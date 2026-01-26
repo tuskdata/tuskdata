@@ -2,6 +2,44 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.1.2] - 2026-01-25 (PyPI Release)
+
+### UX Improvements
+
+#### Search & Filter
+- **Schema Search**: Filter tables in schema browser by name
+- **History Search**: Search through query history
+- **Row Counts**: Show estimated row count per table in schema browser
+
+#### Navigation
+- **Ctrl+Tab**: Switch between editor tabs (Shift+Ctrl+Tab for reverse)
+- **Connection Status**: Visual indicators for connection health (online/offline/connecting)
+- **Cluster Tab Conditional**: Only shows when `[cluster]` feature is installed
+
+#### Map Enhancements
+- **Hover Tooltips**: Show feature name/tag on hover in Studio map view
+- **Fixed Map Click**: Click handlers now work correctly on all geometry layers
+
+### PostgreSQL Admin
+
+#### Logs Viewer
+- View PostgreSQL server logs (requires superuser or pg_read_server_files)
+- Filter logs by level (ERROR, WARNING, FATAL, LOG)
+- Shows log settings and current log file path
+
+### Package & Distribution
+
+#### PyPI Metadata
+- Added `readme`, `license`, `authors`, `keywords`, `classifiers`
+- Added project URLs (Homepage, Repository, Issues)
+- Package description now shows on PyPI
+
+#### Bug Fixes
+- Added missing `apscheduler>=3.10` to `[studio]` dependencies
+- Fixed MapLibre event handlers for individual layer clicks
+
+---
+
 ## [0.7.0] - 2026-01-25
 
 ### Code Architecture Improvements

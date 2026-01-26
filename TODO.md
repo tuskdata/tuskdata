@@ -4,149 +4,149 @@
 
 ---
 
-## Phase 1: SQL Client Completo - DONE ✅
+## Phase 1: Complete SQL Client - DONE ✅
 
-> **Goal**: SQL client que realmente puedas usar todos los días
-> **Success**: Puedes reemplazar pgAdmin/DBeaver para queries básicos
+> **Goal**: SQL client you can actually use every day
+> **Success**: Can replace pgAdmin/DBeaver for basic queries
 
-### 1. Conexiones (CRUD Completo)
-- [x] Crear conexión (PostgreSQL, SQLite)
-- [x] Editar conexión existente
-- [x] Eliminar conexión (con confirmación)
-- [x] Test connection antes de guardar
-- [x] Recordar última conexión usada
-- [x] Icono diferente por tipo (PG, SQLite)
-- [x] Mostrar estado (online/offline/connecting)
-- [ ] Múltiples conexiones pueden estar activas
+### 1. Connections (Full CRUD)
+- [x] Create connection (PostgreSQL, SQLite)
+- [x] Edit existing connection
+- [x] Delete connection (with confirmation)
+- [x] Test connection before saving
+- [x] Remember last used connection
+- [x] Different icon per type (PG, SQLite)
+- [x] Show status (online/offline/connecting)
+- [ ] Multiple connections can be active simultaneously
 
-### 2. Editor SQL (Tabs)
-- [x] Múltiples tabs de queries
-- [x] Crear nuevo tab (+)
-- [x] Cerrar tab (x)
-- [x] Persistir tabs entre sesiones
-- [x] CodeMirror con syntax highlighting
-- [x] Autocomplete (tablas, columnas, keywords)
-- [x] Líneas numeradas
-- [ ] Cerrar tab con confirmación si hay cambios
-- [ ] Renombrar tab (doble click)
-- [ ] Tab muestra * si hay cambios sin guardar
-- [ ] Highlight de errores
+### 2. SQL Editor (Tabs)
+- [x] Multiple query tabs
+- [x] Create new tab (+)
+- [x] Close tab (x)
+- [x] Persist tabs between sessions
+- [x] CodeMirror with syntax highlighting
+- [x] Autocomplete (tables, columns, keywords)
+- [x] Line numbers
+- [ ] Close tab with confirmation if unsaved changes
+- [ ] Rename tab (double click)
+- [ ] Tab shows * if unsaved changes
+- [ ] Error highlighting
 - [ ] Bracket matching
 - [ ] Multi-cursor (Ctrl+D)
 
-### 3. Resultados (Data Grid Real)
-- [x] Tabla con headers sticky
-- [x] Ordenar por columna (click en header)
-- [x] Filtro rápido por texto
-- [x] Paginación (100 rows por página)
-- [x] Mostrar total de rows
-- [x] NULL como badge gris
-- [x] Boolean como check/x
-- [x] JSON con syntax highlight
-- [x] Expandir celda larga (tooltip on hover)
-- [ ] Filtro por columna específica
-- [ ] Seleccionar filas (checkbox)
-- [ ] Seleccionar/copiar celdas
-- [x] Resize de columnas (drag)
-- [ ] Formateo de fechas legibles
-- [ ] Números con separadores
+### 3. Results (Real Data Grid)
+- [x] Table with sticky headers
+- [x] Sort by column (click header)
+- [x] Quick text filter
+- [x] Pagination (100 rows per page)
+- [x] Show total row count
+- [x] NULL as gray badge
+- [x] Boolean as check/x
+- [x] JSON with syntax highlight
+- [x] Expand long cell (tooltip on hover)
+- [ ] Filter by specific column
+- [ ] Select rows (checkbox)
+- [ ] Select/copy cells
+- [x] Resize columns (drag)
+- [ ] Human-readable date formatting
+- [ ] Numbers with separators
 
 ### 4. Export
-- [x] Export a CSV
-- [x] Export a JSON
-- [ ] Export selección o todo
-- [ ] Copiar como INSERT statements
-- [ ] Copiar como CSV al clipboard
+- [x] Export to CSV
+- [x] Export to JSON
+- [ ] Export selection or all
+- [ ] Copy as INSERT statements
+- [ ] Copy as CSV to clipboard
 
 ### 5. Query History
-- [x] Guardar queries en SQLite
-- [x] Mostrar en sidebar
-- [x] Click para cargar en editor
-- [x] Mostrar timestamp y duración
-- [x] Limpiar history
-- [x] Buscar en history
+- [x] Save queries to SQLite
+- [x] Show in sidebar
+- [x] Click to load in editor
+- [x] Show timestamp and duration
+- [x] Clear history
+- [x] Search in history
 
-### 6. Saved Queries (Favoritos)
-- [x] Guardar query con nombre
-- [x] Organizar en carpetas
-- [x] Cargar query guardado
-- [x] Editar nombre
-- [x] Eliminar
+### 6. Saved Queries (Favorites)
+- [x] Save query with name
+- [x] Organize in folders
+- [x] Load saved query
+- [x] Edit name
+- [x] Delete
 
 ### 7. Schema Browser
-- [x] Tree view expandible
-- [x] Ver columnas con tipos
-- [x] Ver primary keys
-- [x] Ver foreign keys
-- [x] Click en columna → añadir al query
+- [x] Expandable tree view
+- [x] View columns with types
+- [x] View primary keys
+- [x] View foreign keys
+- [x] Click column → add to query
 - [x] Refresh schema (F5)
-- [ ] Click en tabla → INSERT template
-- [x] Buscar en schema
-- [x] Ver row count por tabla
+- [ ] Click table → INSERT template
+- [x] Search in schema
+- [x] View row count per table
 
 ### 8. Keyboard Shortcuts
-- [x] Ctrl+Enter - Ejecutar query
-- [x] Ctrl+S - Guardar query
-- [x] Ctrl+N/T - Nuevo tab
-- [x] Ctrl+W - Cerrar tab
+- [x] Ctrl+Enter - Execute query
+- [x] Ctrl+S - Save query
+- [x] Ctrl+N/T - New tab
+- [x] Ctrl+W - Close tab
 - [x] Ctrl+Space - Autocomplete
 - [x] F5 - Refresh schema
-- [x] Escape - Cancelar query
-- [x] Ctrl+Tab - Siguiente tab
-- [ ] Ctrl+/ - Comentar línea
+- [x] Escape - Cancel query
+- [x] Ctrl+Tab - Next tab
+- [ ] Ctrl+/ - Comment line
 
 ### 9. UX
 - [x] Loading spinner
-- [x] Cancelar query en ejecución
-- [x] Mensaje de error amigable
-- [x] Modo oscuro (default)
+- [x] Cancel running query
+- [x] Friendly error messages
+- [x] Dark mode (default)
 - [x] Toast notifications (global component)
-- [ ] Resize de paneles
-- [x] Modo claro toggle
-- [ ] Responsive
+- [ ] Resizable panels
+- [x] Light mode toggle
+- [ ] Responsive design
 
 ---
 
 ## Phase 2: PostgreSQL Admin - DONE ✅
 
-> **Goal**: Administración completa de PostgreSQL
-> **Success**: Manejar un incidente de "base de datos lenta" usando solo Tusk
+> **Goal**: Complete PostgreSQL administration
+> **Success**: Handle a "slow database" incident using only Tusk
 
-### 1. Dashboard de Servidor
-- [x] Conexiones activas vs max
-- [x] Queries activas
+### 1. Server Dashboard
+- [x] Active connections vs max
+- [x] Active queries
 - [x] Cache hit ratio
-- [x] Tamaño de base de datos
+- [x] Database size
 - [x] Uptime
-- [x] Versión de PostgreSQL
-- [x] Refresh manual
-- [x] Auto-refresh configurable (Off/5s/10s/30s/60s)
-- [ ] Gráficos de tendencia
+- [x] PostgreSQL version
+- [x] Manual refresh
+- [x] Configurable auto-refresh (Off/5s/10s/30s/60s)
+- [ ] Trend graphs
 
 ### 2. Active Queries Monitor
-- [x] Lista de queries en ejecución
-- [x] Mostrar: PID, user, database, duration, state, query
-- [x] Highlight queries lentas (> 10s)
+- [x] List of running queries
+- [x] Show: PID, user, database, duration, state, query
+- [x] Highlight slow queries (> 10s)
 - [x] Highlight idle in transaction
-- [x] Kill query individual
+- [x] Kill individual query
 - [x] Refresh button
-- [ ] Kill todas las queries de un usuario
-- [ ] Filtrar por database/user
+- [ ] Kill all queries from a user
+- [ ] Filter by database/user
 
 ### 3. Locks Monitor
-- [x] Ver locks activos
-- [x] Identificar bloqueos
-- [x] Ver waiting queries
-- [x] Visualizar cadena de bloqueos
+- [x] View active locks
+- [x] Identify blocking locks
+- [x] View waiting queries
+- [x] Visualize lock chains
 
 ### 4. Backup & Restore
-- [x] pg_dump con UI
-- [x] Lista de backups existentes
+- [x] pg_dump with UI
+- [x] List existing backups
 - [x] Download backup
-- [x] Restore con UI
-- [ ] Seleccionar formato (plain, custom, directory)
-- [ ] Seleccionar tablas específicas
-- [ ] Progress bar durante backup
+- [x] Restore with UI
+- [ ] Select format (plain, custom, directory)
+- [ ] Select specific tables
+- [ ] Progress bar during backup
 - [x] Scheduled backups (APScheduler)
 
 ### 5. Table Maintenance
@@ -154,39 +154,39 @@
 - [x] VACUUM FULL table
 - [x] ANALYZE table
 - [x] REINDEX table
-- [x] Ver table bloat
-- [x] Ver dead tuples
-- [x] Programar maintenance (APScheduler)
+- [x] View table bloat
+- [x] View dead tuples
+- [x] Schedule maintenance (APScheduler)
 
 ### 6. Extensions Manager
-- [x] Lista de extensiones instaladas
-- [x] Lista de extensiones disponibles
-- [x] Instalar extensión
-- [x] Desinstalar extensión
-- [x] Ver versión actual vs disponible
+- [x] List installed extensions
+- [x] List available extensions
+- [x] Install extension
+- [x] Uninstall extension
+- [x] View current vs available version
 
 ### 7. User/Role Management
-- [x] Lista de roles
-- [x] Crear rol
-- [x] Editar permisos
-- [x] Cambiar password
-- [ ] Ver grants
+- [x] List roles
+- [x] Create role
+- [x] Edit permissions
+- [x] Change password
+- [ ] View grants
 
 ### 8. Database Settings
-- [x] Ver configuración actual (important settings)
-- [ ] Modificar settings
-- [ ] Comparar con defaults
+- [x] View current configuration (important settings)
+- [ ] Modify settings
+- [ ] Compare with defaults
 
 ### 9. Logs Viewer
-- [ ] Ver últimas líneas del log
-- [ ] Filtrar por nivel
-- [ ] Buscar en logs
+- [x] View recent log lines
+- [x] Filter by level
+- [ ] Search in logs
 
 ---
 
 ## Phase 3: Analytics Engine (DuckDB) - DONE ✅
 
-> **Goal**: DuckDB integrado, queries federados, archivos Parquet
+> **Goal**: Integrated DuckDB, federated queries, Parquet files
 
 - [x] DuckDB engine
 - [x] Open Parquet files directly
@@ -257,7 +257,7 @@
 - [x] Export to GeoJSON
 - [x] Dark basemap (CARTO)
 
-### Pending
+### Completed
 - [x] DuckDB Spatial extension (auto-installed at startup)
 - [x] DuckDB Extension Manager UI
 
@@ -302,8 +302,6 @@
 - [x] Job status tracking (pending/running/completed/failed/cancelled)
 - [x] Job progress (stages)
 - [x] Job cancellation
-
----
 
 ---
 
@@ -372,6 +370,14 @@
 ---
 
 ## Future Considerations
+
+### Internationalization (i18n)
+> Multi-language support for the UI
+- [ ] Translation system (i18next or similar)
+- [ ] Translation files per language
+- [ ] Language selector in UI
+- [ ] Spanish as first additional language
+- [ ] Auto-detect browser language
 
 ### Automated ETL Workflows
 > Download files from URLs, extract, transform, load to DB
