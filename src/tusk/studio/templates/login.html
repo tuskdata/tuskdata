@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Tusk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: #0d1117; color: #e6edf3; }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center">
+    <div class="w-full max-w-md px-6">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <div class="flex items-center justify-center gap-3 mb-2">
+                <span class="text-5xl">🦣</span>
+                <span class="font-bold text-3xl">Tusk</span>
+            </div>
+            <p class="text-[#8b949e]">Modern Data Platform</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-[#161b22] border border-[#30363d] rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-6 text-center">Sign in to your account</h2>
+
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2" for="username">Username</label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            required
+                            autofocus
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="Enter your username"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2" for="password">Password</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            required
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="Enter your password"
+                        >
+                    </div>
+
+                    <div id="error-message" class="hidden bg-red-500/20 border border-red-500/50 text-red-400 rounded-lg px-4 py-2 text-sm">
+                    </div>
+
+                    <button
+                        type="submit"
+                        id="login-btn"
+                        class="w-full bg-[#238636] hover:bg-[#2ea043] px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                        <i data-lucide="log-in" class="w-4 h-4"></i>
+                        Sign in
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-6 text-center text-sm text-[#8b949e]">
+            <p>Default credentials: <code class="bg-[#161b22] px-1.5 py-0.5 rounded">admin</code> / <code class="bg-[#161b22] px-1.5 py-0.5 rounded">admin</code></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+
+            // Check if already logged in
+            checkAuthStatus();
+        });
+
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/status');
+                const data = await res.json();
+
+                if (!data.auth_enabled) {
+                    // Auth not enabled, redirect to home
+                    window.location.href = '/';
+                    return;
+                }
+
+                if (data.user) {
+                    // Already logged in, redirect to home
+                    window.location.href = '/';
+                }
+            } catch (e) {
+                console.error('Failed to check auth status:', e);
+            }
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            const btn = document.getElementById('login-btn');
+
+            errorDiv.classList.add('hidden');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Signing in...';
+            lucide.createIcons();
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // Redirect to home or requested page
+                    const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+                    window.location.href = redirect;
+                } else {
+                    errorDiv.textContent = data.error || 'Login failed';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Connection error: ' + e.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="log-in" class="w-4 h-4"></i> Sign in';
+                lucide.createIcons();
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+[project]
+name = "tuskdata"
+version = "0.1.0"
+description = "Modern data platform - PostgreSQL admin + Analytics engine"
+requires-python = ">=3.11"
+# Core dependencies - minimal, always required
+dependencies = [
+    "msgspec>=0.18",       # Fast serialization
+    "structlog>=24.0",     # Structured logging
+    "tomli-w>=1.0",        # Config file writing
+    "httpx>=0.27",         # HTTP client (for future ETL workflows)
+]
+
+[project.optional-dependencies]
+# PostgreSQL connectivity
+postgres = [
+    "psycopg[binary]>=3.0",
+]
+
+# Web UI + Data engines (Studio, Data page)
+studio = [
+    "tuskdata[postgres]",
+    "litestar>=2.0",         # Web framework
+    "granian>=2.0",          # ASGI server
+    "jinja2>=3.0",           # HTML templates
+    "minijinja>=2.0",        # Rust-based templates
+    "duckdb>=1.0",           # Analytics engine
+    "polars>=1.0",           # DataFrame transforms
+    "pyarrow>=17.0",         # Arrow format support
+    "apscheduler>=3.10",     # Task scheduler
+]
+
+# Admin features (scheduled tasks, monitoring)
+admin = [
+    "apscheduler>=3.11.2",   # Task scheduler
+    "psutil>=5.9",           # System metrics
+]
+
+# Cluster mode (distributed queries)
+cluster = [
+    "datafusion>=51.0",      # Distributed query engine
+    "pyarrow>=17.0",         # Arrow Flight
+]
+
+# Everything
+all = [
+    "tuskdata[studio,admin,cluster]",
+]
+
+[project.scripts]
+tusk = "tusk.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tusk"]
+
+[tool.hatch.targets.wheel.sources]
+"src" = ""
+
+# Include non-Python files (templates, static assets)
+[tool.hatch.build]
+include = [
+    "src/tusk/**/*.py",
+    "src/tusk/studio/templates/**/*.html",
+    "src/tusk/studio/static/**/*.js",
+    "src/tusk/studio/static/**/*.css",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

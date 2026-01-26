@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk Studio{% endblock %}
+
+{% block head %}
+<!-- MapLibre GL JS for geo visualization -->
+<script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{% endblock %}
+
+{% block styles %}
+<style>/* Styles in /static/styles.css */</style>
+{% endblock %}
+
+{% block header_actions %}
+<button onclick="showSettingsModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-gray-500 hover:text-white" title="Settings">
+    <i data-lucide="settings" class="w-5 h-5"></i>
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Sidebar -->
+<aside class="sidebar w-64 flex flex-col">
+    <!-- Connections -->
+    <div class="p-3 border-b border-[#30363d]">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Connections</span>
+            <button onclick="showConnModal()" class="text-gray-400 hover:text-white text-lg leading-none" title="Add connection">+</button>
+        </div>
+        <div id="connections-list" class="space-y-1">
+            <div class="text-gray-500 text-sm py-2">No connections yet</div>
+        </div>
+        <div class="mt-2 pt-2 border-t border-[#30363d]/50">
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d]" id="duckdb-connection" onclick="selectDuckDB()">
+                <span class="w-2 h-2 rounded-full bg-gray-500" id="duckdb-status"></span>
+                <span>🦆</span>
+                <span class="text-sm flex-1">DuckDB (Local)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Files -->
+    <div class="p-3 border-b border-[#30363d] max-h-48 overflow-auto">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Files</span>
+            <div class="flex items-center gap-1">
+                <button onclick="showCreateFileModal()" class="text-gray-400 hover:text-green-400 text-xs" title="Create new database">New</button>
+                <button onclick="showAddFolderModal()" class="text-gray-400 hover:text-white text-lg leading-none" title="Add folder">+</button>
+            </div>
+        </div>
+        <div id="files-list" class="space-y-1 text-sm">
+            <div class="text-gray-500 py-1">No folders added</div>
+        </div>
+    </div>
+
+    <!-- Schema -->
+    <div class="flex-1 overflow-auto p-3 border-b border-[#30363d]">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Schema</span>
+        <div id="schema-tree" class="mt-2 text-sm">
+            <div class="text-gray-500 py-2">Select a connection</div>
+        </div>
+    </div>
+
+    <!-- Saved Queries -->
+    <div class="p-3 border-b border-[#30363d] max-h-40 overflow-auto">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved Queries</span>
+        </div>
+        <div id="saved-queries-list" class="space-y-1 text-sm">
+            <div class="text-gray-500 py-1">No saved queries</div>
+        </div>
+    </div>
+
+    <!-- History -->
+    <div class="p-3 max-h-48 overflow-auto">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">History</span>
+            <button onclick="clearHistory()" class="text-gray-500 hover:text-red-400 text-xs" title="Clear history">Clear</button>
+        </div>
+        <div id="history-list" class="space-y-1 text-sm">
+            <div class="text-gray-500 py-1">No history yet</div>
+        </div>
+    </div>
+</aside>
+
+<!-- Editor Area -->
+<main class="flex-1 flex flex-col overflow-hidden">
+    <!-- Query Tabs -->
+    <div class="bg-[#161b22] border-b border-[#30363d] flex items-center px-2">
+        <div id="query-tabs" class="flex items-center overflow-x-auto"></div>
+        <button onclick="createTab()" class="p-1.5 hover:bg-[#21262d] rounded ml-1 text-gray-500 hover:text-white flex-shrink-0" title="New query tab">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </button>
+    </div>
+
+    <!-- SQL Editor -->
+    <div class="p-4 border-b border-[#30363d]">
+        <div class="flex items-center gap-3 mb-3">
+            <span class="text-xs text-gray-500">Engine:</span>
+            <div class="flex bg-[#0d1117] rounded-lg p-0.5">
+                <button id="engine-postgres" onclick="setEngine('postgres')" class="engine-btn active px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🐘</span> PostgreSQL</button>
+                <button id="engine-sqlite" onclick="setEngine('sqlite')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🗃️</span> SQLite</button>
+                <button id="engine-duckdb" onclick="setEngine('duckdb')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🦆</span> DuckDB</button>
+            </div>
+            <span id="engine-info" class="text-xs text-gray-500"></span>
+        </div>
+        <div id="sql-editor" class="rounded-lg border border-[#30363d] overflow-hidden"></div>
+        <div class="flex justify-between items-center mt-3">
+            <span class="text-xs text-gray-500">
+                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Enter</kbd> run ·
+                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">S</kbd> save ·
+                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">T</kbd> new tab
+            </span>
+            <div class="flex gap-2">
+                <button onclick="showSaveQueryModal()" class="bg-[#21262d] hover:bg-[#30363d] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i data-lucide="bookmark" class="w-4 h-4"></i> Save</button>
+                <button id="run-btn" onclick="runQuery()" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"><span>▶</span> Run</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="flex-1 overflow-auto p-4">
+        <div id="results-header" class="text-sm text-gray-400 mb-3"></div>
+        <div id="results-table" class="overflow-auto"></div>
+    </div>
+</main>
+{% endblock %}
+
+{% block modals %}
+<!-- Connection Modal -->
+<div id="conn-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[420px] border border-[#30363d] shadow-2xl">
+        <h3 id="conn-modal-title" class="text-lg font-bold mb-4">Add Connection</h3>
+        <form id="conn-form" class="space-y-4">
+            <input type="hidden" name="edit_id" id="conn-edit-id" value="">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Connection Name</label>
+                <input name="name" id="conn-name" placeholder="My Database" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" required>
+            </div>
+            <div id="conn-type-selector" class="flex gap-4 flex-wrap">
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="postgres" checked onchange="toggleConnFields()" class="accent-indigo-500"><span>🐘 PostgreSQL</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="sqlite" onchange="toggleConnFields()" class="accent-indigo-500"><span>🗃️ SQLite</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="duckdb" onchange="toggleConnFields()" class="accent-indigo-500"><span>🦆 DuckDB</span></label>
+            </div>
+            <div id="postgres-fields" class="space-y-3">
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="col-span-2"><label class="block text-sm text-gray-400 mb-1">Host</label><input name="host" id="conn-host" placeholder="localhost" value="localhost" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
+                    <div><label class="block text-sm text-gray-400 mb-1">Port</label><input name="port" id="conn-port" placeholder="5432" value="5432" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
+                </div>
+                <div><label class="block text-sm text-gray-400 mb-1">Database</label><input name="database" id="conn-database" placeholder="postgres" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-sm text-gray-400 mb-1">User</label><input name="user" id="conn-user" placeholder="postgres" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
+                    <div><label class="block text-sm text-gray-400 mb-1">Password</label><input name="password" id="conn-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"><p id="password-hint" class="text-xs text-gray-500 mt-1 hidden">Leave empty to keep current</p></div>
+                </div>
+            </div>
+            <div id="file-db-fields" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Database Path</label>
+                <input name="path" id="conn-path" placeholder="~/data/app.db" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="flex gap-3 justify-between pt-2">
+                <button type="button" onclick="testConnection()" class="px-4 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-sm">Test Connection</button>
+                <div class="flex gap-3">
+                    <button type="button" onclick="hideConnModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                    <button type="submit" id="conn-submit-btn" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Connect</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Databases Modal -->
+<div id="databases-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Databases on Server</h3><button onclick="hideDatabasesModal()" class="text-gray-400 hover:text-white text-xl">×</button></div>
+        <p class="text-sm text-gray-400 mb-4">Click on a database to create a connection.</p>
+        <div id="databases-list" class="flex-1 overflow-auto space-y-2"><div class="text-gray-500">Loading...</div></div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Settings</h3>
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-300 mb-2">PostgreSQL Client Path</label>
+            <p class="text-xs text-gray-500 mb-3">Path to pg_dump, psql, etc.</p>
+            <div id="pg-paths-list" class="space-y-2 mb-3"><div class="text-gray-500 text-sm">Loading...</div></div>
+            <div class="flex gap-2">
+                <input id="pg-bin-path-input" type="text" placeholder="Custom path" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                <button onclick="setPgBinPath()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium">Set</button>
+            </div>
+            <button onclick="clearPgBinPath()" class="text-sm text-gray-400 hover:text-white mt-2">Reset to auto-detect</button>
+        </div>
+        <div class="flex justify-end pt-2 border-t border-[#30363d]"><button onclick="hideSettingsModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button></div>
+    </div>
+</div>
+
+<!-- Save Query Modal -->
+<div id="save-query-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+        <h3 id="save-query-title" class="text-lg font-bold mb-4">Save Query</h3>
+        <form id="save-query-form" class="space-y-4">
+            <input type="hidden" id="save-query-id" value="">
+            <div><label class="block text-sm text-gray-400 mb-1">Query Name</label><input id="save-query-name" placeholder="My Query" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" required></div>
+            <div><label class="block text-sm text-gray-400 mb-1">Folder (optional)</label><input id="save-query-folder" placeholder="e.g., Reports" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
+            <div class="bg-[#0d1117] border border-[#30363d] rounded-lg p-3 max-h-32 overflow-auto"><pre id="save-query-preview" class="font-mono text-xs text-gray-400 whitespace-pre-wrap"></pre></div>
+            <div class="flex gap-3 justify-end pt-2">
+                <button type="button" onclick="hideSaveQueryModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create File Modal -->
+<div id="create-file-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Create New Database</h3>
+        <form id="create-file-form" class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-2">Database Type</label>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="sqlite" checked class="accent-indigo-500"><span>🗃️ SQLite</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="duckdb" class="accent-indigo-500"><span>🦆 DuckDB</span></label>
+                </div>
+            </div>
+            <div><label class="block text-sm text-gray-400 mb-1">File Path</label><input id="create-file-path" placeholder="~/data/mydb.sqlite" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
+            <div class="flex gap-3 justify-end pt-2">
+                <button type="button" onclick="hideCreateFileModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Folder Modal -->
+<div id="folder-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Add Data Folder</h3>
+        <form id="folder-form" class="space-y-4">
+            <div><label class="block text-sm text-gray-400 mb-1">Folder Path</label><input id="folder-path" placeholder="~/data" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
+            <div class="flex gap-3 justify-end pt-2">
+                <button type="button" onclick="hideFolderModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add Folder</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Parquet Modal -->
+<div id="parquet-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Export to Parquet</h3>
+        <form id="parquet-form" class="space-y-4">
+            <div><label class="block text-sm text-gray-400 mb-1">Output Path</label><input id="parquet-path" placeholder="~/data/output.parquet" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
+            <div class="flex gap-3 justify-end pt-2">
+                <button type="button" onclick="hideParquetModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Export</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- File Preview Modal -->
+<div id="file-preview-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[800px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="flex items-center justify-between mb-4"><h3 id="file-preview-title" class="text-lg font-bold">File Preview</h3><button onclick="hideFilePreviewModal()" class="text-gray-400 hover:text-white text-xl">×</button></div>
+        <div id="file-preview-info" class="text-sm text-gray-400 mb-3"></div>
+        <div id="file-preview-content" class="flex-1 overflow-auto"><div class="text-gray-500">Loading...</div></div>
+        <div class="flex gap-2 mt-4 pt-4 border-t border-[#30363d]">
+            <button onclick="insertFileQuery()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium">Insert Query</button>
+            <button onclick="hideFilePreviewModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d] text-sm">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Map Modal -->
+<div id="map-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
+            <div class="flex items-center gap-3"><h3 class="text-lg font-bold">Map View</h3><span id="map-feature-count" class="text-xs text-gray-400 bg-[#21262d] px-2 py-1 rounded">0 features</span></div>
+            <div class="flex items-center gap-2">
+                <button onclick="exportGeoJSON()" class="text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white">Export GeoJSON</button>
+                <button onclick="hideMapModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            </div>
+        </div>
+        <div id="map-container" class="flex-1"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/studio.js"></script>
+{% endblock %}

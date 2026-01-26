@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Tusk{% endblock %}
+
+{% block content %}
+<main class="flex-1 overflow-auto p-6">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Profile</h1>
+
+        <!-- Profile Info Card -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Account Information</h2>
+
+            <form id="profile-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Username</label>
+                    <input id="profile-username" disabled class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-gray-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Display Name</label>
+                    <input id="profile-display-name" placeholder="Your name" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Email</label>
+                    <input id="profile-email" type="email" placeholder="you@example.com" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save Changes</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Change Password Card -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Change Password</h2>
+
+            <form id="password-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Current Password</label>
+                    <input id="current-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">New Password</label>
+                    <input id="new-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Confirm New Password</label>
+                    <input id="confirm-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="bg-[#238636] hover:bg-[#2ea043] px-4 py-2 rounded-lg font-medium">Change Password</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Groups & Permissions Card -->
+        <div class="card rounded-xl p-6">
+            <h2 class="text-lg font-semibold mb-4">Groups & Permissions</h2>
+
+            <div class="mb-4">
+                <label class="block text-sm text-gray-400 mb-2">Member of</label>
+                <div id="user-groups" class="flex flex-wrap gap-2">
+                    <span class="text-gray-500">Loading...</span>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-2">Permissions</label>
+                <div id="user-permissions" class="flex flex-wrap gap-2">
+                    <span class="text-gray-500">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/profile.js"></script>
+{% endblock %}

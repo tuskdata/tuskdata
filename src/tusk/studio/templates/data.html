@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk Data - ETL Pipeline Builder{% endblock %}
+
+{% block head %}
+<!-- MapLibre for geo visualization -->
+<script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{% endblock %}
+
+{% block header_actions %}
+<button onclick="showCode()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm flex items-center gap-2">
+    <i data-lucide="code" class="w-4 h-4"></i>
+    View Code
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Drop Overlay (shown when dragging files) -->
+<div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-overlay-content">
+        <i data-lucide="upload" class="w-12 h-12 mx-auto mb-3 text-indigo-400"></i>
+        <div class="text-lg font-medium">Drop file to load</div>
+        <div class="text-sm text-[#8b949e] mt-1">CSV, Parquet, JSON, OSM/PBF</div>
+    </div>
+</div>
+<!-- Left Sidebar - Sources & Transforms -->
+<aside class="w-64 sidebar flex flex-col flex-shrink-0 overflow-hidden">
+    <!-- Datasets Section -->
+    <div class="p-3 border-b border-[#30363d]">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">1. Datasets</span>
+            <button onclick="showSourceModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add dataset">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <div id="datasets-list" class="space-y-1">
+            <div id="datasets-empty" class="text-[#8b949e] text-xs py-2">Click + to add a dataset</div>
+        </div>
+    </div>
+
+    <!-- Transforms Section -->
+    <div class="flex-1 p-3 overflow-auto">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">2. Transforms</span>
+            <button onclick="showAddTransformModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add transform">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <div id="transforms-list" class="space-y-1">
+            <div class="text-[#8b949e] text-xs py-2">Add filters, sorts, joins...<br/>(optional)</div>
+        </div>
+    </div>
+
+    <!-- Quick Transforms -->
+    <div class="p-3 border-t border-[#30363d]">
+        <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">Quick Transforms</span>
+        <div class="mt-2 space-y-1">
+            <button onclick="quickTransform('filter')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="filter" class="w-4 h-4 text-[#58a6ff]"></i>
+                Filter
+            </button>
+            <button onclick="quickTransform('select')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="columns" class="w-4 h-4 text-[#58a6ff]"></i>
+                Select Columns
+            </button>
+            <button onclick="quickTransform('sort')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="arrow-up-down" class="w-4 h-4 text-[#58a6ff]"></i>
+                Sort
+            </button>
+            <button onclick="quickTransform('group_by')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="group" class="w-4 h-4 text-[#58a6ff]"></i>
+                Group By
+            </button>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="p-3 border-t border-[#30363d] space-y-2">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">3. Execute</span>
+            <button onclick="showDuckDBExtensionsModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="DuckDB Extensions">
+                <i data-lucide="puzzle" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <button onclick="runPipeline()" class="w-full bg-[#238636] hover:bg-[#2ea043] py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            Run Pipeline
+        </button>
+        <div class="flex gap-2">
+            <button onclick="showImportModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i>
+                Import to DB
+            </button>
+            <button onclick="showSavePipelineModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5" title="Save pipeline">
+                <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                Save
+            </button>
+            <button onclick="showLoadPipelineModal()" class="bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center" title="Load saved pipeline">
+                <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+    </div>
+</aside>
+
+<!-- Main Panel - Results -->
+<main class="flex-1 flex flex-col overflow-hidden">
+    <!-- Preview Header -->
+    <div id="preview-header" class="px-4 py-2 border-b border-[#30363d] flex items-center justify-between bg-[#161b22]">
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-medium">Preview</span>
+            <span id="results-stats" class="text-xs text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded-full hidden"></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-[#8b949e]">
+                <span>Rows:</span>
+                <select id="preview-limit" onchange="changeLimit()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                    <option value="100">100</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                    <option value="5000">5000</option>
+                </select>
+            </label>
+            <div class="w-px h-4 bg-[#30363d]"></div>
+            <button onclick="exportResults('csv')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                CSV
+            </button>
+            <button onclick="exportResults('parquet')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                Parquet
+            </button>
+        </div>
+    </div>
+
+    <!-- Results Table -->
+    <div id="results-container" class="flex-1 overflow-auto p-4">
+        <div class="text-[#8b949e] text-center py-12 max-w-md mx-auto">
+            <i data-lucide="workflow" class="w-16 h-16 mx-auto mb-4 opacity-30"></i>
+            <h3 class="text-lg font-medium text-white mb-4">Build a Data Pipeline</h3>
+            <div class="text-left space-y-3 bg-[#161b22] rounded-lg p-4 text-sm">
+                <div class="flex items-start gap-3">
+                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
+                    <div><strong>Select a data source</strong><br/>File (CSV, Parquet, JSON, OSM) or Database table/query</div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
+                    <div><strong>Add transforms</strong> (optional)<br/>Filter, sort, join, group by...</div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
+                    <div><strong>Run &amp; Export</strong><br/>Preview, export to CSV/Parquet, or import to DB</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block modals %}
+<!-- File Browser Modal -->
+<div id="file-browser-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+    <div class="bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+            <h3 class="text-lg font-bold">Select File</h3>
+            <button onclick="hideFileBrowser()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+        </div>
+        <div class="px-4 py-2 border-b border-[#30363d] flex items-center gap-2">
+            <button onclick="browseParent()" class="p-1.5 hover:bg-[#21262d] rounded" title="Go up">
+                <i data-lucide="arrow-up" class="w-4 h-4"></i>
+            </button>
+            <input id="browser-path" value="~" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter')browseTo(this.value)">
+            <button onclick="browseTo(document.getElementById('browser-path').value)" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm">Go</button>
+        </div>
+        <div id="browser-files" class="flex-1 overflow-auto p-2 min-h-[300px]">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+        </div>
+        <div class="p-4 border-t border-[#30363d] flex justify-end">
+            <button onclick="hideFileBrowser()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Source Modal -->
+<div id="source-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[550px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Add Dataset</h3>
+
+        <!-- Source Type Tabs -->
+        <div class="flex gap-1 mb-4 bg-[#0d1117] p-1 rounded-lg">
+            <button onclick="setSourceTab('file')" id="source-tab-file" class="flex-1 px-3 py-2 rounded text-sm font-medium bg-[#21262d] text-white">
+                <i data-lucide="file" class="w-4 h-4 inline mr-1"></i> File
+            </button>
+            <button onclick="setSourceTab('database')" id="source-tab-database" class="flex-1 px-3 py-2 rounded text-sm font-medium text-[#8b949e] hover:text-white">
+                <i data-lucide="database" class="w-4 h-4 inline mr-1"></i> Database
+            </button>
+        </div>
+
+        <!-- File Source -->
+        <div id="source-file-section" class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">File Path</label>
+                <div class="flex gap-2">
+                    <input id="source-path" placeholder="~/data/myfile.csv" onchange="detectFileType()" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm">
+                    <button onclick="showFileBrowser()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm flex items-center gap-1">
+                        <i data-lucide="folder-open" class="w-4 h-4"></i>
+                        Browse
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Supports CSV, Parquet, JSON and OSM (.osm.pbf) files</p>
+            </div>
+            <div id="osm-layer-section" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">OSM Layer</label>
+                <select id="osm-layer" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <option value="nodes">Nodes/Points - POIs, addresses, standalone points</option>
+                    <option value="ways">Ways/Lines - Roads, paths, building outlines</option>
+                    <option value="relations">Relations - Routes, boundaries, complex structures</option>
+                    <option value="all">All Data - Everything (nodes + ways + relations)</option>
+                </select>
+            </div>
+            <button onclick="previewSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview file...</button>
+            <div id="source-schema" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Columns</label>
+                <div id="schema-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-40 overflow-auto text-xs font-mono"></div>
+            </div>
+        </div>
+
+        <!-- Database Source -->
+        <div id="source-db-section" class="hidden space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Connection</label>
+                <select id="source-db-connection" onchange="loadDbTables()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <option value="">Select a connection...</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Add connections from the Studio page</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Source Type</label>
+                <div class="flex gap-2">
+                    <button onclick="setDbSourceType('table')" id="db-source-table-btn" class="flex-1 px-3 py-2 rounded bg-[#21262d] text-white text-sm">Table</button>
+                    <button onclick="setDbSourceType('query')" id="db-source-query-btn" class="flex-1 px-3 py-2 rounded bg-[#0d1117] text-[#8b949e] hover:text-white text-sm">Custom Query</button>
+                </div>
+            </div>
+            <div id="db-table-section">
+                <label class="block text-sm text-gray-400 mb-1">Table</label>
+                <select id="source-db-table" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <option value="">Select a table...</option>
+                </select>
+            </div>
+            <div id="db-query-section" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">SQL Query</label>
+                <textarea id="source-db-query" rows="4" placeholder="SELECT * FROM my_table WHERE ..." class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm"></textarea>
+            </div>
+            <button onclick="previewDbSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview data...</button>
+            <div id="db-source-schema" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Columns</label>
+                <div id="db-schema-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-40 overflow-auto text-xs font-mono"></div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button onclick="hideSourceModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button onclick="selectSource()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Select</button>
+        </div>
+    </div>
+</div>
+
+<!-- Transform Modal -->
+<div id="transform-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <h3 class="text-lg font-bold mb-4">Add Transform</h3>
+        <div id="transform-type-select" class="grid grid-cols-2 gap-2 mb-4">
+            <button onclick="selectTransformType('filter')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#58a6ff]/20 rounded-lg"><i data-lucide="filter" class="w-4 h-4 text-[#58a6ff]"></i></div>
+                <div><div class="font-medium text-sm">Filter</div><div class="text-xs text-[#8b949e]">Filter rows by condition</div></div>
+            </button>
+            <button onclick="selectTransformType('select')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#a371f7]/20 rounded-lg"><i data-lucide="columns" class="w-4 h-4 text-[#a371f7]"></i></div>
+                <div><div class="font-medium text-sm">Select</div><div class="text-xs text-[#8b949e]">Select specific columns</div></div>
+            </button>
+            <button onclick="selectTransformType('sort')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#f0883e]/20 rounded-lg"><i data-lucide="arrow-up-down" class="w-4 h-4 text-[#f0883e]"></i></div>
+                <div><div class="font-medium text-sm">Sort</div><div class="text-xs text-[#8b949e]">Sort by columns</div></div>
+            </button>
+            <button onclick="selectTransformType('group_by')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#3fb950]/20 rounded-lg"><i data-lucide="group" class="w-4 h-4 text-[#3fb950]"></i></div>
+                <div><div class="font-medium text-sm">Group By</div><div class="text-xs text-[#8b949e]">Aggregate data</div></div>
+            </button>
+            <button onclick="selectTransformType('rename')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#58a6ff]/20 rounded-lg"><i data-lucide="pencil" class="w-4 h-4 text-[#58a6ff]"></i></div>
+                <div><div class="font-medium text-sm">Rename</div><div class="text-xs text-[#8b949e]">Rename columns</div></div>
+            </button>
+            <button onclick="selectTransformType('drop_nulls')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#f85149]/20 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4 text-[#f85149]"></i></div>
+                <div><div class="font-medium text-sm">Drop Nulls</div><div class="text-xs text-[#8b949e]">Remove null values</div></div>
+            </button>
+            <button onclick="selectTransformType('limit')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#8b949e]/20 rounded-lg"><i data-lucide="hash" class="w-4 h-4 text-[#8b949e]"></i></div>
+                <div><div class="font-medium text-sm">Limit</div><div class="text-xs text-[#8b949e]">Limit number of rows</div></div>
+            </button>
+            <button onclick="selectTransformType('join')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#3fb950]/20 rounded-lg"><i data-lucide="git-merge" class="w-4 h-4 text-[#3fb950]"></i></div>
+                <div><div class="font-medium text-sm">Join</div><div class="text-xs text-[#8b949e]">Join with another dataset</div></div>
+            </button>
+        </div>
+        <div id="transform-config" class="hidden flex-1 overflow-auto">
+            <div id="config-filter" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Column</label>
+                    <select id="filter-column" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Operator</label>
+                    <select id="filter-operator" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="eq">Equals (=)</option>
+                        <option value="ne">Not Equals</option>
+                        <option value="gt">Greater Than</option>
+                        <option value="gte">Greater or Equal</option>
+                        <option value="lt">Less Than</option>
+                        <option value="lte">Less or Equal</option>
+                        <option value="contains">Contains</option>
+                        <option value="is_null">Is Null</option>
+                        <option value="is_not_null">Is Not Null</option>
+                        <option value="is_empty">Is Empty (List)</option>
+                        <option value="is_not_empty">Is Not Empty (List)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Value</label>
+                    <input id="filter-value" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                </div>
+            </div>
+            <div id="config-select" class="hidden space-y-3">
+                <label class="block text-sm text-gray-400 mb-1">Select Columns</label>
+                <div id="select-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-48 overflow-auto space-y-1"></div>
+            </div>
+            <div id="config-sort" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Sort By</label>
+                    <select id="sort-column" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="sort-descending" class="accent-indigo-500">
+                    <span class="text-sm">Descending</span>
+                </label>
+            </div>
+            <div id="config-group_by" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Group By</label>
+                    <div id="groupby-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-32 overflow-auto space-y-1"></div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Aggregation</label>
+                    <div class="flex gap-2">
+                        <select id="agg-column" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                        <select id="agg-function" class="w-24 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                            <option value="sum">Sum</option>
+                            <option value="mean">Mean</option>
+                            <option value="min">Min</option>
+                            <option value="max">Max</option>
+                            <option value="count">Count</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div id="config-rename" class="hidden space-y-3">
+                <div class="flex gap-2">
+                    <div class="flex-1">
+                        <label class="block text-sm text-gray-400 mb-1">From</label>
+                        <select id="rename-from" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-sm text-gray-400 mb-1">To</label>
+                        <input id="rename-to" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                    </div>
+                </div>
+            </div>
+            <div id="config-drop_nulls" class="hidden space-y-3">
+                <label class="block text-sm text-gray-400 mb-1">Columns (leave empty for all)</label>
+                <div id="dropnulls-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-48 overflow-auto space-y-1"></div>
+            </div>
+            <div id="config-limit" class="hidden space-y-3">
+                <label class="block text-sm text-gray-400 mb-1">Number of Rows</label>
+                <input id="limit-n" type="number" value="100" min="1" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+            </div>
+            <div id="config-join" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Join with File</label>
+                    <div class="flex gap-2">
+                        <input id="join-file-path" placeholder="~/data/other.csv" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
+                        <button onclick="browseJoinFile()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm">
+                            <i data-lucide="folder-open" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Join Type</label>
+                    <select id="join-how" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="inner">Inner Join - Only matching rows</option>
+                        <option value="left">Left Join - All left + matching right</option>
+                        <option value="right">Right Join - All right + matching left</option>
+                        <option value="outer">Outer Join - All rows from both</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Join On Column (left table)</label>
+                    <select id="join-left-on" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Join On Column (right table)</label>
+                    <input id="join-right-on" placeholder="Column name from right file" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button onclick="hideTransformModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button id="add-transform-btn" onclick="addTransform()" class="hidden bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add</button>
+        </div>
+    </div>
+</div>
+
+<!-- Map Modal -->
+<div id="map-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+            <h3 class="text-lg font-bold">Map View</h3>
+            <div class="flex items-center gap-2">
+                <button onclick="exportGeoJSON()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Export GeoJSON</button>
+                <button onclick="hideMapModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            </div>
+        </div>
+        <div id="map-container" class="flex-1"></div>
+    </div>
+</div>
+
+<!-- Code Modal -->
+<div id="code-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl w-[700px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+            <h3 class="text-lg font-bold">Generated Polars Code</h3>
+            <div class="flex items-center gap-2">
+                <button onclick="copyCodeFromModal()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Copy</button>
+                <button onclick="hideCodeModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-auto p-4">
+            <pre id="code-modal-content" class="mono text-sm text-gray-300 whitespace-pre-wrap bg-[#0d1117] p-4 rounded-lg"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- Import to DB Modal -->
+<div id="import-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Import to Database</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Database</label>
+                <select id="import-db-type" onchange="toggleImportOptions()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                    <option value="duckdb">DuckDB (In-Memory)</option>
+                    <option value="duckdb-file">DuckDB (File)</option>
+                    <option value="postgres">PostgreSQL Connection</option>
+                </select>
+            </div>
+            <div id="import-duckdb-path" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Database File Path</label>
+                <input id="import-db-path" placeholder="~/data/mydb.duckdb" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
+            </div>
+            <div id="import-postgres-conn" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">PostgreSQL Connection</label>
+                <select id="import-pg-connection" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                    <option value="">Loading connections...</option>
+                </select>
+                <p class="text-xs text-[#8b949e] mt-1">Add connections from the Admin page</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Table Name</label>
+                <input id="import-table-name" placeholder="my_table" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+            </div>
+            <div class="bg-[#0d1117] rounded-lg p-3 text-sm text-[#8b949e]">
+                <div class="flex items-start gap-2">
+                    <i data-lucide="info" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+                    <div>This will create a table with the current pipeline results. You can then query it from the Studio page.</div>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button onclick="hideImportModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button onclick="importToDB()" class="bg-[#238636] hover:bg-[#2ea043] px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                <i data-lucide="database" class="w-4 h-4"></i>
+                Import
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Save Pipeline Modal -->
+<div id="save-pipeline-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Save Pipeline</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Pipeline Name</label>
+                <input id="save-pipeline-name" placeholder="My Pipeline" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+            </div>
+        </div>
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button onclick="hideSavePipelineModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button onclick="savePipelineWithName()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Load Pipeline Modal -->
+<div id="load-pipeline-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <h3 class="text-lg font-bold mb-4">Load Pipeline</h3>
+        <div id="saved-pipelines-list" class="flex-1 overflow-auto space-y-2 min-h-[200px]">
+            <div class="text-[#8b949e] text-center py-8">No saved pipelines</div>
+        </div>
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button onclick="hideLoadPipelineModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- DuckDB Extensions Modal -->
+<div id="duckdb-extensions-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+            <h3 class="text-lg font-bold flex items-center gap-2">
+                <span>🦆</span> DuckDB Extensions
+            </h3>
+            <div class="flex items-center gap-2">
+                <button onclick="refreshDuckDBExtensions()" class="text-sm text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-[#21262d]">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+                <button onclick="hideDuckDBExtensionsModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            </div>
+        </div>
+        <div class="px-4 py-2 border-b border-[#30363d] flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-[#8b949e]">
+                <input type="checkbox" id="show-all-duckdb-ext" onchange="refreshDuckDBExtensions()" class="accent-indigo-500">
+                Show all available
+            </label>
+        </div>
+        <div id="duckdb-extensions-list" class="flex-1 overflow-auto">
+            <div class="p-4 text-[#8b949e]">Loading...</div>
+        </div>
+        <div class="p-4 border-t border-[#30363d] text-xs text-[#8b949e]">
+            <i data-lucide="info" class="w-3 h-3 inline"></i>
+            Extensions are installed globally in ~/.duckdb/extensions/
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/data.js"></script>
+{% endblock %}

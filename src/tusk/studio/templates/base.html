@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Tusk{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    {% block head %}{% endblock %}
+    {% block styles %}<style></style>{% endblock %}
+</head>
+<body class="h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-[#161b22] border-b border-[#30363d] px-4 py-2 flex items-center justify-between">
+        <div class="flex items-center gap-6">
+            <!-- Logo -->
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🦣</span>
+                <span class="font-bold text-lg">Tusk</span>
+                <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded font-medium">v0.1</span>
+            </div>
+
+            <!-- Main Navigation -->
+            <div class="flex bg-[#0d1117] rounded-lg p-0.5">
+                <a href="/" class="nav-tab {% if active_page == 'studio' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="terminal-square" class="w-4 h-4"></i>
+                    Studio
+                </a>
+                <a href="/admin" class="nav-tab {% if active_page == 'admin' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4"></i>
+                    Admin
+                </a>
+                <a href="/data" class="nav-tab {% if active_page == 'data' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4"></i>
+                    Data
+                </a>
+                <a href="/cluster" class="nav-tab {% if active_page == 'cluster' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="server" class="w-4 h-4"></i>
+                    Cluster
+                </a>
+            </div>
+        </div>
+
+        <!-- Right side -->
+        <div class="flex items-center gap-3">
+            {% block header_actions %}{% endblock %}
+
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" onclick="toggleTheme()" class="p-2 rounded-lg hover:bg-[#21262d]" title="Toggle theme">
+                <i data-lucide="sun" id="theme-icon-light" class="w-4 h-4 hidden"></i>
+                <i data-lucide="moon" id="theme-icon-dark" class="w-4 h-4"></i>
+            </button>
+
+            <!-- User Menu (populated by JS when auth is enabled) -->
+            <div id="user-menu" class="hidden relative">
+                <button id="user-menu-btn" onclick="toggleUserMenu()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-[#21262d]">
+                    <div id="user-avatar" class="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-medium">?</div>
+                    <span id="user-name" class="text-sm font-medium">User</span>
+                    <i data-lucide="chevron-down" class="w-4 h-4 text-[#8b949e]"></i>
+                </button>
+                <div id="user-dropdown" class="absolute right-0 top-full mt-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg py-1 w-48 hidden z-50">
+                    <div id="user-info" class="px-3 py-2 border-b border-[#30363d]">
+                        <div class="font-medium text-sm" id="dropdown-name">User</div>
+                        <div class="text-xs text-[#8b949e]" id="dropdown-username">@username</div>
+                    </div>
+                    <a href="/profile" class="px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2">
+                        <i data-lucide="user" class="w-4 h-4"></i>
+                        Profile
+                    </a>
+                    <a href="/users" id="users-link" class="hidden px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                        User Management
+                    </a>
+                    <button onclick="logout()" class="w-full px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2 text-red-400">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                        Sign out
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <div class="flex-1 flex overflow-hidden">
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block modals %}{% endblock %}
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        // Init Lucide icons and theme
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            checkAuthStatus();
+            initTheme();
+        });
+
+        // Theme management
+        function initTheme() {
+            const saved = localStorage.getItem('tusk-theme');
+            if (saved === 'light') {
+                document.body.classList.add('light');
+                document.getElementById('theme-icon-light').classList.remove('hidden');
+                document.getElementById('theme-icon-dark').classList.add('hidden');
+            }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light');
+            localStorage.setItem('tusk-theme', isLight ? 'light' : 'dark');
+            document.getElementById('theme-icon-light').classList.toggle('hidden', !isLight);
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', isLight);
+        }
+
+        // Check auth status and setup user menu
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/status');
+                const data = await res.json();
+
+                if (data.auth_enabled && data.user) {
+                    const userMenu = document.getElementById('user-menu');
+                    userMenu.classList.remove('hidden');
+
+                    const name = data.user.display_name || data.user.username;
+                    document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+                    document.getElementById('user-name').textContent = name;
+                    document.getElementById('dropdown-name').textContent = name;
+                    document.getElementById('dropdown-username').textContent = '@' + data.user.username;
+
+                    if (data.user.is_admin) {
+                        document.getElementById('users-link').classList.remove('hidden');
+                    }
+                    lucide.createIcons();
+                } else if (data.auth_enabled && !data.user) {
+                    const currentPath = window.location.pathname;
+                    if (currentPath !== '/login') {
+                        window.location.href = '/login?redirect=' + encodeURIComponent(currentPath);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to check auth status:', e);
+            }
+        }
+
+        function toggleUserMenu() {
+            document.getElementById('user-dropdown').classList.toggle('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            const userMenu = document.getElementById('user-menu');
+            const dropdown = document.getElementById('user-dropdown');
+            if (userMenu && !userMenu.contains(e.target)) {
+                dropdown?.classList.add('hidden');
+            }
+        });
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (e) {
+                console.error('Logout failed:', e);
+            }
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toast-container');
+            const icons = {
+                success: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>',
+                error: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',
+                warning: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
+                info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                ${icons[type] || icons.info}
+                <span class="flex-1">${message}</span>
+                <span class="toast-close" onclick="this.parentElement.remove()">&times;</span>
+            `;
+
+            container.appendChild(toast);
+
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.classList.add('hiding');
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+            return toast;
+        }
+
+        window.tuskToast = showToast;
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

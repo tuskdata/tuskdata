@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk - User Management{% endblock %}
+
+{% block header_actions %}
+<button onclick="showCreateUserModal()" class="px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-2">
+    <i data-lucide="user-plus" class="w-4 h-4"></i>
+    Add User
+</button>
+{% endblock %}
+
+{% block content %}
+<main class="flex-1 flex flex-col overflow-hidden p-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">User Management</h1>
+            <p class="text-[#8b949e] text-sm mt-1">Manage users, groups, and permissions</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="showTab('users')" id="tab-users" class="tab-btn active px-4 py-2 rounded-lg text-sm font-medium bg-[#21262d]">
+                Users
+            </button>
+            <button onclick="showTab('groups')" id="tab-groups" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#21262d]">
+                Groups
+            </button>
+        </div>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="panel-users" class="flex-1 overflow-auto">
+        <div class="bg-[#161b22] border border-[#30363d] rounded-lg">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-[#30363d] text-left text-xs text-[#8b949e] uppercase tracking-wider">
+                        <th class="px-4 py-3">User</th>
+                        <th class="px-4 py-3">Email</th>
+                        <th class="px-4 py-3">Role</th>
+                        <th class="px-4 py-3">Groups</th>
+                        <th class="px-4 py-3">Status</th>
+                        <th class="px-4 py-3">Last Login</th>
+                        <th class="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table">
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Groups Tab -->
+    <div id="panel-groups" class="flex-1 overflow-auto hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="groups-grid">
+            <div class="text-[#8b949e]">Loading...</div>
+        </div>
+    </div>
+</main>
+
+<!-- Create User Modal -->
+<div id="create-user-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold mb-4">Create New User</h3>
+        <form id="create-user-form" onsubmit="createUser(event)">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Username *</label>
+                    <input type="text" name="username" required
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Password *</label>
+                    <input type="password" name="password" required minlength="6"
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Display Name</label>
+                    <input type="text" name="display_name"
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Email</label>
+                    <input type="email" name="email"
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="is_admin" id="is_admin" class="rounded">
+                    <label for="is_admin" class="text-sm">Administrator</label>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="hideCreateUserModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Create User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="edit-user-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold mb-4">Edit User</h3>
+        <form id="edit-user-form" onsubmit="updateUser(event)">
+            <input type="hidden" name="user_id" id="edit-user-id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Username</label>
+                    <input type="text" id="edit-username" disabled
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm opacity-50">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Display Name</label>
+                        <input type="text" name="display_name" id="edit-display-name"
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Email</label>
+                        <input type="email" name="email" id="edit-email"
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" name="is_admin" id="edit-is-admin" class="rounded accent-indigo-500">
+                        <span class="text-sm">Administrator</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" name="is_active" id="edit-is-active" class="rounded accent-indigo-500">
+                        <span class="text-sm">Active</span>
+                    </label>
+                </div>
+
+                <!-- Groups Assignment -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Groups</label>
+                    <div id="edit-user-groups" class="grid grid-cols-2 gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg p-3 max-h-40 overflow-y-auto">
+                        <div class="text-[#8b949e] text-sm">Loading groups...</div>
+                    </div>
+                    <p class="text-xs text-[#8b949e] mt-1">Select groups to assign to this user</p>
+                </div>
+            </div>
+            <div class="flex justify-between mt-6 pt-4 border-t border-[#30363d]">
+                <button type="button" onclick="showResetPasswordModal()" class="px-4 py-2 rounded-lg text-sm text-yellow-400 hover:bg-yellow-500/20">
+                    Reset Password
+                </button>
+                <div class="flex gap-3">
+                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Save Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div id="reset-password-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-sm p-6">
+        <h3 class="text-lg font-semibold mb-4">Reset Password</h3>
+        <form onsubmit="resetPassword(event)">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">New Password *</label>
+                    <input type="password" id="new-password" required minlength="6"
+                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="hideResetPasswordModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-yellow-600 hover:bg-yellow-500">Reset Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/users.js"></script>
+{% endblock %}

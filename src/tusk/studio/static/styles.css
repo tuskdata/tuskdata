@@ -1,0 +1,379 @@
+/* Tusk Studio - Consolidated Styles */
+
+/* ============================================
+   CSS Variables (Theming)
+   ============================================ */
+
+/* Dark theme (default) */
+:root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border-color: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --accent-color: rgba(99, 102, 241, 0.15);
+    --accent-text: #a5b4fc;
+}
+
+/* Light theme */
+.light {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eaeef2;
+    --border-color: #d0d7de;
+    --text-primary: #1f2328;
+    --text-secondary: #656d76;
+    --accent-color: rgba(99, 102, 241, 0.1);
+    --accent-text: #6366f1;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+* { font-family: 'Inter', sans-serif; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.2s, color 0.2s;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ============================================
+   Layout Components
+   ============================================ */
+
+/* Sidebar */
+.sidebar {
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    width: 256px;
+}
+
+/* Cards */
+.card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+}
+
+/* Header */
+header {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* ============================================
+   Navigation
+   ============================================ */
+
+.nav-tab {
+    transition: all 0.15s;
+    color: var(--text-secondary);
+}
+.nav-tab:hover {
+    background: var(--accent-color);
+    color: var(--text-primary);
+}
+.nav-tab.active {
+    background: var(--accent-color);
+    color: var(--accent-text);
+}
+
+/* ============================================
+   Toast Notifications
+   ============================================ */
+
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.toast {
+    padding: 12px 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 280px;
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s ease;
+    font-size: 14px;
+}
+.toast.hiding {
+    animation: slideOut 0.3s ease forwards;
+}
+.toast-success { background: #238636; color: white; }
+.toast-error { background: #da3633; color: white; }
+.toast-warning { background: #9e6a03; color: white; }
+.toast-info { background: #1f6feb; color: white; }
+.toast-close {
+    margin-left: auto;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+.toast-close:hover { opacity: 1; }
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+/* Spin animation for loaders */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Pulse animation for running status */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.status-running {
+    animation: pulse 2s infinite;
+}
+
+/* Progress bar animation */
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* ============================================
+   Interactive Elements
+   ============================================ */
+
+/* Table/list row hover */
+.user-row,
+.worker-card,
+.job-row,
+.transform-card,
+.sidebar-item {
+    transition: all 0.15s;
+}
+.user-row:hover,
+.worker-card:hover,
+.job-row:hover,
+.transform-card:hover,
+.sidebar-item:hover {
+    background: var(--bg-tertiary);
+}
+.transform-card.selected {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* Stat card gradient */
+.stat-card {
+    background: linear-gradient(135deg, #161b22 0%, #1c2128 100%);
+}
+
+/* Resizable columns */
+.resizable-th {
+    position: relative;
+}
+.resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+}
+.resize-handle:hover,
+.resize-handle.resizing {
+    background: #6366f1;
+}
+
+/* ============================================
+   Data Display
+   ============================================ */
+
+/* Null value badge */
+.null-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    background: #30363d;
+    color: #8b949e;
+    border-radius: 4px;
+    font-size: 10px;
+    font-style: italic;
+}
+
+/* ============================================
+   Drag & Drop
+   ============================================ */
+
+.drop-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(99, 102, 241, 0.1);
+    border: 3px dashed #6366f1;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.drop-overlay-content {
+    background: var(--bg-secondary);
+    padding: 2rem 3rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* ============================================
+   CodeMirror (Studio page)
+   ============================================ */
+
+.cm-editor {
+    height: 180px;
+    font-size: 14px;
+    background: var(--bg-primary);
+}
+.cm-editor .cm-content {
+    font-family: 'JetBrains Mono', monospace;
+}
+.cm-editor .cm-gutters {
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    color: #484f58;
+}
+.cm-editor.cm-focused {
+    outline: 1px solid #6366f1;
+}
+.cm-tooltip-autocomplete {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 6px !important;
+}
+.cm-tooltip-autocomplete ul li {
+    color: var(--text-primary) !important;
+    padding: 4px 8px !important;
+}
+.cm-tooltip-autocomplete ul li[aria-selected] {
+    background: #6366f1 !important;
+}
+
+/* ============================================
+   Query Tabs (Studio page)
+   ============================================ */
+
+.query-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s;
+}
+.query-tab:hover {
+    color: var(--text-primary);
+}
+.query-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: #6366f1;
+}
+.query-tab .close-btn {
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0;
+}
+.query-tab:hover .close-btn,
+.query-tab.active .close-btn {
+    opacity: 0.6;
+}
+.query-tab .close-btn:hover {
+    opacity: 1;
+    background: var(--bg-tertiary);
+}
+
+/* Engine buttons */
+.engine-btn {
+    transition: all 0.15s;
+    color: var(--text-secondary);
+}
+.engine-btn:hover {
+    background: var(--accent-color);
+    color: var(--text-primary);
+}
+.engine-btn.active {
+    background: var(--accent-color);
+    color: var(--accent-text);
+}
+
+/* ============================================
+   MapLibre (Geo features)
+   ============================================ */
+
+.maplibregl-popup-content {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+}
+.maplibregl-popup-tip {
+    border-top-color: var(--bg-secondary) !important;
+}
+.geo-popup .maplibregl-popup-content {
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+}
+.geo-popup .maplibregl-popup-close-button {
+    color: var(--text-secondary);
+    font-size: 16px;
+    padding: 4px 8px;
+}
+.geo-popup .maplibregl-popup-close-button:hover {
+    color: white;
+    background: rgba(255,255,255,0.1);
+}
+.geo-popup .maplibregl-popup-tip {
+    border-top-color: var(--bg-secondary);
+}
+
+/* Hover tooltip for map features */
+.hover-tooltip .maplibregl-popup-content {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+.hover-tooltip .maplibregl-popup-tip {
+    display: none;
+}
+.dark-popup .maplibregl-popup-content {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+}
