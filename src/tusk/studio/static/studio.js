@@ -596,6 +596,8 @@ loadConnections().then(() => {
 });
 loadHistory();
 
+let connectionStatuses = {};
+
 async function loadConnections() {
     const res = await fetch('/api/connections');
     const conns = await res.json();
@@ -608,10 +610,17 @@ async function loadConnections() {
 
     list.innerHTML = conns.map(c => {
         const icon = c.type === 'duckdb' ? '🦆' : c.type === 'sqlite' ? '🗃️' : '🐘';
+        const status = connectionStatuses[c.id];
+        const statusColor = status === true ? 'bg-green-500'
+            : status === false ? 'bg-red-500'
+            : currentConnection?.id === c.id ? 'bg-green-500' : 'bg-gray-500';
+        const statusTitle = status === true ? 'Online'
+            : status === false ? 'Offline'
+            : 'Unknown';
         return `
         <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
              onclick="selectConnection('${c.id}', '${c.name}', '${c.type}')">
-            <span class="w-2 h-2 rounded-full ${currentConnection?.id === c.id ? 'bg-green-500' : 'bg-gray-500'}"></span>
+            <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
             <span>${icon}</span>
             <span class="text-sm flex-1 truncate" title="${c.name}">${c.name}</span>
             <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1">
@@ -634,6 +643,60 @@ async function loadConnections() {
             </div>
         </div>
     `}).join('');
+
+    // Check connection statuses in background
+    checkConnectionStatuses(conns);
+}
+
+async function checkConnectionStatuses(conns) {
+    for (const c of conns) {
+        try {
+            const res = await fetch(`/api/connections/${c.id}/status`);
+            const data = await res.json();
+            connectionStatuses[c.id] = data.online;
+        } catch {
+            connectionStatuses[c.id] = false;
+        }
+    }
+    // Re-render with updated statuses
+    const res = await fetch('/api/connections');
+    const updatedConns = await res.json();
+    const list = document.getElementById('connections-list');
+    if (list && updatedConns.length > 0) {
+        list.innerHTML = updatedConns.map(c => {
+            const icon = c.type === 'duckdb' ? '🦆' : c.type === 'sqlite' ? '🗃️' : '🐘';
+            const status = connectionStatuses[c.id];
+            const statusColor = status === true ? 'bg-green-500'
+                : status === false ? 'bg-red-500'
+                : 'bg-gray-500';
+            const statusTitle = status === true ? 'Online' : status === false ? 'Offline' : 'Unknown';
+            return `
+            <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
+                 onclick="selectConnection('${c.id}', '${c.name}', '${c.type}')">
+                <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
+                <span>${icon}</span>
+                <span class="text-sm flex-1 truncate" title="${c.name}">${c.name}</span>
+                <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                    ${c.type === 'postgres' ? `
+                        <button onclick="event.stopPropagation(); showDatabasesModal('${c.id}')"
+                                class="text-gray-500 hover:text-indigo-400 transition-colors text-xs" title="Browse databases">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                            </svg>
+                        </button>
+                    ` : ''}
+                    <button onclick="event.stopPropagation(); showEditConnModal('${c.id}')"
+                            class="text-gray-500 hover:text-blue-400 transition-colors text-xs" title="Edit connection">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                        </svg>
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteConnection('${c.id}')"
+                            class="text-gray-500 hover:text-red-400 transition-colors">×</button>
+                </div>
+            </div>
+        `}).join('');
+    }
 }
 
 window.selectConnection = async function(id, name, type) {
@@ -660,30 +723,40 @@ window.selectConnection = async function(id, name, type) {
 
     // Render schema tree
     renderSchemaTree(schema);
+
+    // Load row counts asynchronously (don't block)
+    loadRowCounts();
 }
 
 // Render schema tree
-function renderSchemaTree(schema) {
+let tableRowCounts = {};
+
+function renderSchemaTree(schema, filter = '') {
     const tree = document.getElementById('schema-tree');
-    tree.innerHTML = `
-        <div class="flex items-center justify-between mb-2">
-            <button onclick="refreshSchema()" class="text-xs text-gray-500 hover:text-white flex items-center gap-1" title="Refresh schema (F5)">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                Refresh
-            </button>
-        </div>
-    ` + Object.entries(schema).map(([schemaName, tables]) => `
+    const filterLower = filter.toLowerCase();
+
+    const schemaHtml = Object.entries(schema).map(([schemaName, tables]) => {
+        // Filter tables if search is active
+        const filteredTables = Object.entries(tables).filter(([tableName]) =>
+            !filterLower || tableName.toLowerCase().includes(filterLower)
+        );
+
+        if (filteredTables.length === 0) return '';
+
+        return `
         <details open class="mt-1">
             <summary class="cursor-pointer text-gray-400 hover:text-white py-1">📁 ${schemaName}</summary>
             <div class="ml-3">
-                ${Object.entries(tables).map(([tableName, cols]) => `
+                ${filteredTables.map(([tableName, cols]) => {
+                    const rowCount = tableRowCounts[`${schemaName}.${tableName}`];
+                    const rowCountStr = rowCount !== undefined ? `<span class="text-indigo-400/70">${formatRowCount(rowCount)}</span>` : '';
+                    return `
                     <details class="mt-0.5">
                         <summary class="cursor-pointer hover:text-white py-0.5 flex items-center gap-1"
                                  ondblclick="event.stopPropagation(); insertTable('${tableName}')">
                             <span>📋</span> ${tableName}
                             <span class="text-xs text-gray-600">(${cols.length})</span>
+                            ${rowCountStr}
                         </summary>
                         <div class="ml-4 text-xs text-gray-500">
                             ${cols.map(c => {
@@ -705,10 +778,46 @@ function renderSchemaTree(schema) {
                             `}).join('')}
                         </div>
                     </details>
-                `).join('')}
+                `}).join('')}
             </div>
         </details>
-    `).join('');
+    `}).join('');
+
+    tree.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <button onclick="refreshSchema()" class="text-xs text-gray-500 hover:text-white flex items-center gap-1" title="Refresh schema (F5)">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Refresh
+            </button>
+        </div>
+    ` + (schemaHtml || '<div class="text-gray-500 py-2">No tables match filter</div>');
+}
+
+function formatRowCount(count) {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
+}
+
+window.filterSchema = function(query) {
+    if (!currentSchema || Object.keys(currentSchema).length === 0) return;
+    renderSchemaTree(currentSchema, query);
+}
+
+async function loadRowCounts() {
+    if (!currentConnection) return;
+    try {
+        const res = await fetch(`/api/connections/${currentConnection.id}/row-counts`);
+        const data = await res.json();
+        if (data.counts) {
+            tableRowCounts = data.counts;
+            renderSchemaTree(currentSchema);
+        }
+    } catch (e) {
+        console.error('Failed to load row counts:', e);
+    }
 }
 
 // Refresh schema
@@ -1008,6 +1117,17 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         refreshSchema();
     }
+    // Ctrl+Tab - next tab
+    if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        if (tabs.length > 1) {
+            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+            const nextIndex = e.shiftKey
+                ? (currentIndex - 1 + tabs.length) % tabs.length
+                : (currentIndex + 1) % tabs.length;
+            switchTab(tabs[nextIndex].id);
+        }
+    }
 });
 
 // Close modal on backdrop click
@@ -1127,18 +1247,24 @@ window.clearPgBinPath = async function() {
 }
 
 // History Functions
-async function loadHistory() {
-    const res = await fetch('/api/history?limit=20');
-    const data = await res.json();
+let historyData = [];
 
+async function loadHistory() {
+    const res = await fetch('/api/history?limit=50');
+    const data = await res.json();
+    historyData = data.history || [];
+    renderHistory(historyData);
+}
+
+function renderHistory(items) {
     const list = document.getElementById('history-list');
 
-    if (!data.history || data.history.length === 0) {
+    if (!items || items.length === 0) {
         list.innerHTML = '<div class="text-gray-500 py-1">No history yet</div>';
         return;
     }
 
-    list.innerHTML = data.history.map(h => {
+    list.innerHTML = items.map(h => {
         // Truncate SQL for display
         const sqlPreview = h.sql.length > 35 ? h.sql.slice(0, 35) + '...' : h.sql;
         const statusIcon = h.status === 'success' ? '✓' : '✗';
@@ -1159,6 +1285,19 @@ async function loadHistory() {
             </div>
         `;
     }).join('');
+}
+
+window.filterHistory = function(query) {
+    if (!query.trim()) {
+        renderHistory(historyData);
+        return;
+    }
+    const q = query.toLowerCase();
+    const filtered = historyData.filter(h =>
+        h.sql.toLowerCase().includes(q) ||
+        (h.connection_name || '').toLowerCase().includes(q)
+    );
+    renderHistory(filtered);
 }
 
 window.useHistoryQuery = async function(id) {

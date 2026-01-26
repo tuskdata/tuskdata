@@ -16,7 +16,7 @@
 - [x] Test connection antes de guardar
 - [x] Recordar última conexión usada
 - [x] Icono diferente por tipo (PG, SQLite)
-- [ ] Mostrar estado (online/offline/connecting)
+- [x] Mostrar estado (online/offline/connecting)
 - [ ] Múltiples conexiones pueden estar activas
 
 ### 2. Editor SQL (Tabs)
@@ -64,7 +64,7 @@
 - [x] Click para cargar en editor
 - [x] Mostrar timestamp y duración
 - [x] Limpiar history
-- [ ] Buscar en history
+- [x] Buscar en history
 
 ### 6. Saved Queries (Favoritos)
 - [x] Guardar query con nombre
@@ -81,8 +81,8 @@
 - [x] Click en columna → añadir al query
 - [x] Refresh schema (F5)
 - [ ] Click en tabla → INSERT template
-- [ ] Buscar en schema
-- [ ] Ver row count por tabla
+- [x] Buscar en schema
+- [x] Ver row count por tabla
 
 ### 8. Keyboard Shortcuts
 - [x] Ctrl+Enter - Ejecutar query
@@ -92,7 +92,7 @@
 - [x] Ctrl+Space - Autocomplete
 - [x] F5 - Refresh schema
 - [x] Escape - Cancelar query
-- [ ] Ctrl+Tab - Siguiente tab
+- [x] Ctrl+Tab - Siguiente tab
 - [ ] Ctrl+/ - Comentar línea
 
 ### 9. UX
@@ -366,7 +366,7 @@
 - [x] Toast notifications (global component)
 - [x] Scheduled backups (APScheduler)
 - [x] Database settings viewer
-- [ ] Logs viewer
+- [x] Logs viewer
 - [x] DuckDB Spatial extension
 
 ---

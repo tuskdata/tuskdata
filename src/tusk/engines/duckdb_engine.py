@@ -299,6 +299,45 @@ def get_schema(path: str) -> dict:
         return {"error": str(e)}
 
 
+def check_connection(path: str) -> bool:
+    """Check if DuckDB file is accessible"""
+    try:
+        path = str(Path(path).expanduser())
+        conn = duckdb.connect(path, read_only=True)
+        conn.execute("SELECT 1")
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_row_counts(path: str) -> dict:
+    """Get row counts for all tables in a DuckDB database"""
+    try:
+        path = str(Path(path).expanduser())
+        conn = duckdb.connect(path, read_only=True)
+
+        tables_result = conn.execute("""
+            SELECT table_schema, table_name
+            FROM information_schema.tables
+            WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+        """)
+
+        counts = {}
+        for schema_name, table_name in tables_result.fetchall():
+            try:
+                count_result = conn.execute(f'SELECT COUNT(*) FROM "{schema_name}"."{table_name}"')
+                count = count_result.fetchone()[0]
+                counts[f"{schema_name}.{table_name}"] = count
+            except Exception:
+                pass
+
+        conn.close()
+        return counts
+    except Exception:
+        return {}
+
+
 def test_connection(path: str) -> dict:
     """Test connection to a DuckDB file"""
     path = str(Path(path).expanduser())

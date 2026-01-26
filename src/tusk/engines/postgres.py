@@ -143,6 +143,29 @@ async def test_connection(config: ConnectionConfig) -> tuple[bool, str]:
     return True, "Connection successful"
 
 
+async def check_connection(config: ConnectionConfig) -> bool:
+    """Quick check if connection is online"""
+    result = await execute_query(config, "SELECT 1")
+    return not result.error
+
+
+async def get_row_counts(config: ConnectionConfig) -> dict:
+    """Get estimated row counts for all tables (fast, uses pg_stat)"""
+    sql = """
+        SELECT
+            schemaname || '.' || relname as table_name,
+            n_live_tup as row_count
+        FROM pg_stat_user_tables
+        ORDER BY schemaname, relname
+    """
+    result = await execute_query(config, sql)
+    counts = {}
+    if not result.error:
+        for row in result.rows:
+            counts[row[0]] = row[1]
+    return counts
+
+
 async def list_databases(config: ConnectionConfig) -> list[dict]:
     """List all databases on the PostgreSQL server"""
     sql = """

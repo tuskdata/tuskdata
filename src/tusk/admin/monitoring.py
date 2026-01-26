@@ -420,3 +420,84 @@ def _format_bytes(size: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
     return f"{size:.1f} PB"
+
+
+async def get_logs(config: ConnectionConfig, limit: int = 100, level: str | None = None) -> dict:
+    """Get PostgreSQL server logs (requires pg_read_server_files or superuser)
+
+    This reads from pg_current_logfile() if available (PG 10+)
+    Falls back to returning log settings if file access is not available.
+    """
+    # First, check log settings
+    settings_sql = """
+    SELECT
+        name, setting
+    FROM pg_settings
+    WHERE name IN (
+        'log_destination',
+        'log_directory',
+        'log_filename',
+        'logging_collector',
+        'log_statement',
+        'log_min_duration_statement',
+        'log_min_error_statement'
+    )
+    ORDER BY name
+    """
+
+    settings_result = await postgres.execute_query(config, settings_sql)
+    settings = {}
+    if not settings_result.error:
+        for row in settings_result.rows:
+            settings[row[0]] = row[1]
+
+    # Try to get current log file path
+    logfile_sql = "SELECT pg_current_logfile()"
+    logfile_result = await postgres.execute_query(config, logfile_sql)
+
+    log_file = None
+    if not logfile_result.error and logfile_result.rows:
+        log_file = logfile_result.rows[0][0]
+
+    # Try to read recent log entries using pg_read_file
+    logs = []
+    if log_file:
+        try:
+            # Read last N bytes of log file (approximately last 100 lines)
+            read_sql = f"""
+            SELECT pg_read_file('{log_file}', greatest(pg_stat_file('{log_file}').size - 50000, 0), 50000)
+            """
+            read_result = await postgres.execute_query(config, read_sql)
+            if not read_result.error and read_result.rows:
+                content = read_result.rows[0][0] or ""
+                lines = content.strip().split("\n")
+                # Take last N lines
+                lines = lines[-limit:]
+
+                for line in lines:
+                    # Simple parsing - PostgreSQL log format varies
+                    log_entry = {"raw": line, "level": "LOG"}
+                    if "ERROR" in line.upper():
+                        log_entry["level"] = "ERROR"
+                    elif "WARNING" in line.upper():
+                        log_entry["level"] = "WARNING"
+                    elif "FATAL" in line.upper():
+                        log_entry["level"] = "FATAL"
+                    elif "PANIC" in line.upper():
+                        log_entry["level"] = "PANIC"
+
+                    # Filter by level if specified
+                    if level and log_entry["level"].upper() != level.upper():
+                        continue
+
+                    logs.append(log_entry)
+        except Exception:
+            pass
+
+    return {
+        "settings": settings,
+        "log_file": log_file,
+        "logs": logs,
+        "count": len(logs),
+        "note": "Requires pg_read_server_files role or superuser" if not logs else None
+    }

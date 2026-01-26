@@ -43,6 +43,7 @@ from tusk.admin.monitoring import (
     get_duplicate_indexes,
     get_replication_status,
     get_wal_stats,
+    get_logs,
 )
 from tusk.admin.pitr import (
     get_pitr_config,
@@ -638,6 +639,18 @@ class AdminController(Controller):
             return {"error": "WAL stats only available for PostgreSQL"}
 
         return await get_wal_stats(config)
+
+    @get("/{conn_id:str}/logs")
+    async def get_server_logs(self, conn_id: str, limit: int = 100, level: str | None = None) -> dict:
+        """Get PostgreSQL server logs"""
+        config = get_connection(conn_id)
+        if not config:
+            return {"error": "Connection not found"}
+
+        if config.type != "postgres":
+            return {"error": "Logs only available for PostgreSQL"}
+
+        return await get_logs(config, limit=limit, level=level)
 
     # ===== Point-In-Time Recovery (PITR) =====
 

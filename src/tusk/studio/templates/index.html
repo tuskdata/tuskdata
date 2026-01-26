@@ -56,6 +56,9 @@
     <!-- Schema -->
     <div class="flex-1 overflow-auto p-3 border-b border-[#30363d]">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Schema</span>
+        <input type="text" id="schema-search" placeholder="Search tables..."
+               class="w-full mt-2 px-2 py-1 text-xs bg-[#0d1117] border border-[#30363d] rounded focus:border-indigo-500 focus:outline-none"
+               oninput="filterSchema(this.value)">
         <div id="schema-tree" class="mt-2 text-sm">
             <div class="text-gray-500 py-2">Select a connection</div>
         </div>
@@ -72,11 +75,14 @@
     </div>
 
     <!-- History -->
-    <div class="p-3 max-h-48 overflow-auto">
+    <div class="p-3 max-h-64 overflow-auto">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">History</span>
             <button onclick="clearHistory()" class="text-gray-500 hover:text-red-400 text-xs" title="Clear history">Clear</button>
         </div>
+        <input type="text" id="history-search" placeholder="Search history..."
+               class="w-full mb-2 px-2 py-1 text-xs bg-[#0d1117] border border-[#30363d] rounded focus:border-indigo-500 focus:outline-none"
+               oninput="filterHistory(this.value)">
         <div id="history-list" class="space-y-1 text-sm">
             <div class="text-gray-500 py-1">No history yet</div>
         </div>

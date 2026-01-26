@@ -224,6 +224,42 @@ class APIController(Controller):
         else:
             return sqlite.get_schema(config)
 
+    @get("/connections/{conn_id:str}/row-counts")
+    async def get_row_counts(self, conn_id: str) -> dict:
+        """Get row counts for all tables in a connection"""
+        config = get_connection(conn_id)
+        if not config:
+            return {"error": "Connection not found"}
+
+        try:
+            if config.type == "postgres":
+                counts = await postgres.get_row_counts(config)
+            elif config.type == "duckdb":
+                counts = duckdb_engine.get_row_counts(config.path)
+            else:
+                counts = sqlite.get_row_counts(config)
+            return {"counts": counts}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @get("/connections/{conn_id:str}/status")
+    async def get_conn_status(self, conn_id: str) -> dict:
+        """Check if a connection is online"""
+        config = get_connection(conn_id)
+        if not config:
+            return {"online": False, "error": "Connection not found"}
+
+        try:
+            if config.type == "postgres":
+                online = await postgres.check_connection(config)
+            elif config.type == "duckdb":
+                online = duckdb_engine.check_connection(config.path)
+            else:
+                online = sqlite.check_connection(config)
+            return {"online": online}
+        except Exception as e:
+            return {"online": False, "error": str(e)}
+
     @post("/query")
     async def run_query(self, data: dict = Body()) -> dict:
         """Execute a query"""

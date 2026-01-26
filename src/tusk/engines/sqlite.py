@@ -85,3 +85,38 @@ def test_connection(config: ConnectionConfig) -> tuple[bool, str]:
     if result.error:
         return False, result.error
     return True, "Connection successful"
+
+
+def check_connection(config: ConnectionConfig) -> bool:
+    """Quick check if connection is online"""
+    result = execute_query(config, "SELECT 1")
+    return not result.error
+
+
+def get_row_counts(config: ConnectionConfig) -> dict:
+    """Get row counts for all tables"""
+    try:
+        path = Path(config.path).expanduser() if config.path else ":memory:"
+        conn = sqlite3.connect(str(path))
+        cursor = conn.cursor()
+
+        # Get all tables
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
+
+        counts = {}
+        for table in tables:
+            try:
+                cursor.execute(f'SELECT COUNT(*) FROM "{table}"')
+                count = cursor.fetchone()[0]
+                counts[f"main.{table}"] = count
+            except Exception:
+                pass
+
+        conn.close()
+        return counts
+    except Exception:
+        return {}

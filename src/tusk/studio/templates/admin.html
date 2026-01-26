@@ -334,6 +334,28 @@
             </div>
         </div>
 
+        <!-- Server Logs -->
+        <div class="card rounded-xl overflow-hidden mb-6">
+            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                <h3 class="font-medium flex items-center gap-2">
+                    <span>📜</span> Server Logs
+                </h3>
+                <div class="flex items-center gap-2">
+                    <select id="log-level-filter" onchange="refreshLogs()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                        <option value="">All Levels</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="LOG">LOG</option>
+                        <option value="FATAL">FATAL</option>
+                    </select>
+                    <button onclick="refreshLogs()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+                </div>
+            </div>
+            <div id="logs-content" class="p-4 max-h-96 overflow-auto">
+                <div class="text-gray-500">Loading...</div>
+            </div>
+        </div>
+
         <!-- PITR - Point-In-Time Recovery -->
         <div class="card rounded-xl overflow-hidden mb-6">
             <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">

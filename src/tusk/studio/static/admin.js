@@ -57,7 +57,8 @@ window.selectServer = async function(id, name) {
         refreshSlowQueries(),
         refreshIndexUsage(),
         refreshReplication(),
-        refreshPITR()
+        refreshPITR(),
+        refreshLogs()
     ]);
 
     // Start auto-refresh based on selected interval
@@ -87,7 +88,8 @@ window.refreshAll = function() {
         refreshSlowQueries(),
         refreshIndexUsage(),
         refreshReplication(),
-        refreshPITR()
+        refreshPITR(),
+        refreshLogs()
     ]);
 }
 
@@ -1470,4 +1472,72 @@ window.showBaseBackupsList = async function() {
     ).join('\n');
 
     alert('Base Backups:\n\n' + list);
+}
+
+// ===== Server Logs =====
+window.refreshLogs = async function() {
+    if (!currentServer) return;
+
+    const container = document.getElementById('logs-content');
+    const levelFilter = document.getElementById('log-level-filter');
+
+    if (!container) {
+        console.warn('Logs content element not found');
+        return;
+    }
+
+    try {
+        const level = levelFilter ? levelFilter.value : '';
+        const url = `/api/admin/${currentServer.id}/logs?limit=100${level ? `&level=${level}` : ''}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.error) {
+            container.innerHTML = `<div class="text-red-400">${data.error}</div>`;
+            return;
+        }
+
+        let html = '';
+
+        // Show log settings
+        if (data.settings && Object.keys(data.settings).length > 0) {
+            html += `<div class="mb-4 p-3 bg-[#21262d] rounded-lg">
+                <div class="text-xs text-gray-400 mb-2">Log Configuration</div>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    ${Object.entries(data.settings).map(([k, v]) => `
+                        <div class="text-gray-500">${k}</div>
+                        <div class="text-gray-300 font-mono">${v || 'N/A'}</div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+
+        if (data.log_file) {
+            html += `<div class="text-xs text-gray-500 mb-2">Log file: ${data.log_file}</div>`;
+        }
+
+        if (data.note) {
+            html += `<div class="text-xs text-yellow-500 mb-2">${data.note}</div>`;
+        }
+
+        if (data.logs && data.logs.length > 0) {
+            html += `<div class="space-y-1 font-mono text-xs">`;
+            for (const log of data.logs) {
+                const levelColor = log.level === 'ERROR' ? 'text-red-400'
+                    : log.level === 'WARNING' ? 'text-yellow-400'
+                    : log.level === 'FATAL' ? 'text-red-500 font-bold'
+                    : log.level === 'PANIC' ? 'text-red-600 font-bold'
+                    : 'text-gray-400';
+                html += `<div class="py-1 border-b border-[#21262d] ${levelColor}">${log.raw}</div>`;
+            }
+            html += `</div>`;
+        } else {
+            html += `<div class="text-gray-500">No log entries found. Logs may require superuser or pg_read_server_files role.</div>`;
+        }
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('refreshLogs error:', e);
+        container.innerHTML = `<div class="text-red-400">Error: ${e.message}</div>`;
+    }
 }

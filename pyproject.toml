@@ -1,7 +1,28 @@
 [project]
 name = "tuskdata"
-version = "0.1.1"
+version = "0.1.2"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "TuskData Team" }
+]
+keywords = ["postgresql", "admin", "analytics", "duckdb", "polars", "etl", "sql", "database"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+]
 requires-python = ">=3.11"
 # Core dependencies - minimal, always required
 dependencies = [
@@ -46,6 +67,11 @@ cluster = [
 all = [
     "tuskdata[studio,admin,cluster]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tuskdata/tuskdata"
+Repository = "https://github.com/tuskdata/tuskdata"
+Issues = "https://github.com/tuskdata/tuskdata/issues"
 
 [project.scripts]
 tusk = "tusk.cli:main"
