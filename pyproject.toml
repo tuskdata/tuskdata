@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.1.0"
+version = "0.1.1"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 requires-python = ">=3.11"
 # Core dependencies - minimal, always required

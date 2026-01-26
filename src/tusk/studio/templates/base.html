@@ -37,10 +37,12 @@
                     <i data-lucide="git-branch" class="w-4 h-4"></i>
                     Data
                 </a>
+                {% if features.cluster %}
                 <a href="/cluster" class="nav-tab {% if active_page == 'cluster' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
                     <i data-lucide="server" class="w-4 h-4"></i>
                     Cluster
                 </a>
+                {% endif %}
             </div>
         </div>
 
