@@ -1,0 +1,97 @@
+{# Data Table Component
+
+   Macros: data_table, simple_table, key_value_table
+#}
+
+{% macro data_table(columns, rows, row_key="id", empty_message="No data") %}
+<div class="card overflow-hidden">
+    <table class="w-full">
+        <thead class="bg-[#0d1117]">
+            <tr>
+                {% for col in columns %}
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                    {{ col }}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-[#30363d]">
+            {% if rows %}
+                {% for row in rows %}
+                <tr class="hover:bg-[#21262d] transition-colors">
+                    {{ caller(row) }}
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="{{ columns|length }}" class="px-4 py-8 text-center text-[#8b949e]">
+                        {{ empty_message }}
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+
+{% macro simple_table(headers, rows, empty_message="No data") %}
+{# Simple table that takes header strings and row arrays #}
+<div class="card overflow-hidden">
+    <table class="w-full">
+        <thead class="bg-[#0d1117]">
+            <tr>
+                {% for header in headers %}
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                    {{ header }}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-[#30363d]">
+            {% if rows %}
+                {% for row in rows %}
+                <tr class="hover:bg-[#21262d] transition-colors">
+                    {% for cell in row %}
+                    <td class="px-4 py-3 text-sm">{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="{{ headers|length }}" class="px-4 py-8 text-center text-[#8b949e]">
+                        {{ empty_message }}
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+
+{% macro key_value_table(items, key_header="Key", value_header="Value") %}
+{# Table for key-value pairs #}
+<div class="card overflow-hidden">
+    <table class="w-full">
+        <thead class="bg-[#0d1117]">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider w-1/3">
+                    {{ key_header }}
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                    {{ value_header }}
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-[#30363d]">
+            {% for key, value in items %}
+            <tr class="hover:bg-[#21262d] transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-[#8b949e]">{{ key }}</td>
+                <td class="px-4 py-3 text-sm font-mono">{{ value }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}

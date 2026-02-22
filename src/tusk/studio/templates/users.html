@@ -3,14 +3,14 @@
 {% block title %}Tusk - User Management{% endblock %}
 
 {% block header_actions %}
-<button onclick="showCreateUserModal()" class="px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-2">
+<button onclick="window.dispatchEvent(new CustomEvent('open-create-user'))" class="px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-2">
     <i data-lucide="user-plus" class="w-4 h-4"></i>
     Add User
 </button>
 {% endblock %}
 
 {% block content %}
-<main class="flex-1 flex flex-col overflow-hidden p-6">
+<main class="flex-1 flex flex-col overflow-hidden p-6" x-data="usersPage()">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div>
@@ -18,17 +18,20 @@
             <p class="text-[#8b949e] text-sm mt-1">Manage users, groups, and permissions</p>
         </div>
         <div class="flex gap-2">
-            <button onclick="showTab('users')" id="tab-users" class="tab-btn active px-4 py-2 rounded-lg text-sm font-medium bg-[#21262d]">
+            <button @click="activeTab = 'users'" :class="activeTab === 'users' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
                 Users
             </button>
-            <button onclick="showTab('groups')" id="tab-groups" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#21262d]">
+            <button @click="activeTab = 'groups'" :class="activeTab === 'groups' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
                 Groups
+            </button>
+            <button @click="activeTab = 'audit'" :class="activeTab === 'audit' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
+                Audit Log
             </button>
         </div>
     </div>
 
     <!-- Users Tab -->
-    <div id="panel-users" class="flex-1 overflow-auto">
+    <div x-show="activeTab === 'users'" class="flex-1 overflow-auto">
         <div class="bg-[#161b22] border border-[#30363d] rounded-lg">
             <table class="w-full">
                 <thead>
@@ -42,138 +45,330 @@
                         <th class="px-4 py-3 text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="users-table">
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
+                <tbody id="users-table"
+                       hx-get="/api/users/"
+                       hx-trigger="load, usersChanged from:body"
+                       hx-swap="innerHTML">
+                    <tr><td colspan="7" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <!-- Groups Tab -->
-    <div id="panel-groups" class="flex-1 overflow-auto hidden">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="groups-grid">
+    <div x-show="activeTab === 'groups'" x-cloak class="flex-1 overflow-auto">
+        <div id="groups-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+             hx-get="/api/groups/"
+             hx-trigger="load"
+             hx-swap="innerHTML">
             <div class="text-[#8b949e]">Loading...</div>
         </div>
     </div>
-</main>
 
-<!-- Create User Modal -->
-<div id="create-user-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
-    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-md p-6">
-        <h3 class="text-lg font-semibold mb-4">Create New User</h3>
-        <form id="create-user-form" onsubmit="createUser(event)">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Username *</label>
-                    <input type="text" name="username" required
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Password *</label>
-                    <input type="password" name="password" required minlength="6"
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Display Name</label>
-                    <input type="text" name="display_name"
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Email</label>
-                    <input type="email" name="email"
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                </div>
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" name="is_admin" id="is_admin" class="rounded">
-                    <label for="is_admin" class="text-sm">Administrator</label>
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button type="button" onclick="hideCreateUserModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
-                <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Create User</button>
-            </div>
-        </form>
+    <!-- Audit Log Tab -->
+    <div x-show="activeTab === 'audit'" x-cloak class="flex-1 overflow-auto">
+        <div class="flex items-center gap-4 mb-4">
+            <select name="action"
+                    hx-get="/api/audit/"
+                    hx-trigger="change"
+                    hx-target="#audit-table"
+                    hx-swap="innerHTML"
+                    hx-include="this"
+                    class="bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-sm">
+                <option value="">All Actions</option>
+                <option value="login">Login</option>
+                <option value="logout">Logout</option>
+                <option value="user.create">User Create</option>
+                <option value="user.update">User Update</option>
+                <option value="user.delete">User Delete</option>
+                <option value="password.change">Password Change</option>
+                <option value="group.assign">Group Assign</option>
+            </select>
+        </div>
+        <div class="bg-[#161b22] border border-[#30363d] rounded-lg">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-[#30363d] text-left text-xs text-[#8b949e] uppercase tracking-wider">
+                        <th class="px-4 py-3">Timestamp</th>
+                        <th class="px-4 py-3">User</th>
+                        <th class="px-4 py-3">Action</th>
+                        <th class="px-4 py-3">Resource</th>
+                        <th class="px-4 py-3">Details</th>
+                        <th class="px-4 py-3">IP Address</th>
+                    </tr>
+                </thead>
+                <tbody id="audit-table"
+                       hx-get="/api/audit/"
+                       hx-trigger="load"
+                       hx-swap="innerHTML">
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-<!-- Edit User Modal -->
-<div id="edit-user-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
-    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-lg p-6">
-        <h3 class="text-lg font-semibold mb-4">Edit User</h3>
-        <form id="edit-user-form" onsubmit="updateUser(event)">
-            <input type="hidden" name="user_id" id="edit-user-id">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Username</label>
-                    <input type="text" id="edit-username" disabled
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm opacity-50">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+    <!-- Create User Modal -->
+    <div x-data="{ open: false }"
+         x-show="open"
+         x-on:open-create-user.window="open = true"
+         x-on:keydown.escape.window="open = false"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+        <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-md p-6" @click.stop>
+            <h3 class="text-lg font-semibold mb-4">Create New User</h3>
+            <form hx-post="/api/users/"
+                  hx-swap="none"
+                  @htmx:after-request.camel="if ($event.detail.successful) { open = false; $el.reset(); htmx.trigger(document.body, 'usersChanged') }">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Username *</label>
+                        <input type="text" name="username" required
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Password *</label>
+                        <input type="password" name="password" required minlength="6"
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium mb-2">Display Name</label>
-                        <input type="text" name="display_name" id="edit-display-name"
+                        <input type="text" name="display_name"
                             class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-2">Email</label>
-                        <input type="email" name="email" id="edit-email"
+                        <input type="email" name="email"
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" name="is_admin" id="create-is-admin" class="rounded">
+                        <label for="create-is-admin" class="text-sm">Administrator</label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="open = false" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div x-show="editOpen"
+         x-on:keydown.escape.window="editOpen = false"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/60" @click="editOpen = false"></div>
+        <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-lg p-6" @click.stop>
+            <h3 class="text-lg font-semibold mb-4">Edit User</h3>
+            <form @submit.prevent="updateUser()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Username</label>
+                        <input type="text" :value="editData.username" disabled
+                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm opacity-50">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Display Name</label>
+                            <input type="text" x-model="editData.display_name"
+                                class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Email</label>
+                            <input type="email" x-model="editData.email"
+                                class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" x-model="editData.is_admin" class="rounded accent-indigo-500">
+                            <span class="text-sm">Administrator</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" x-model="editData.is_active" class="rounded accent-indigo-500">
+                            <span class="text-sm">Active</span>
+                        </label>
+                    </div>
+
+                    <!-- Groups Assignment -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Groups</label>
+                        <div class="grid grid-cols-2 gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg p-3 max-h-40 overflow-y-auto">
+                            <template x-for="g in allGroups" :key="g.id">
+                                <label class="flex items-center gap-2 p-1.5 rounded hover:bg-[#21262d] cursor-pointer">
+                                    <input type="checkbox" :value="g.id"
+                                        :checked="editData.group_ids.includes(g.id)"
+                                        @change="toggleGroup(g.id, $el.checked)"
+                                        class="rounded accent-indigo-500">
+                                    <span class="text-sm" x-text="g.name"></span>
+                                </label>
+                            </template>
+                            <template x-if="allGroups.length === 0">
+                                <div class="text-[#8b949e] text-sm col-span-2">No groups available</div>
+                            </template>
+                        </div>
+                        <p class="text-xs text-[#8b949e] mt-1">Select groups to assign to this user</p>
+                    </div>
+                </div>
+                <div class="flex justify-between mt-6 pt-4 border-t border-[#30363d]">
+                    <button type="button" @click="resetPasswordOpen = true" class="px-4 py-2 rounded-lg text-sm text-yellow-400 hover:bg-yellow-500/20">
+                        Reset Password
+                    </button>
+                    <div class="flex gap-3">
+                        <button type="button" @click="editOpen = false" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                        <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Save Changes</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div x-show="resetPasswordOpen"
+         x-on:keydown.escape.window="resetPasswordOpen = false"
+         x-cloak
+         class="fixed inset-0 z-[60] flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/60" @click="resetPasswordOpen = false"></div>
+        <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-sm p-6" @click.stop>
+            <h3 class="text-lg font-semibold mb-4">Reset Password</h3>
+            <form @submit.prevent="resetPassword()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">New Password *</label>
+                        <input type="password" x-model="newPassword" required minlength="6"
                             class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
                     </div>
                 </div>
-                <div class="flex items-center gap-4">
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" name="is_admin" id="edit-is-admin" class="rounded accent-indigo-500">
-                        <span class="text-sm">Administrator</span>
-                    </label>
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" name="is_active" id="edit-is-active" class="rounded accent-indigo-500">
-                        <span class="text-sm">Active</span>
-                    </label>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="resetPasswordOpen = false" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-yellow-600 hover:bg-yellow-500">Reset Password</button>
                 </div>
-
-                <!-- Groups Assignment -->
-                <div>
-                    <label class="block text-sm font-medium mb-2">Groups</label>
-                    <div id="edit-user-groups" class="grid grid-cols-2 gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg p-3 max-h-40 overflow-y-auto">
-                        <div class="text-[#8b949e] text-sm">Loading groups...</div>
-                    </div>
-                    <p class="text-xs text-[#8b949e] mt-1">Select groups to assign to this user</p>
-                </div>
-            </div>
-            <div class="flex justify-between mt-6 pt-4 border-t border-[#30363d]">
-                <button type="button" onclick="showResetPasswordModal()" class="px-4 py-2 rounded-lg text-sm text-yellow-400 hover:bg-yellow-500/20">
-                    Reset Password
-                </button>
-                <div class="flex gap-3">
-                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
-                    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-[#238636] hover:bg-[#2ea043]">Save Changes</button>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
-</div>
-
-<!-- Reset Password Modal -->
-<div id="reset-password-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
-    <div class="bg-[#161b22] border border-[#30363d] rounded-lg w-full max-w-sm p-6">
-        <h3 class="text-lg font-semibold mb-4">Reset Password</h3>
-        <form onsubmit="resetPassword(event)">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">New Password *</label>
-                    <input type="password" id="new-password" required minlength="6"
-                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button type="button" onclick="hideResetPasswordModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
-                <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-yellow-600 hover:bg-yellow-500">Reset Password</button>
-            </div>
-        </form>
-    </div>
-</div>
+</main>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/users.js"></script>
+<script>
+    function usersPage() {
+        return {
+            activeTab: 'users',
+            editOpen: false,
+            resetPasswordOpen: false,
+            editData: { id: '', username: '', display_name: '', email: '', is_admin: false, is_active: true, group_ids: [] },
+            allGroups: [],
+            originalGroupIds: [],
+            newPassword: '',
+
+            async editUser(userId) {
+                try {
+                    const [userRes, groupsRes] = await Promise.all([
+                        fetch(`/api/users/${userId}`),
+                        fetch('/api/groups/')
+                    ]);
+                    const userData = await userRes.json();
+                    const groupsData = await groupsRes.json();
+
+                    if (userData.error) {
+                        tuskToast('Error: ' + userData.error, 'error');
+                        return;
+                    }
+
+                    const u = userData.user;
+                    this.editData = {
+                        id: u.id,
+                        username: u.username,
+                        display_name: u.display_name || '',
+                        email: u.email || '',
+                        is_admin: u.is_admin,
+                        is_active: u.is_active,
+                        group_ids: (userData.groups || []).map(g => g.id),
+                    };
+                    this.originalGroupIds = [...this.editData.group_ids];
+                    this.allGroups = groupsData.groups || [];
+                    this.editOpen = true;
+                } catch (e) {
+                    tuskToast('Failed to load user data', 'error');
+                }
+            },
+
+            toggleGroup(groupId, checked) {
+                if (checked && !this.editData.group_ids.includes(groupId)) {
+                    this.editData.group_ids.push(groupId);
+                } else if (!checked) {
+                    this.editData.group_ids = this.editData.group_ids.filter(id => id !== groupId);
+                }
+            },
+
+            async updateUser() {
+                try {
+                    // Update user profile
+                    const res = await fetch(`/api/users/${this.editData.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            display_name: this.editData.display_name,
+                            email: this.editData.email,
+                            is_admin: this.editData.is_admin,
+                            is_active: this.editData.is_active,
+                        }),
+                    });
+                    const result = await res.json();
+                    if (!result.success) {
+                        tuskToast('Error: ' + (result.error || 'Failed to update'), 'error');
+                        return;
+                    }
+
+                    // Update group memberships
+                    const toAdd = this.editData.group_ids.filter(id => !this.originalGroupIds.includes(id));
+                    const toRemove = this.originalGroupIds.filter(id => !this.editData.group_ids.includes(id));
+
+                    for (const gid of toAdd) {
+                        await fetch(`/api/users/${this.editData.id}/groups`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ group_id: gid }),
+                        });
+                    }
+                    for (const gid of toRemove) {
+                        await fetch(`/api/users/${this.editData.id}/groups/${gid}/remove`, { method: 'POST' });
+                    }
+
+                    this.editOpen = false;
+                    tuskToast('User updated successfully', 'success');
+                    htmx.trigger(document.body, 'usersChanged');
+                } catch (e) {
+                    tuskToast('Failed to update user', 'error');
+                }
+            },
+
+            async resetPassword() {
+                if (!this.newPassword || this.newPassword.length < 6) {
+                    tuskToast('Password must be at least 6 characters', 'warning');
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/users/${this.editData.id}/password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: this.newPassword }),
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        this.resetPasswordOpen = false;
+                        this.newPassword = '';
+                        tuskToast('Password reset successfully', 'success');
+                    } else {
+                        tuskToast('Error: ' + (result.error || 'Failed'), 'error');
+                    }
+                } catch (e) {
+                    tuskToast('Failed to reset password', 'error');
+                }
+            },
+        };
+    }
+</script>
 {% endblock %}

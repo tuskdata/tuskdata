@@ -7,8 +7,11 @@ from pathlib import Path
 
 def main():
     """Entry point for tusk command"""
+    # Discover plugins early for CLI commands
+    plugin_commands = _get_plugin_commands()
+
     if len(sys.argv) < 2:
-        print_usage()
+        print_usage(plugin_commands)
         sys.exit(1)
 
     command = sys.argv[1]
@@ -17,27 +20,39 @@ def main():
         start_studio()
     elif command == "config":
         handle_config()
-    elif command == "scheduler":
-        start_scheduler()
-    elif command == "worker":
-        start_worker()
-    elif command == "cluster":
-        start_cluster_dev()
     elif command == "users":
         handle_users()
     elif command == "auth":
         handle_auth()
+    elif command == "plugins":
+        handle_plugins()
     elif command == "features":
         show_features()
     elif command == "version":
         from tusk import __version__
         print(f"Tusk v{__version__}")
     elif command == "help" or command == "--help":
-        print_usage()
+        print_usage(plugin_commands)
+    elif command in plugin_commands:
+        # Route to plugin command handler
+        plugin, handler = plugin_commands[command]
+        args = sys.argv[2:]
+        exit_code = handler(args)
+        sys.exit(exit_code or 0)
     else:
         print(f"Unknown command: {command}")
-        print_usage()
+        print_usage(plugin_commands)
         sys.exit(1)
+
+
+def _get_plugin_commands() -> dict:
+    """Get CLI commands from all plugins"""
+    try:
+        from tusk.plugins.registry import discover_plugins, get_plugin_cli_commands
+        discover_plugins()
+        return get_plugin_cli_commands()
+    except ImportError:
+        return {}
 
 
 def show_features():
@@ -46,7 +61,39 @@ def show_features():
     print_feature_status()
 
 
-def print_usage():
+def handle_plugins():
+    """Handle plugin management commands"""
+    args = sys.argv[2:]
+
+    if not args or args[0] == "list":
+        try:
+            from tusk.plugins.registry import discover_plugins, get_all_plugins
+            discover_plugins()
+            plugins = get_all_plugins()
+
+            if not plugins:
+                print("No plugins installed")
+                print("\nInstall plugins via pip:")
+                print("  pip install tusk-security")
+                print("  pip install tusk-cluster")
+                return
+
+            print(f"{'Plugin':<25} {'Version':<12} {'Tab':<15}")
+            print("-" * 55)
+            for p in plugins:
+                tab = p.tab_label if hasattr(p, 'tab_label') else '-'
+                print(f"{p.name:<25} {p.version:<12} {tab:<15}")
+
+        except ImportError as e:
+            print(f"Error loading plugins: {e}")
+            sys.exit(1)
+
+    else:
+        print("Usage: tusk plugins [list]")
+        sys.exit(1)
+
+
+def print_usage(plugin_commands=None):
     """Print usage information"""
     print("""
 Tusk - Modern Data Platform
@@ -54,11 +101,9 @@ Tusk - Modern Data Platform
 Usage:
     tusk studio [options]     Start the web studio        [requires: studio]
     tusk config [options]     Manage configuration
-    tusk scheduler [options]  Start the cluster scheduler [requires: cluster]
-    tusk worker [options]     Start a cluster worker      [requires: cluster]
-    tusk cluster [options]    Start local cluster (dev)   [requires: cluster]
     tusk users [command]      Manage users                [requires: studio]
     tusk auth [command]       Manage authentication       [requires: studio]
+    tusk plugins [command]    Manage plugins
     tusk features             Show installed features
     tusk version              Show version
     tusk help                 Show this help
@@ -67,18 +112,6 @@ Studio Options:
     --host HOST               Host to bind to (default: 127.0.0.1)
     --port, -p PORT           Port to bind to (default: 8000)
     --pg-bin-path PATH        Path to PostgreSQL binaries (pg_dump, psql)
-
-Scheduler Options:
-    --host HOST               Host to bind to (default: 0.0.0.0)
-    --port, -p PORT           Port to bind to (default: 8814)
-
-Worker Options:
-    --scheduler HOST:PORT     Scheduler address (default: localhost:8814)
-    --host HOST               Host to bind to (default: 0.0.0.0)
-    --port, -p PORT           Port to bind to (default: 8815)
-
-Cluster Options (dev mode):
-    --workers, -w N           Number of workers (default: 3)
 
 Config Commands:
     tusk config show                    Show current configuration
@@ -96,12 +129,20 @@ Auth Commands:
     tusk auth enable                    Enable multi-user mode
     tusk auth disable                   Disable auth (single mode)
 
+Plugin Commands:
+    tusk plugins list         List installed plugins""")
+
+    # Show plugin-provided commands
+    if plugin_commands:
+        print()
+        print("Commands from plugins:")
+        for cmd_name, (plugin, _) in plugin_commands.items():
+            print(f"    tusk {cmd_name:<18} (from {plugin.name})")
+
+    print("""
 Examples:
     tusk studio
     tusk studio --port 3000
-    tusk scheduler --port 8814
-    tusk worker --scheduler localhost:8814 --port 8815
-    tusk cluster --workers 3
     tusk config show
     tusk auth enable
     tusk users create admin --admin
@@ -220,159 +261,6 @@ def handle_config():
     else:
         print("Usage: tusk config [show|set KEY VALUE]")
         sys.exit(1)
-
-
-def start_scheduler():
-    """Start the cluster scheduler"""
-    from tusk.core.deps import require_feature
-    require_feature("cluster")
-
-    host = "0.0.0.0"
-    port = 8814
-
-    # Parse arguments
-    args = sys.argv[2:]
-    i = 0
-    while i < len(args):
-        if args[i] == "--host" and i + 1 < len(args):
-            host = args[i + 1]
-            i += 2
-        elif args[i] in ("--port", "-p") and i + 1 < len(args):
-            port = int(args[i + 1])
-            i += 2
-        else:
-            i += 1
-
-    print(f"Starting Tusk Scheduler on {host}:{port}")
-
-    from tusk.cluster.scheduler import Scheduler
-    scheduler = Scheduler(host=host, port=port)
-    try:
-        scheduler.serve()
-    except KeyboardInterrupt:
-        print("\nShutting down scheduler...")
-        scheduler.shutdown()
-
-
-def start_worker():
-    """Start a cluster worker"""
-    from tusk.core.deps import require_feature
-    require_feature("cluster")
-
-    scheduler_host = "localhost"
-    scheduler_port = 8814
-    host = "0.0.0.0"
-    port = 8815
-
-    # Parse arguments
-    args = sys.argv[2:]
-    i = 0
-    while i < len(args):
-        if args[i] == "--scheduler" and i + 1 < len(args):
-            addr = args[i + 1]
-            if ":" in addr:
-                scheduler_host, scheduler_port = addr.split(":")
-                scheduler_port = int(scheduler_port)
-            else:
-                scheduler_host = addr
-            i += 2
-        elif args[i] == "--host" and i + 1 < len(args):
-            host = args[i + 1]
-            i += 2
-        elif args[i] in ("--port", "-p") and i + 1 < len(args):
-            port = int(args[i + 1])
-            i += 2
-        else:
-            i += 1
-
-    print(f"Starting Tusk Worker on {host}:{port}")
-    print(f"Connecting to scheduler at {scheduler_host}:{scheduler_port}")
-
-    from tusk.cluster.worker import Worker
-    worker = Worker(
-        scheduler_host=scheduler_host,
-        scheduler_port=scheduler_port,
-        host=host,
-        port=port
-    )
-    try:
-        worker.serve()
-    except KeyboardInterrupt:
-        print("\nShutting down worker...")
-        worker.shutdown()
-
-
-def start_cluster_dev():
-    """Start local cluster with scheduler + workers for development"""
-    from tusk.core.deps import require_feature
-    require_feature("cluster")
-
-    import multiprocessing
-    import time
-    import os
-
-    num_workers = 3
-
-    # Parse arguments
-    args = sys.argv[2:]
-    i = 0
-    while i < len(args):
-        if args[i] in ("--workers", "-w") and i + 1 < len(args):
-            num_workers = int(args[i + 1])
-            i += 2
-        else:
-            i += 1
-
-    print(f"Starting Tusk Cluster (dev mode)")
-    print(f"  Scheduler: localhost:8814")
-    print(f"  Workers: {num_workers}")
-
-    processes = []
-
-    def run_scheduler():
-        from tusk.cluster.scheduler import Scheduler
-        scheduler = Scheduler(host="0.0.0.0", port=8814)
-        scheduler.serve()
-
-    def run_worker(worker_port):
-        from tusk.cluster.worker import Worker
-        worker = Worker(
-            scheduler_host="localhost",
-            scheduler_port=8814,
-            host="0.0.0.0",
-            port=worker_port
-        )
-        worker.serve()
-
-    # Start scheduler
-    p_scheduler = multiprocessing.Process(target=run_scheduler)
-    p_scheduler.start()
-    processes.append(p_scheduler)
-
-    # Wait for scheduler to start
-    time.sleep(1)
-
-    # Start workers
-    for i in range(num_workers):
-        worker_port = 8815 + i
-        p = multiprocessing.Process(target=run_worker, args=(worker_port,))
-        p.start()
-        processes.append(p)
-        print(f"  Worker {i+1}: localhost:{worker_port}")
-
-    print("\nCluster started. Press Ctrl+C to stop.")
-
-    try:
-        # Wait for all processes
-        for p in processes:
-            p.join()
-    except KeyboardInterrupt:
-        print("\nShutting down cluster...")
-        for p in processes:
-            p.terminate()
-        for p in processes:
-            p.join(timeout=5)
-        print("Cluster stopped.")
 
 
 def handle_users():

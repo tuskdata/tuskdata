@@ -3,6 +3,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
+import ast
 import msgspec
 import polars as pl
 import duckdb
@@ -20,7 +21,7 @@ class DataSource(msgspec.Struct):
     """A data source for the pipeline"""
     id: str
     name: str
-    source_type: Literal["csv", "parquet", "json", "sql", "osm"]
+    source_type: Literal["csv", "parquet", "json", "sql", "database", "osm"]
     path: str | None = None  # For file sources
     connection_id: str | None = None  # For SQL sources
     query: str | None = None  # For SQL sources
@@ -124,7 +125,7 @@ def generate_code(pipeline: Pipeline) -> str:
             lines.append(f'_conn = duckdb.connect()')
             lines.append(f'_conn.execute("INSTALL spatial; LOAD spatial;")')
             lines.append(f'{var_name} = _conn.execute("""')
-            lines.append(f'    SELECT id, kind, tags, lat, lon, ST_AsText(ST_Point(lon, lat)) as geometry')
+            lines.append(f'    SELECT id, kind, tags, lat, lon, ST_AsGeoJSON(ST_Point(lon, lat)) as geometry')
             lines.append(f'    FROM st_readosm(\'{source.path}\')')
             lines.append(f'    WHERE kind = \'{layer.rstrip("s") if layer != "all" else "node"}\' AND lat IS NOT NULL')
             lines.append(f'""").pl()  # Remove LIMIT clause for full data')
@@ -255,8 +256,8 @@ def load_source(source: DataSource) -> pl.DataFrame:
         return pl.read_json(path)
     elif source.source_type == "osm":
         return load_osm(source.path, source.osm_layer)
-    elif source.source_type == "sql":
-        raise NotImplementedError("SQL source not yet implemented")
+    elif source.source_type in ("sql", "database"):
+        return load_sql_source(source.connection_id, source.query)
     else:
         raise ValueError(f"Unknown source type: {source.source_type}")
 
@@ -286,6 +287,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
         conn.execute("INSTALL spatial; LOAD spatial;")
     except Exception as e:
         log.error("Failed to load DuckDB spatial extension", error=str(e))
+        conn.close()
         return pl.DataFrame({"error": [f"DuckDB spatial extension error: {e}"]})
 
     # Layer/kind filter for OSM data
@@ -304,7 +306,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     tags,
                     lat,
                     lon,
-                    ST_AsText(ST_Point(lon, lat)) as geometry
+                    ST_AsGeoJSON(ST_Point(lon, lat)) as geometry
                 FROM st_readosm('{p}')
                 WHERE kind = 'node' AND lat IS NOT NULL
                 {limit_clause}
@@ -343,7 +345,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     id,
                     kind,
                     tags,
-                    CASE WHEN lat IS NOT NULL THEN ST_AsText(ST_Point(lon, lat)) END as geometry,
+                    CASE WHEN lat IS NOT NULL THEN ST_AsGeoJSON(ST_Point(lon, lat)) END as geometry,
                     CASE WHEN refs IS NOT NULL THEN len(refs) END as ref_count
                 FROM st_readosm('{p}')
                 {limit_clause}
@@ -361,6 +363,212 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
             "error": [str(e)],
             "hint": ["Make sure you have DuckDB spatial extension. Try layers: nodes, ways, relations, or all"]
         })
+    finally:
+        conn.close()
+
+
+def load_sql_source(connection_id: str | None, query: str | None) -> pl.DataFrame:
+    """Load data from a PostgreSQL connection into a Polars DataFrame.
+
+    Uses psycopg synchronous connection to fetch results and convert to Polars.
+    """
+    if not connection_id:
+        raise ValueError("SQL source requires a connection_id")
+    if not query:
+        raise ValueError("SQL source requires a query")
+
+    from tusk.core.connection import get_connection
+
+    conn_config = get_connection(connection_id)
+    if conn_config is None:
+        raise ValueError(f"Connection not found: {connection_id}")
+
+    if conn_config.type != "postgres":
+        raise ValueError(f"SQL source only supports PostgreSQL connections, got: {conn_config.type}")
+
+    try:
+        import psycopg
+
+        dsn = conn_config.dsn
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+                if cur.description is None:
+                    raise ValueError("Query did not return any results")
+
+                columns = [desc.name for desc in cur.description]
+                rows = cur.fetchall()
+
+                if not rows:
+                    # Return empty DataFrame with proper schema
+                    return pl.DataFrame({col: [] for col in columns})
+
+                # Build dict of columns
+                data = {col: [row[i] for row in rows] for i, col in enumerate(columns)}
+                return pl.DataFrame(data)
+
+    except ImportError:
+        raise ValueError("psycopg is required for SQL sources. Install with: pip install psycopg[binary]")
+
+
+# ============================================================================
+# Safe Polars Expression Parser (replaces eval())
+# ============================================================================
+
+_ALLOWED_PL_FUNCS = {"col", "lit", "when", "concat_str"}
+_ALLOWED_CHAIN_METHODS = {
+    "str": {"to_uppercase", "to_lowercase", "contains", "strip_chars", "replace",
+            "starts_with", "ends_with", "slice", "lengths", "len_chars", "to_integer"},
+    "cast": True,
+    "abs": True, "round": True, "fill_null": True, "fill_nan": True,
+    "alias": True, "is_null": True, "is_not_null": True,
+    "sort": True, "reverse": True, "shift": True, "over": True,
+}
+
+
+def _safe_eval_polars_expr(expression: str) -> pl.Expr:
+    """Safely parse a Polars expression string without eval()"""
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Invalid expression syntax: {e}")
+
+    return _eval_node(tree.body)
+
+
+def _eval_node(node):
+    """Recursively evaluate AST node into Polars expression"""
+    # Number/string literals
+    if isinstance(node, ast.Constant):
+        return pl.lit(node.value)
+
+    # Binary operations: expr + expr, expr * expr, etc.
+    if isinstance(node, ast.BinOp):
+        left = _eval_node(node.left)
+        right = _eval_node(node.right)
+        ops = {
+            ast.Add: lambda l, r: l + r,
+            ast.Sub: lambda l, r: l - r,
+            ast.Mult: lambda l, r: l * r,
+            ast.Div: lambda l, r: l / r,
+            ast.FloorDiv: lambda l, r: l // r,
+            ast.Mod: lambda l, r: l % r,
+        }
+        op_func = ops.get(type(node.op))
+        if op_func is None:
+            raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+        return op_func(left, right)
+
+    # Comparison operations
+    if isinstance(node, ast.Compare):
+        left = _eval_node(node.left)
+        if len(node.ops) != 1:
+            raise ValueError("Only single comparisons supported")
+        right = _eval_node(node.comparators[0])
+        cmp_ops = {
+            ast.Gt: lambda l, r: l > r,
+            ast.Lt: lambda l, r: l < r,
+            ast.GtE: lambda l, r: l >= r,
+            ast.LtE: lambda l, r: l <= r,
+            ast.Eq: lambda l, r: l == r,
+            ast.NotEq: lambda l, r: l != r,
+        }
+        op_func = cmp_ops.get(type(node.ops[0]))
+        if op_func is None:
+            raise ValueError(f"Unsupported comparison: {type(node.ops[0]).__name__}")
+        return op_func(left, right)
+
+    # Unary operations (negation)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_eval_node(node.operand)
+
+    # Function calls: pl.col("x"), pl.lit(42), .method()
+    if isinstance(node, ast.Call):
+        # pl.col("name") or pl.lit(value)
+        if (isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "pl"):
+            func_name = node.func.attr
+            if func_name not in _ALLOWED_PL_FUNCS:
+                raise ValueError(f"Disallowed pl function: {func_name}")
+
+            if func_name == "col":
+                args = [_eval_literal(a) for a in node.args]
+                return pl.col(*args)
+            elif func_name == "lit":
+                args = [_eval_literal(a) for a in node.args]
+                return pl.lit(*args)
+            elif func_name == "concat_str":
+                return pl.concat_str(*[_eval_node(a) for a in node.args])
+            elif func_name == "when":
+                args = [_eval_node(a) for a in node.args]
+                return pl.when(*args)
+
+        # Method calls on expressions: expr.str.to_uppercase(), expr.round(2)
+        if isinstance(node.func, ast.Attribute):
+            obj = _eval_node(node.func.value)
+            method_name = node.func.attr
+
+            # Disallow bare .str call (must be .str.method())
+            if method_name == "str":
+                raise ValueError("Use full method like .str.to_uppercase()")
+
+            # Check if it's a str sub-method (obj is already ExprStringNameSpace)
+            allowed_str = _ALLOWED_CHAIN_METHODS.get("str", set())
+            if isinstance(allowed_str, set) and method_name in allowed_str:
+                args = [_eval_literal(a) for a in node.args]
+                return getattr(obj, method_name)(*args)
+
+            # Check allowed chain methods
+            if method_name in _ALLOWED_CHAIN_METHODS and method_name != "str":
+                # Cast needs special handling for pl.Int64 etc
+                if method_name == "cast":
+                    dtype_arg = node.args[0] if node.args else None
+                    if (dtype_arg
+                            and isinstance(dtype_arg, ast.Attribute)
+                            and isinstance(dtype_arg.value, ast.Name)
+                            and dtype_arg.value.id == "pl"):
+                        dtype_name = dtype_arg.attr
+                        dtype = getattr(pl, dtype_name, None)
+                        if dtype is None:
+                            raise ValueError(f"Unknown dtype: pl.{dtype_name}")
+                        return obj.cast(dtype)
+                    raise ValueError("cast() requires a pl.DataType argument like pl.Int64")
+
+                args = [_eval_literal(a) for a in node.args]
+                return getattr(obj, method_name)(*args)
+
+            raise ValueError(f"Disallowed method: {method_name}")
+
+        raise ValueError(f"Unsupported call: {ast.dump(node.func)}")
+
+    # Attribute access for .str accessor
+    if isinstance(node, ast.Attribute):
+        obj = _eval_node(node.value)
+        attr = node.attr
+        if attr == "str":
+            return obj.str
+        raise ValueError(f"Disallowed attribute access: {attr}")
+
+    # Name lookups (only allow "pl")
+    if isinstance(node, ast.Name):
+        if node.id == "pl":
+            return pl  # Will be used in pl.col, pl.lit calls
+        raise ValueError(f"Disallowed name: {node.id}")
+
+    raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
+
+def _eval_literal(node):
+    """Extract a literal value from an AST node"""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name) and node.id == "pl":
+        return pl
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "pl":
+        # pl.Int64, pl.Utf8, etc.
+        return getattr(pl, node.attr)
+    raise ValueError(f"Expected literal, got: {ast.dump(node)}")
 
 
 def apply_transform(df: pl.DataFrame, transform: Transform, sources_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -432,8 +640,7 @@ def apply_transform(df: pl.DataFrame, transform: Transform, sources_map: dict[st
         return df.group_by(transform.by).agg(aggs)
 
     elif isinstance(transform, AddColumnTransform):
-        # Parse expression - simplified version
-        expr = eval(transform.expression, {"pl": pl})
+        expr = _safe_eval_polars_expr(transform.expression)
         return df.with_columns(expr.alias(transform.name))
 
     elif isinstance(transform, DropNullsTransform):
@@ -491,7 +698,8 @@ def execute_pipeline(pipeline: Pipeline, limit: int | None = 100) -> dict:
             "columns": columns,
             "rows": rows,
             "row_count": len(rows),
-            "total_count": result.height if not limit else None
+            "total_count": result.height if not limit else None,
+            "engine_used": "polars",
         }
 
     except Exception as e:
@@ -682,20 +890,23 @@ def import_to_duckdb(pipeline: Pipeline, table_name: str, db_path: str | None = 
         # Connect to DuckDB (in-memory or file)
         conn = duckdb.connect(db_path or ":memory:")
 
-        # Register the polars DataFrame and create table
-        conn.register("temp_df", result)
-        conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM temp_df')
+        try:
+            # Register the polars DataFrame and create table
+            conn.register("temp_df", result)
+            conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM temp_df')
 
-        row_count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
+            row_count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
 
-        log.info("Imported to DuckDB", table=table_name, db=db_path or ":memory:", rows=row_count)
-        return {
-            "success": True,
-            "table": table_name,
-            "database": db_path or ":memory:",
-            "rows": row_count,
-            "columns": result.columns
-        }
+            log.info("Imported to DuckDB", table=table_name, db=db_path or ":memory:", rows=row_count)
+            return {
+                "success": True,
+                "table": table_name,
+                "database": db_path or ":memory:",
+                "rows": row_count,
+                "columns": result.columns
+            }
+        finally:
+            conn.close()
 
     except Exception as e:
         log.error("Failed to import to DuckDB", error=str(e))
@@ -794,11 +1005,15 @@ async def import_to_postgres(
             if dtype_str.startswith("List") or dtype_str.startswith("Struct"):
                 json_columns.add(i)
 
+        # Normalize identifiers to lowercase for PostgreSQL compatibility
+        table_name = table_name.lower()
+        pg_columns = [c.lower() for c in result.columns]
+
         async with await psycopg.AsyncConnection.connect(conn_str) as conn:
             async with conn.cursor() as cur:
                 # Build CREATE TABLE statement
                 columns_def = []
-                for name, dtype in zip(result.columns, result.dtypes):
+                for name, dtype in zip(pg_columns, result.dtypes):
                     dtype_str = str(dtype)
                     if dtype_str.startswith("List") or dtype_str.startswith("Struct"):
                         pg_type = "JSONB"
@@ -812,7 +1027,7 @@ async def import_to_postgres(
 
                 # Use COPY for fast bulk loading - process in batches
                 batch_size = 100_000
-                col_names = ", ".join(f'"{c}"' for c in result.columns)
+                col_names = ", ".join(f'"{c}"' for c in pg_columns)
                 # Use BINARY format for best performance, fall back to TEXT
                 copy_sql = f'COPY "{table_name}" ({col_names}) FROM STDIN'
 

@@ -1,0 +1,59 @@
+{# Users table rows — HTMX partial #}
+{% if users %}
+    {% for u in users %}
+    <tr class="user-row border-b border-[#30363d]">
+        <td class="px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-medium">
+                    {{ (u.display_name or u.username)[0] | upper }}
+                </div>
+                <div>
+                    <div class="font-medium">{{ u.display_name or u.username }}</div>
+                    <div class="text-xs text-[#8b949e]">@{{ u.username }}</div>
+                </div>
+            </div>
+        </td>
+        <td class="px-4 py-3 text-sm text-[#8b949e]">{{ u.email or '-' }}</td>
+        <td class="px-4 py-3">
+            {% if u.is_admin %}
+            <span class="px-2 py-1 rounded text-xs bg-purple-500/20 text-purple-400">Admin</span>
+            {% else %}
+            <span class="px-2 py-1 rounded text-xs bg-[#21262d] text-[#8b949e]">User</span>
+            {% endif %}
+        </td>
+        <td class="px-4 py-3">
+            {% if u.groups %}
+                {% for g in u.groups %}
+                <span class="px-1.5 py-0.5 rounded text-xs bg-indigo-500/20 text-indigo-400 mr-1">{{ g.name }}</span>
+                {% endfor %}
+            {% else %}
+                <span class="text-xs text-[#8b949e]">-</span>
+            {% endif %}
+        </td>
+        <td class="px-4 py-3">
+            {% if u.is_active %}
+            <span class="px-2 py-1 rounded text-xs bg-green-500/20 text-green-400">Active</span>
+            {% else %}
+            <span class="px-2 py-1 rounded text-xs bg-red-500/20 text-red-400">Inactive</span>
+            {% endif %}
+        </td>
+        <td class="px-4 py-3 text-sm text-[#8b949e]">
+            {{ u.last_login_display or 'Never' }}
+        </td>
+        <td class="px-4 py-3 text-right">
+            <button @click="editUser('{{ u.id }}')" class="p-1.5 hover:bg-[#21262d] rounded" title="Edit">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+            </button>
+            <button hx-post="/api/users/{{ u.id }}/delete"
+                    hx-target="#users-table"
+                    hx-swap="innerHTML"
+                    hx-confirm="Delete user &quot;{{ u.username }}&quot;? This cannot be undone."
+                    class="p-1.5 hover:bg-red-500/20 text-red-400 rounded" title="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </td>
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="7" class="px-4 py-8 text-center text-[#8b949e]">No users found</td></tr>
+{% endif %}

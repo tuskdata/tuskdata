@@ -11,20 +11,31 @@
         <div class="card rounded-xl p-6 mb-6">
             <h2 class="text-lg font-semibold mb-4">Account Information</h2>
 
-            <form id="profile-form" class="space-y-4">
+            <form hx-post="/api/profile/"
+                  hx-swap="none"
+                  class="space-y-4">
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Username</label>
-                    <input id="profile-username" disabled class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-gray-500">
+                    <input disabled
+                           value="{{ profile_user.username if profile_user else '' }}"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-gray-500">
                 </div>
 
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Display Name</label>
-                    <input id="profile-display-name" placeholder="Your name" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input name="display_name"
+                           value="{{ profile_user.display_name if profile_user and profile_user.display_name else '' }}"
+                           placeholder="Your name"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                 </div>
 
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Email</label>
-                    <input id="profile-email" type="email" placeholder="you@example.com" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input name="email"
+                           type="email"
+                           value="{{ profile_user.email if profile_user and profile_user.email else '' }}"
+                           placeholder="you@example.com"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                 </div>
 
                 <div class="flex justify-end pt-2">
@@ -37,21 +48,40 @@
         <div class="card rounded-xl p-6 mb-6">
             <h2 class="text-lg font-semibold mb-4">Change Password</h2>
 
-            <form id="password-form" class="space-y-4">
+            <form x-data="{ newPw: '', confirmPw: '', currentPw: '' }"
+                  hx-post="/api/profile/password"
+                  hx-swap="none"
+                  @htmx:after-request.camel="if ($event.detail.successful) { newPw = ''; confirmPw = ''; currentPw = ''; $el.reset() }"
+                  @submit="if (!currentPw) { tuskToast('Current password required', 'warning'); $event.preventDefault(); return; }
+                           if (!newPw) { tuskToast('New password required', 'warning'); $event.preventDefault(); return; }
+                           if (newPw.length < 6) { tuskToast('Password must be at least 6 characters', 'warning'); $event.preventDefault(); return; }
+                           if (newPw !== confirmPw) { tuskToast('Passwords do not match', 'warning'); $event.preventDefault(); return; }"
+                  class="space-y-4">
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Current Password</label>
-                    <input id="current-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input name="current_password"
+                           type="password"
+                           x-model="currentPw"
+                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                 </div>
 
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">New Password</label>
-                    <input id="new-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input name="new_password"
+                           type="password"
+                           x-model="newPw"
+                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                     <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
                 </div>
 
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Confirm New Password</label>
-                    <input id="confirm-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input type="password"
+                           x-model="confirmPw"
+                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                 </div>
 
                 <div class="flex justify-end pt-2">
@@ -66,22 +96,30 @@
 
             <div class="mb-4">
                 <label class="block text-sm text-gray-400 mb-2">Member of</label>
-                <div id="user-groups" class="flex flex-wrap gap-2">
-                    <span class="text-gray-500">Loading...</span>
+                <div class="flex flex-wrap gap-2">
+                    {% if profile_groups %}
+                        {% for g in profile_groups %}
+                        <span class="px-3 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-sm">{{ g.name }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-gray-500 text-sm">No groups assigned</span>
+                    {% endif %}
                 </div>
             </div>
 
             <div>
                 <label class="block text-sm text-gray-400 mb-2">Permissions</label>
-                <div id="user-permissions" class="flex flex-wrap gap-2">
-                    <span class="text-gray-500">Loading...</span>
+                <div class="flex flex-wrap gap-2">
+                    {% if profile_permissions %}
+                        {% for p in profile_permissions %}
+                        <span class="px-2 py-0.5 bg-[#21262d] text-gray-400 rounded text-xs font-mono">{{ p }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-gray-500 text-sm">No permissions</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </main>
-{% endblock %}
-
-{% block scripts %}
-<script src="/static/profile.js"></script>
 {% endblock %}

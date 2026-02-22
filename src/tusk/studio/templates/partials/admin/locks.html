@@ -1,0 +1,67 @@
+{% if locks %}
+    {% if show_all %}
+        {% for l in locks %}
+        <div class="p-4 flex items-start justify-between gap-4 hover:bg-[#21262d]/50 {% if not l.granted %}bg-yellow-500/5 border-l-2 border-yellow-500{% endif %}">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="font-mono text-sm">PID {{ l.pid }}</span>
+                    <span class="text-gray-500 text-sm">{{ l.user or 'unknown' }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full {% if l.granted %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">{% if l.granted %}granted{% else %}waiting{% endif %}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{{ l.mode }}</span>
+                </div>
+                <div class="text-sm text-gray-400">
+                    <span class="text-gray-500">{{ l.lock_type }}:</span> {{ l.locked_item }}
+                    {% if l.duration %}<span class="text-gray-500 ml-2">{{ l.duration }}</span>{% endif %}
+                </div>
+                <div class="font-mono text-xs text-gray-500 truncate mt-1">{{ l.query or '' }}</div>
+            </div>
+            {% if not l.granted %}
+            <button hx-post="/api/admin/{{ conn_id }}/kill/{{ l.pid }}"
+                    hx-target="#locks-list"
+                    hx-swap="innerHTML"
+                    hx-confirm="Terminate process {{ l.pid }}?"
+                    class="text-red-400 hover:text-red-300 hover:bg-red-500/20 px-2 py-1 rounded transition-colors text-sm">
+                Kill
+            </button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        {% for l in locks %}
+        <div class="p-4 hover:bg-[#21262d]/50 bg-red-500/5 border-l-2 border-red-500">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-gray-500 mb-1">BLOCKED</div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="font-mono text-sm">PID {{ l.blocked_pid }}</span>
+                        <span class="text-gray-500 text-sm">{{ l.blocked_user }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">{{ l.duration }}</span>
+                    </div>
+                    <div class="font-mono text-xs text-gray-400 truncate">{{ l.blocked_query }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500 mb-1">BLOCKING</div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="font-mono text-sm">PID {{ l.blocking_pid }}</span>
+                        <span class="text-gray-500 text-sm">{{ l.blocking_user }}</span>
+                    </div>
+                    <div class="font-mono text-xs text-gray-400 truncate">{{ l.blocking_query }}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 mt-3">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{{ l.mode }}</span>
+                <span class="text-gray-500 text-sm">{{ l.locked_item }}</span>
+                <button hx-post="/api/admin/{{ conn_id }}/kill/{{ l.blocking_pid }}"
+                        hx-target="#locks-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Kill blocking process {{ l.blocking_pid }}?"
+                        class="ml-auto text-red-400 hover:text-red-300 hover:bg-red-500/20 px-2 py-1 rounded transition-colors text-sm">
+                    Kill Blocker
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+{% else %}
+    <div class="p-4 text-gray-500">{% if show_all %}No locks active{% else %}No blocking locks detected{% endif %}</div>
+{% endif %}

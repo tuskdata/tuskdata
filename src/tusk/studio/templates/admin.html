@@ -2,18 +2,29 @@
 
 {% block title %}Tusk Admin{% endblock %}
 
-{% block styles %}
-<style>/* Styles in /static/styles.css */</style>
-{% endblock %}
-
 {% block content %}
 <!-- Sidebar -->
-<aside class="sidebar w-64 flex flex-col">
+<aside class="sidebar flex flex-col flex-shrink-0 overflow-hidden relative" x-data="resizableSidebar('admin')" style="min-width: 180px; max-width: 480px;">
+    <div @mousedown="startResize($event)" class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#6366f1]/50 active:bg-[#6366f1] z-10 transition-colors"></div>
     <!-- Servers/Connections -->
+    <div class="flex flex-col flex-1 overflow-hidden" x-data="adminSidebar()">
     <div class="p-3 border-b border-[#30363d]">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">PostgreSQL Servers</span>
-        <div id="servers-list" class="mt-2 space-y-1">
-            <div class="text-gray-500 text-sm py-2">Loading...</div>
+        <div class="mt-2 space-y-1">
+            {% if pg_connections %}
+                {% for c in pg_connections %}
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] transition-colors"
+                     :class="connId === '{{ c.id }}' ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''"
+                     @click="selectServer('{{ c.id }}', '{{ c.name }}')">
+                    <span class="w-2 h-2 rounded-full" :class="connId === '{{ c.id }}' ? 'bg-green-500' : 'bg-gray-500'"></span>
+                    <i data-lucide="database" class="w-4 h-4 text-gray-400"></i>
+                    <span class="text-sm flex-1 truncate">{{ c.name }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-gray-500 text-sm py-2">No PostgreSQL connections</div>
+                <a href="/" class="text-sm text-indigo-400 hover:text-indigo-300">Add one in Studio</a>
+            {% endif %}
         </div>
     </div>
 
@@ -21,397 +32,443 @@
     <div class="p-3">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</span>
         <div class="mt-2 space-y-2">
-            <button onclick="createBackup()" id="backup-btn" disabled
+            <button @click="createBackup()" :disabled="!connId"
                     class="w-full text-left px-3 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2">
-                <span>💾</span> Create Backup
+                <i data-lucide="hard-drive-download" class="w-4 h-4"></i> Create Backup
             </button>
-            <button onclick="showBackups()" id="backups-btn" disabled
+            <button @click="$dispatch('open-backups')" :disabled="!connId"
                     class="w-full text-left px-3 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2">
-                <span>📦</span> View Backups
+                <i data-lucide="archive" class="w-4 h-4"></i> View Backups
             </button>
         </div>
+    </div>
     </div>
 </aside>
 
 <!-- Main Content -->
-<main class="flex-1 overflow-auto p-6">
-    <div id="no-server" class="flex items-center justify-center h-full text-gray-500">
-        <div class="text-center">
-            <div class="text-4xl mb-4">🐘</div>
-            <div>Select a PostgreSQL server from the sidebar</div>
-            <div class="text-sm mt-2">SQLite connections don't have admin features</div>
-        </div>
-    </div>
-
-    <div id="admin-content" class="hidden">
-        <!-- Server Info -->
-        <div class="mb-6 flex items-center justify-between">
-            <div>
-                <h2 id="server-name" class="text-xl font-bold">Server</h2>
-                <p id="server-version" class="text-sm text-gray-400 mt-1"></p>
+<main class="flex-1 overflow-auto p-6" x-data="adminPage()">
+    <template x-if="!connId">
+        <div class="flex items-center justify-center h-full text-gray-500">
+            <div class="text-center">
+                <i data-lucide="database" class="w-16 h-16 mx-auto mb-4 text-gray-600"></i>
+                <div>Select a PostgreSQL server from the sidebar</div>
+                <div class="text-sm mt-2">SQLite connections don't have admin features</div>
             </div>
-            <div class="flex items-center gap-2">
-                <label class="text-sm text-gray-400">Auto-refresh:</label>
-                <select id="refresh-interval" onchange="setRefreshInterval()" class="bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-sm">
-                    <option value="0">Off</option>
-                    <option value="5000" selected>5s</option>
-                    <option value="10000">10s</option>
-                    <option value="30000">30s</option>
-                    <option value="60000">60s</option>
-                </select>
-                <button onclick="refreshAll()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm flex items-center gap-1.5">
+        </div>
+    </template>
+
+    <template x-if="connId">
+        <div>
+            <!-- Server Info Header -->
+            <div class="mb-6 flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold" x-text="connName"></h2>
+                    <p class="text-sm text-gray-400 mt-1" id="server-version"></p>
+                </div>
+                <button @click="refreshAll()"
+                        class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm flex items-center gap-1.5">
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    Refresh Now
+                    Refresh All
                 </button>
             </div>
-        </div>
 
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
-            <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-                <div class="text-gray-400 text-sm mb-1">Connections</div>
-                <div class="text-2xl font-bold" id="stat-connections">-</div>
-                <div class="mt-2 h-1.5 bg-[#30363d] rounded-full overflow-hidden">
-                    <div id="conn-bar" class="h-full bg-blue-500 transition-all" style="width: 0%"></div>
+            <!-- Stats Cards -->
+            <div id="admin-stats"
+                 :hx-get="'/api/admin/' + connId + '/stats'"
+                 hx-trigger="adminRefresh from:body, every 5s"
+                 hx-swap="innerHTML"
+                 class="mb-6">
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
+                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
+                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
+                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
                 </div>
             </div>
-            <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-                <div class="text-gray-400 text-sm mb-1">Active Queries</div>
-                <div class="text-2xl font-bold" id="stat-active">-</div>
-                <div class="mt-2 text-xs text-gray-500">currently running</div>
-            </div>
-            <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-                <div class="text-gray-400 text-sm mb-1">Cache Hit Ratio</div>
-                <div class="text-2xl font-bold" id="stat-cache">-</div>
-                <div class="mt-2 h-1.5 bg-[#30363d] rounded-full overflow-hidden">
-                    <div id="cache-bar" class="h-full bg-green-500 transition-all" style="width: 0%"></div>
-                </div>
-            </div>
-            <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-                <div class="text-gray-400 text-sm mb-1">Database Size</div>
-                <div class="text-2xl font-bold" id="stat-size">-</div>
-                <div class="mt-2 text-xs text-gray-500" id="stat-uptime">-</div>
-            </div>
-        </div>
 
-        <!-- Active Queries -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium">Active Processes</h3>
-                <button onclick="refreshProcesses()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-            </div>
-            <div id="processes-list" class="divide-y divide-[#30363d]">
-                <div class="p-4 text-gray-500">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Locks Monitor -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>🔒</span> Lock Monitor
-                </h3>
-                <div class="flex items-center gap-2">
-                    <label class="flex items-center gap-2 text-sm text-gray-400">
-                        <input type="checkbox" id="show-all-locks" onchange="refreshLocks()" class="accent-indigo-500">
-                        Show all locks
-                    </label>
-                    <button onclick="refreshLocks()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-                </div>
-            </div>
-            <div id="locks-list" class="divide-y divide-[#30363d]">
-                <div class="p-4 text-gray-500">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Table Maintenance -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>🧹</span> Table Maintenance
-                </h3>
-                <button onclick="refreshTableBloat()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-[#21262d] text-gray-400 text-left">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Table</th>
-                            <th class="px-4 py-2 font-medium">Size</th>
-                            <th class="px-4 py-2 font-medium">Dead Tuples</th>
-                            <th class="px-4 py-2 font-medium">Bloat %</th>
-                            <th class="px-4 py-2 font-medium">Last Vacuum</th>
-                            <th class="px-4 py-2 font-medium">Last Analyze</th>
-                            <th class="px-4 py-2 font-medium text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="bloat-list" class="divide-y divide-[#30363d]">
-                        <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Extensions -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium">Extensions</h3>
-                <div class="flex items-center gap-2">
-                    <label class="flex items-center gap-2 text-sm text-gray-400">
-                        <input type="checkbox" id="show-all-extensions" onchange="refreshExtensions()" class="accent-indigo-500">
-                        Show available
-                    </label>
-                    <button onclick="refreshExtensions()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-                </div>
-            </div>
-            <div id="extensions-list" class="divide-y divide-[#30363d]">
-                <div class="p-4 text-gray-500">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Database Settings -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>⚙️</span> Database Settings
-                </h3>
-                <div class="flex items-center gap-2">
-                    <label class="flex items-center gap-2 text-sm text-gray-400">
-                        <input type="checkbox" id="show-all-settings" onchange="refreshSettings()" class="accent-indigo-500">
-                        Show all
-                    </label>
-                    <button onclick="refreshSettings()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-                </div>
-            </div>
-            <div class="overflow-x-auto max-h-96">
-                <table class="w-full text-sm">
-                    <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Setting</th>
-                            <th class="px-4 py-2 font-medium">Value</th>
-                            <th class="px-4 py-2 font-medium">Category</th>
-                            <th class="px-4 py-2 font-medium">Description</th>
-                        </tr>
-                    </thead>
-                    <tbody id="settings-list" class="divide-y divide-[#30363d]">
-                        <tr><td colspan="4" class="p-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Scheduled Tasks -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>⏰</span> Scheduled Tasks
-                </h3>
-                <div class="flex items-center gap-2">
-                    <button onclick="showScheduleModal()" class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                        <i data-lucide="plus" class="w-4 h-4"></i> Add Schedule
+            <!-- Active Processes -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium">Active Processes</h3>
+                    <button @click="htmx.trigger('#processes-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
                     </button>
-                    <button onclick="refreshScheduledJobs()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+                </div>
+                <div id="processes-list"
+                     :hx-get="'/api/admin/' + connId + '/processes'"
+                     hx-trigger="adminRefresh from:body, every 5s, refresh"
+                     hx-swap="innerHTML"
+                     class="divide-y divide-[#30363d]">
+                    <div class="p-4 text-gray-500">Loading...</div>
                 </div>
             </div>
-            <div id="scheduled-jobs-list" class="divide-y divide-[#30363d]">
-                <div class="p-4 text-gray-500">Loading...</div>
-            </div>
-        </div>
 
-        <!-- Roles Management -->
-        <div class="card rounded-xl overflow-hidden">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>👤</span> Roles & Users
-                </h3>
-                <div class="flex items-center gap-2">
-                    <button onclick="showCreateRoleModal()" class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                        <i data-lucide="plus" class="w-4 h-4"></i> New Role
+            <!-- Locks Monitor -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="lock" class="w-4 h-4"></i> Lock Monitor
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" x-model="showAll"
+                                   @change="$nextTick(() => htmx.trigger('#locks-list', 'refresh'))"
+                                   class="accent-indigo-500">
+                            Show all locks
+                        </label>
+                    </div>
+                </div>
+                <div id="locks-list"
+                     :hx-get="'/api/admin/' + connId + (showAll ? '/locks/all' : '/locks')"
+                     hx-trigger="revealed, refresh, adminRefresh from:body"
+                     hx-swap="innerHTML"
+                     class="divide-y divide-[#30363d]">
+                    <div class="p-4 text-gray-500">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Table Maintenance -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="wrench" class="w-4 h-4"></i> Table Maintenance
+                    </h3>
+                    <button @click="htmx.trigger('#bloat-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
                     </button>
-                    <button onclick="refreshRoles()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#21262d] text-gray-400 text-left">
+                            <tr>
+                                <th class="px-4 py-2 font-medium">Table</th>
+                                <th class="px-4 py-2 font-medium">Size</th>
+                                <th class="px-4 py-2 font-medium">Dead Tuples</th>
+                                <th class="px-4 py-2 font-medium">Bloat %</th>
+                                <th class="px-4 py-2 font-medium">Last Vacuum</th>
+                                <th class="px-4 py-2 font-medium">Last Analyze</th>
+                                <th class="px-4 py-2 font-medium text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bloat-list"
+                               :hx-get="'/api/admin/' + connId + '/tables/bloat'"
+                               hx-trigger="revealed, refresh, adminRefresh from:body"
+                               hx-swap="innerHTML"
+                               class="divide-y divide-[#30363d]">
+                            <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-[#21262d] text-gray-400 text-left">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Role</th>
-                            <th class="px-4 py-2 font-medium">Login</th>
-                            <th class="px-4 py-2 font-medium">Superuser</th>
-                            <th class="px-4 py-2 font-medium">Create DB</th>
-                            <th class="px-4 py-2 font-medium">Create Role</th>
-                            <th class="px-4 py-2 font-medium">Member Of</th>
-                            <th class="px-4 py-2 font-medium text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="roles-list" class="divide-y divide-[#30363d]">
-                        <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
 
-        <!-- Slow Queries (pg_stat_statements) -->
-        <div class="card rounded-xl overflow-hidden mb-6 mt-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>🐢</span> Slow Queries
-                    <span id="slow-queries-status" class="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400">checking...</span>
-                </h3>
-                <div class="flex items-center gap-2">
-                    <select id="slow-queries-order" onchange="refreshSlowQueries()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
-                        <option value="total_time">Total Time</option>
-                        <option value="mean_time">Avg Time</option>
-                        <option value="calls">Calls</option>
-                    </select>
-                    <button onclick="resetSlowQueries()" class="text-sm text-gray-400 hover:text-white" title="Reset statistics">Reset</button>
-                    <button onclick="refreshSlowQueries()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+            <!-- Extensions -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium">Extensions</h3>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" x-model="showAll"
+                                   @change="$nextTick(() => htmx.trigger('#extensions-list', 'refresh'))"
+                                   class="accent-indigo-500">
+                            Show available
+                        </label>
+                    </div>
+                </div>
+                <div id="extensions-list"
+                     :hx-get="'/api/admin/' + connId + '/extensions?show_all=' + showAll"
+                     hx-trigger="revealed, refresh, adminRefresh from:body"
+                     hx-swap="innerHTML"
+                     class="divide-y divide-[#30363d]">
+                    <div class="p-4 text-gray-500">Loading...</div>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-80">
-                <table class="w-full text-sm">
-                    <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Query</th>
-                            <th class="px-4 py-2 font-medium text-right">Calls</th>
-                            <th class="px-4 py-2 font-medium text-right">Total Time</th>
-                            <th class="px-4 py-2 font-medium text-right">Avg Time</th>
-                            <th class="px-4 py-2 font-medium text-right">Rows</th>
-                            <th class="px-4 py-2 font-medium text-right">Cache %</th>
-                        </tr>
-                    </thead>
-                    <tbody id="slow-queries-list" class="divide-y divide-[#30363d]">
-                        <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
 
-        <!-- Index Usage -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>📊</span> Index Usage
-                </h3>
-                <div class="flex items-center gap-2">
-                    <label class="flex items-center gap-2 text-sm text-gray-400">
-                        <input type="checkbox" id="show-unused-only" onchange="refreshIndexUsage()" class="accent-indigo-500">
-                        Unused only
-                    </label>
-                    <button onclick="showDuplicateIndexes()" class="text-sm text-orange-400 hover:text-orange-300">Find Duplicates</button>
-                    <button onclick="refreshIndexUsage()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+            <!-- Database Settings -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4"></i> Database Settings
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" x-model="showAll"
+                                   @change="$nextTick(() => htmx.trigger('#settings-list', 'refresh'))"
+                                   class="accent-indigo-500">
+                            Show all
+                        </label>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 font-medium">Setting</th>
+                                <th class="px-4 py-2 font-medium">Value</th>
+                                <th class="px-4 py-2 font-medium">Category</th>
+                                <th class="px-4 py-2 font-medium">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-list"
+                               :hx-get="'/api/admin/' + connId + '/settings' + (showAll ? '' : '?important_only=true')"
+                               hx-trigger="revealed, refresh, adminRefresh from:body"
+                               hx-swap="innerHTML"
+                               class="divide-y divide-[#30363d]">
+                            <tr><td colspan="4" class="p-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-80">
-                <table class="w-full text-sm">
-                    <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Index</th>
-                            <th class="px-4 py-2 font-medium">Table</th>
-                            <th class="px-4 py-2 font-medium text-right">Size</th>
-                            <th class="px-4 py-2 font-medium text-right">Scans</th>
-                            <th class="px-4 py-2 font-medium text-right">Tuples Read</th>
-                            <th class="px-4 py-2 font-medium">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="index-usage-list" class="divide-y divide-[#30363d]">
-                        <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
 
-        <!-- Replication -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>🔄</span> Replication
-                </h3>
-                <button onclick="refreshReplication()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
-            </div>
-            <div id="replication-content" class="p-4">
-                <div class="text-gray-500">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Server Logs -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>📜</span> Server Logs
-                </h3>
-                <div class="flex items-center gap-2">
-                    <select id="log-level-filter" onchange="refreshLogs()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
-                        <option value="">All Levels</option>
-                        <option value="ERROR">ERROR</option>
-                        <option value="WARNING">WARNING</option>
-                        <option value="LOG">LOG</option>
-                        <option value="FATAL">FATAL</option>
-                    </select>
-                    <button onclick="refreshLogs()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+            <!-- Scheduled Tasks -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="clock" class="w-4 h-4"></i> Scheduled Tasks
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button @click="$dispatch('open-schedule-modal')"
+                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add Schedule
+                        </button>
+                        <button @click="htmx.trigger('#scheduled-jobs-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
+                            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div id="scheduled-jobs-list" class="divide-y divide-[#30363d]">
+                    <div class="p-4 text-gray-500">Loading...</div>
                 </div>
             </div>
-            <div id="logs-content" class="p-4 max-h-96 overflow-auto">
-                <div class="text-gray-500">Loading...</div>
-            </div>
-        </div>
 
-        <!-- PITR - Point-In-Time Recovery -->
-        <div class="card rounded-xl overflow-hidden mb-6">
-            <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                <h3 class="font-medium flex items-center gap-2">
-                    <span>⏱️</span> Point-In-Time Recovery
-                </h3>
-                <div class="flex items-center gap-2">
-                    <button onclick="createBaseBackup()" class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                        <i data-lucide="hard-drive" class="w-4 h-4"></i> Base Backup
+            <!-- Roles Management -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4"></i> Roles & Users
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button @click="$dispatch('open-role-modal')"
+                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
+                            <i data-lucide="plus" class="w-4 h-4"></i> New Role
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#21262d] text-gray-400 text-left">
+                            <tr>
+                                <th class="px-4 py-2 font-medium">Role</th>
+                                <th class="px-4 py-2 font-medium">Login</th>
+                                <th class="px-4 py-2 font-medium">Superuser</th>
+                                <th class="px-4 py-2 font-medium">Create DB</th>
+                                <th class="px-4 py-2 font-medium">Create Role</th>
+                                <th class="px-4 py-2 font-medium">Member Of</th>
+                                <th class="px-4 py-2 font-medium text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roles-list"
+                               :hx-get="'/api/admin/' + connId + '/roles'"
+                               hx-trigger="revealed, rolesChanged from:body, adminRefresh from:body"
+                               hx-swap="innerHTML"
+                               class="divide-y divide-[#30363d]">
+                            <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Slow Queries -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ orderBy: 'total_time' }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="snail" class="w-4 h-4"></i> Slow Queries
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <select x-model="orderBy"
+                                @change="$nextTick(() => htmx.trigger('#slow-queries-list', 'refresh'))"
+                                class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                            <option value="total_time">Total Time</option>
+                            <option value="mean_time">Avg Time</option>
+                            <option value="calls">Calls</option>
+                        </select>
+                        <button @click="resetSlowQueries()" class="text-sm text-gray-400 hover:text-white" title="Reset statistics">Reset</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-80">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 font-medium">Query</th>
+                                <th class="px-4 py-2 font-medium text-right">Calls</th>
+                                <th class="px-4 py-2 font-medium text-right">Total Time</th>
+                                <th class="px-4 py-2 font-medium text-right">Avg Time</th>
+                                <th class="px-4 py-2 font-medium text-right">Rows</th>
+                                <th class="px-4 py-2 font-medium text-right">Cache %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="slow-queries-list"
+                               :hx-get="'/api/admin/' + connId + '/slow-queries?order_by=' + orderBy + '&limit=20'"
+                               hx-trigger="revealed, refresh, adminRefresh from:body"
+                               hx-swap="innerHTML"
+                               class="divide-y divide-[#30363d]">
+                            <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Index Usage -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ unusedOnly: false }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="list-tree" class="w-4 h-4"></i> Index Usage
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" x-model="unusedOnly"
+                                   @change="$nextTick(() => htmx.trigger('#index-usage-list', 'refresh'))"
+                                   class="accent-indigo-500">
+                            Unused only
+                        </label>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-80">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 font-medium">Index</th>
+                                <th class="px-4 py-2 font-medium">Table</th>
+                                <th class="px-4 py-2 font-medium text-right">Size</th>
+                                <th class="px-4 py-2 font-medium text-right">Scans</th>
+                                <th class="px-4 py-2 font-medium text-right">Tuples Read</th>
+                                <th class="px-4 py-2 font-medium">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="index-usage-list"
+                               :hx-get="'/api/admin/' + connId + '/indexes' + (unusedOnly ? '?unused_only=true' : '')"
+                               hx-trigger="revealed, refresh, adminRefresh from:body"
+                               hx-swap="innerHTML"
+                               class="divide-y divide-[#30363d]">
+                            <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Replication -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="copy" class="w-4 h-4"></i> Replication
+                    </h3>
+                    <button @click="htmx.trigger('#replication-content', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
                     </button>
-                    <button onclick="refreshPITR()" class="text-sm text-gray-400 hover:text-white">↻ Refresh</button>
+                </div>
+                <div id="replication-content"
+                     :hx-get="'/api/admin/' + connId + '/replication'"
+                     hx-trigger="revealed, refresh, adminRefresh from:body"
+                     hx-swap="innerHTML"
+                     class="p-4">
+                    <div class="text-gray-500">Loading...</div>
                 </div>
             </div>
-            <div id="pitr-content" class="p-4">
-                <div class="text-gray-500">Loading...</div>
+
+            <!-- Server Logs -->
+            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ logLevel: '' }">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="scroll-text" class="w-4 h-4"></i> Server Logs
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <select x-model="logLevel"
+                                @change="$nextTick(() => htmx.trigger('#logs-content', 'refresh'))"
+                                class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                            <option value="">All Levels</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="LOG">LOG</option>
+                            <option value="FATAL">FATAL</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="logs-content"
+                     :hx-get="'/api/admin/' + connId + '/logs?limit=100' + (logLevel ? '&level=' + logLevel : '')"
+                     hx-trigger="revealed, refresh, adminRefresh from:body"
+                     hx-swap="innerHTML"
+                     class="p-4 max-h-96 overflow-auto">
+                    <div class="text-gray-500">Loading...</div>
+                </div>
+            </div>
+
+            <!-- PITR -->
+            <div class="card rounded-xl overflow-hidden mb-6">
+                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <h3 class="font-medium flex items-center gap-2">
+                        <i data-lucide="timer" class="w-4 h-4"></i> Point-In-Time Recovery
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button @click="createBaseBackup()"
+                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
+                            <i data-lucide="hard-drive" class="w-4 h-4"></i> Base Backup
+                        </button>
+                    </div>
+                </div>
+                <div id="pitr-content"
+                     :hx-get="'/api/admin/' + connId + '/pitr'"
+                     hx-trigger="revealed, refresh, adminRefresh from:body"
+                     hx-swap="innerHTML"
+                     class="p-4">
+                    <div class="text-gray-500">Loading...</div>
+                </div>
             </div>
         </div>
-    </div>
+    </template>
 </main>
 {% endblock %}
 
 {% block modals %}
 <!-- Role Modal -->
-<div id="role-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl">
-        <h3 id="role-modal-title" class="text-lg font-bold mb-4">Create Role</h3>
-        <form id="role-form" class="space-y-4">
-            <input type="hidden" id="role-edit-name" value="">
+<div x-data="roleModal()"
+     x-show="open"
+     x-on:open-role-modal.window="openCreate()"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
+        <h3 class="text-lg font-bold mb-4" x-text="isEdit ? 'Edit Role' : 'Create Role'"></h3>
+        <form @submit.prevent="saveRole()" class="space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Role Name</label>
-                <input id="role-name" placeholder="my_user" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" required>
+                <input x-model="form.name" :disabled="isEdit" placeholder="my_user"
+                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-50" required>
             </div>
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Password (optional for roles without login)</label>
-                <input id="role-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                <input x-model="form.password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="role-login" checked class="accent-indigo-500">
+                    <input type="checkbox" x-model="form.login" class="accent-indigo-500">
                     <span class="text-sm">Can Login</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="role-superuser" class="accent-indigo-500">
+                    <input type="checkbox" x-model="form.superuser" class="accent-indigo-500">
                     <span class="text-sm">Superuser</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="role-createdb" class="accent-indigo-500">
+                    <input type="checkbox" x-model="form.createdb" class="accent-indigo-500">
                     <span class="text-sm">Create Database</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="role-createrole" class="accent-indigo-500">
+                    <input type="checkbox" x-model="form.createrole" class="accent-indigo-500">
                     <span class="text-sm">Create Role</span>
                 </label>
             </div>
             <div class="flex gap-3 justify-end pt-2 border-t border-[#30363d]">
-                <button type="button" onclick="hideRoleModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
             </div>
         </form>
@@ -419,93 +476,114 @@
 </div>
 
 <!-- Backups Modal -->
-<div id="backups-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[550px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="backupsModal()"
+     x-show="backupsOpen"
+     x-on:open-backups.window="backupsOpen = true; $nextTick(() => htmx.trigger('#backups-content', 'refresh'))"
+     x-on:keydown.escape.window="backupsOpen = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="backupsOpen = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[550px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold">Database Backups</h3>
-            <button onclick="hideBackupsModal()" class="text-gray-400 hover:text-white text-xl">×</button>
+            <button @click="backupsOpen = false" class="text-gray-400 hover:text-white text-xl">&times;</button>
         </div>
-        <div id="backups-list" class="flex-1 overflow-auto">
+        <div id="backups-content"
+             :hx-get="connId ? '/api/admin/' + connId + '/backups' : ''"
+             hx-trigger="refresh"
+             hx-swap="innerHTML"
+             class="flex-1 overflow-auto">
             <div class="text-gray-500">Loading...</div>
         </div>
     </div>
 </div>
 
 <!-- Create Database from Backup Modal -->
-<div id="create-db-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl">
+<div x-data="createDbModal()"
+     x-show="createDbOpen"
+     x-on:open-create-db.window="openModal($event.detail)"
+     x-on:keydown.escape.window="createDbOpen = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="createDbOpen = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Create Database from Backup</h3>
         <div class="space-y-4">
             <div class="bg-[#0d1117] rounded-lg p-3 text-sm">
                 <div class="text-gray-400 mb-1">Backup file:</div>
-                <div id="create-db-backup-name" class="font-mono text-indigo-400"></div>
+                <div class="font-mono text-indigo-400" x-text="backupFile"></div>
             </div>
             <div>
                 <label class="block text-sm text-gray-400 mb-1">New Database Name</label>
-                <input id="create-db-name" type="text" placeholder="my_new_database"
+                <input x-model="dbName" type="text" placeholder="my_new_database"
                        class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                 <p class="text-xs text-gray-500 mt-1">Use lowercase letters, numbers, and underscores</p>
             </div>
             <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-400">
-                <div class="flex items-start gap-2">
-                    <span class="text-lg">⚠️</span>
-                    <div>This will create a new database and restore the backup into it.</div>
-                </div>
+                This will create a new database and restore the backup into it.
             </div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideCreateDbModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button onclick="createDbFromBackup()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium">Create Database</button>
+            <button @click="createDbOpen = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="createDatabase()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium">Create Database</button>
         </div>
     </div>
 </div>
 
 <!-- Schedule Modal -->
-<div id="schedule-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl">
+<div x-data="scheduleModal()"
+     x-show="scheduleOpen"
+     x-on:open-schedule-modal.window="openModal()"
+     x-on:keydown.escape.window="scheduleOpen = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="scheduleOpen = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Add Scheduled Task</h3>
         <div class="space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Task Type</label>
-                <select id="schedule-type" onchange="updateScheduleOptions()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                <select x-model="taskType" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
                     <option value="backup">Backup</option>
                     <option value="vacuum">VACUUM</option>
                     <option value="analyze">ANALYZE</option>
                 </select>
             </div>
-            <div id="schedule-vacuum-options" class="hidden">
+            <div x-show="taskType === 'vacuum'">
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="schedule-vacuum-full" class="accent-indigo-500">
+                    <input type="checkbox" x-model="vacuumFull" class="accent-indigo-500">
                     <span class="text-sm">VACUUM FULL (more thorough, but locks tables)</span>
                 </label>
             </div>
-            <!-- Schedule Mode -->
             <div>
                 <label class="block text-sm text-gray-400 mb-2">Schedule Mode</label>
                 <div class="flex gap-2">
-                    <button onclick="setScheduleMode('recurring')" id="schedule-mode-recurring" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-[#21262d] text-white border border-indigo-500">
+                    <button @click="mode = 'recurring'" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border"
+                            :class="mode === 'recurring' ? 'bg-[#21262d] text-white border-indigo-500' : 'bg-[#0d1117] text-[#8b949e] hover:text-white border-[#30363d]'">
                         <i data-lucide="repeat" class="w-4 h-4 inline mr-1"></i> Recurring
                     </button>
-                    <button onclick="setScheduleMode('once')" id="schedule-mode-once" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-[#0d1117] text-[#8b949e] hover:text-white border border-[#30363d]">
+                    <button @click="mode = 'once'" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border"
+                            :class="mode === 'once' ? 'bg-[#21262d] text-white border-indigo-500' : 'bg-[#0d1117] text-[#8b949e] hover:text-white border-[#30363d]'">
                         <i data-lucide="calendar" class="w-4 h-4 inline mr-1"></i> Run Once
                     </button>
                 </div>
             </div>
-            <!-- Recurring options -->
-            <div id="schedule-recurring-options">
+            <div x-show="mode === 'recurring'">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm text-gray-400 mb-1">Hour (0-23)</label>
-                        <input id="schedule-hour" type="number" min="0" max="23" value="2" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <input x-model.number="hour" type="number" min="0" max="23"
+                               class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
                     </div>
                     <div>
                         <label class="block text-sm text-gray-400 mb-1">Minute (0-59)</label>
-                        <input id="schedule-minute" type="number" min="0" max="59" value="0" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <input x-model.number="minute" type="number" min="0" max="59"
+                               class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
                     </div>
                 </div>
                 <div class="mt-4">
                     <label class="block text-sm text-gray-400 mb-1">Day of Week</label>
-                    <select id="schedule-day" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                    <select x-model="dayOfWeek" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
                         <option value="*">Every day</option>
                         <option value="mon">Monday</option>
                         <option value="tue">Tuesday</option>
@@ -518,12 +596,10 @@
                     </select>
                 </div>
             </div>
-            <!-- One-time options -->
-            <div id="schedule-once-options" class="hidden">
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Date & Time</label>
-                    <input id="schedule-datetime" type="datetime-local" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white">
-                </div>
+            <div x-show="mode === 'once'">
+                <label class="block text-sm text-gray-400 mb-1">Date & Time</label>
+                <input x-model="runDatetime" type="datetime-local"
+                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white">
             </div>
             <div class="bg-[#0d1117] rounded-lg p-3 text-sm text-[#8b949e]">
                 <div class="flex items-start gap-2">
@@ -533,14 +609,308 @@
             </div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideScheduleModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button onclick="addScheduledTask()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add Schedule</button>
+            <button @click="scheduleOpen = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="addTask()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add Schedule</button>
         </div>
     </div>
 </div>
 {% endblock %}
 
-
 {% block scripts %}
-<script src="/static/admin.js"></script>
+<script>
+// Shared state for connId across Alpine components — use Alpine.store to avoid TDZ errors with hx-boost
+(function() {
+    function _initAdminStore() {
+        if (!Alpine.store('admin')) {
+            Alpine.store('admin', { connId: '', connName: '' });
+        }
+    }
+    if (window.Alpine && Alpine.store) {
+        _initAdminStore();
+    } else {
+        document.addEventListener('alpine:init', _initAdminStore);
+    }
+})();
+
+// Accessor for convenience
+var adminState = { get connId() { return Alpine.store('admin')?.connId || ''; }, set connId(v) { Alpine.store('admin').connId = v; }, get connName() { return Alpine.store('admin')?.connName || ''; }, set connName(v) { Alpine.store('admin').connName = v; } };
+
+function adminSidebar() {
+    return {
+        get connId() { return adminState.connId; },
+        selectServer(id, name) {
+            adminState.connId = id;
+            adminState.connName = name;
+            // Wait for Alpine to render the template, then trigger HTMX loads
+            this.$nextTick(() => {
+                htmx.process(document.body);
+                // Fire adminRefresh so all sections load/reload with the new connId
+                setTimeout(() => {
+                    htmx.trigger(document.body, 'adminRefresh');
+                    lucide.createIcons();
+                }, 30);
+            });
+        },
+        async createBackup() {
+            if (!adminState.connId) return;
+            showToast('Creating backup...', 'info');
+            try {
+                const res = await fetch('/api/admin/' + adminState.connId + '/backup', { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message || data.error, data.success ? 'success' : 'error');
+            } catch (e) { showToast('Backup failed: ' + e.message, 'error'); }
+        }
+    };
+}
+
+function loadScheduledJobs() {
+    const el = document.getElementById('scheduled-jobs-list');
+    if (!el) return;
+    fetch('/api/scheduler/jobs')
+        .then(r => r.json())
+        .then(data => {
+            const jobs = data.jobs || [];
+            if (!jobs.length) {
+                el.innerHTML = '<div class="p-4 text-gray-500">No scheduled tasks</div>';
+                return;
+            }
+            el.innerHTML = jobs.map(j => `
+                <div class="p-4 flex items-center justify-between hover:bg-[#21262d]/50">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium">${j.name || j.type || 'Task'}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full ${j.paused ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'}">${j.paused ? 'Paused' : 'Active'}</span>
+                        </div>
+                        <div class="text-sm text-gray-500 mt-1">${j.schedule || ''} ${j.next_run ? '· Next: ' + j.next_run : ''}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="runJobNow('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-indigo-400" title="Run now">Run</button>
+                        ${j.paused
+                            ? `<button onclick="resumeJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-green-400">Resume</button>`
+                            : `<button onclick="pauseJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-yellow-400">Pause</button>`
+                        }
+                        <button onclick="deleteJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-red-400">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(() => {
+            el.innerHTML = '<div class="p-4 text-gray-500">No scheduled tasks</div>';
+        });
+}
+
+function adminPage() {
+    return {
+        get connId() { return adminState.connId; },
+        get connName() { return adminState.connName; },
+        init() { loadScheduledJobs(); },
+        refreshAll() {
+            htmx.trigger(document.body, 'adminRefresh');
+            loadScheduledJobs();
+        },
+        async resetSlowQueries() {
+            if (!adminState.connId) return;
+            if (!confirm('Reset pg_stat_statements statistics? This clears all query history.')) return;
+            try {
+                const res = await fetch('/api/admin/' + adminState.connId + '/slow-queries/reset', { method: 'POST' });
+                const data = await res.json();
+                showToast(data.success ? 'Statistics reset' : ('Failed: ' + data.error), data.success ? 'success' : 'error');
+                if (data.success) htmx.trigger(document.getElementById('slow-queries-list'), 'refresh');
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        },
+        async createBaseBackup() {
+            if (!adminState.connId) return;
+            const label = prompt('Backup label (optional):');
+            showToast('Starting base backup...', 'info');
+            try {
+                const res = await fetch('/api/admin/' + adminState.connId + '/pitr/base-backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: label || undefined })
+                });
+                const data = await res.json();
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) htmx.trigger(document.getElementById('pitr-content'), 'refresh');
+            } catch (e) { showToast('Backup failed: ' + e.message, 'error'); }
+        }
+    };
+}
+
+function roleModal() {
+    return {
+        open: false,
+        isEdit: false,
+        form: { name: '', password: '', login: true, superuser: false, createdb: false, createrole: false },
+        openCreate() {
+            this.isEdit = false;
+            this.form = { name: '', password: '', login: true, superuser: false, createdb: false, createrole: false };
+            this.open = true;
+        },
+        editRole(name, login, superuser, createdb, createrole) {
+            this.isEdit = true;
+            this.form = { name, password: '', login, superuser, createdb, createrole };
+            this.open = true;
+        },
+        async saveRole() {
+            const url = this.isEdit
+                ? '/api/admin/' + adminState.connId + '/roles/' + this.form.name
+                : '/api/admin/' + adminState.connId + '/roles';
+            const body = { ...this.form };
+            if (!body.password) delete body.password;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    this.open = false;
+                    htmx.trigger(document.body, 'rolesChanged');
+                } else {
+                    showToast('Failed: ' + data.error, 'error');
+                }
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        }
+    };
+}
+
+// Make editRole callable from partial template @click
+window.editRole = function(name, login, superuser, createdb, createrole) {
+    const modal = document.querySelector('[x-data*="roleModal"]');
+    if (modal) {
+        Alpine.$data(modal).editRole(name, login, superuser, createdb, createrole);
+    }
+};
+
+function backupsModal() {
+    return {
+        get connId() { return adminState.connId; },
+        backupsOpen: false,
+        showCreateDb(filename) {
+            window.dispatchEvent(new CustomEvent('open-create-db', { detail: filename }));
+        }
+    };
+}
+// Make showCreateDb callable from partial
+window.showCreateDb = function(filename) {
+    window.dispatchEvent(new CustomEvent('open-create-db', { detail: filename }));
+};
+
+function createDbModal() {
+    return {
+        createDbOpen: false,
+        backupFile: '',
+        dbName: '',
+        openModal(filename) {
+            this.backupFile = filename;
+            this.dbName = '';
+            this.createDbOpen = true;
+        },
+        async createDatabase() {
+            if (!this.dbName.trim()) { showToast('Please enter a database name', 'warning'); return; }
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(this.dbName)) {
+                showToast('Invalid database name. Use letters, numbers, and underscores only.', 'warning'); return;
+            }
+            showToast('Creating database from backup...', 'info');
+            try {
+                const res = await fetch('/api/admin/' + adminState.connId + '/databases/from-backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: this.dbName, filename: this.backupFile })
+                });
+                const data = await res.json();
+                showToast(data.success ? 'Database "' + this.dbName + '" created!' : ('Failed: ' + data.message),
+                          data.success ? 'success' : 'error');
+                if (data.success) this.createDbOpen = false;
+            } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+        }
+    };
+}
+
+function scheduleModal() {
+    return {
+        scheduleOpen: false,
+        taskType: 'backup',
+        vacuumFull: false,
+        mode: 'recurring',
+        hour: 2, minute: 0,
+        dayOfWeek: 'sun',
+        runDatetime: '',
+        openModal() {
+            if (!adminState.connId) { showToast('Please select a server first', 'warning'); return; }
+            this.scheduleOpen = true;
+            // Set default datetime
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(2, 0, 0, 0);
+            this.runDatetime = tomorrow.toISOString().slice(0, 16);
+            this.$nextTick(() => lucide.createIcons());
+        },
+        async addTask() {
+            const body = { connection_id: adminState.connId };
+            if (this.mode === 'once') {
+                if (!this.runDatetime) { showToast('Please select a date and time', 'warning'); return; }
+                body.run_date = new Date(this.runDatetime).toISOString();
+            } else {
+                body.hour = this.hour;
+                body.minute = this.minute;
+                body.day_of_week = this.dayOfWeek;
+            }
+            if (this.taskType === 'vacuum') body.full = this.vacuumFull;
+            try {
+                const res = await fetch('/api/scheduler/jobs/' + this.taskType, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast((this.mode === 'once' ? 'One-time' : 'Recurring') + ' ' + this.taskType + ' task scheduled', 'success');
+                    this.scheduleOpen = false;
+                    loadScheduledJobs();
+                } else { showToast('Failed: ' + data.error, 'error'); }
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        }
+    };
+}
+
+// Scheduler job actions (called from HTMX partial if we add one, or keep as fetch for now)
+window.runJobNow = async function(jobId) {
+    try {
+        const res = await fetch('/api/scheduler/jobs/' + jobId + '/run', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.success ? 'Job triggered' : 'Failed to trigger job', data.success ? 'success' : 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+};
+
+window.pauseJob = async function(jobId) {
+    try {
+        const res = await fetch('/api/scheduler/jobs/' + jobId + '/pause', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) { showToast('Job paused', 'success'); loadScheduledJobs(); }
+        else showToast('Failed to pause job', 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+};
+
+window.resumeJob = async function(jobId) {
+    try {
+        const res = await fetch('/api/scheduler/jobs/' + jobId + '/resume', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) { showToast('Job resumed', 'success'); loadScheduledJobs(); }
+        else showToast('Failed to resume job', 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+};
+
+window.deleteJob = async function(jobId) {
+    if (!confirm('Delete this scheduled task?')) return;
+    try {
+        const res = await fetch('/api/scheduler/jobs/' + jobId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) { showToast('Job deleted', 'success'); loadScheduledJobs(); }
+        else showToast('Failed to delete job', 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+};
+</script>
 {% endblock %}

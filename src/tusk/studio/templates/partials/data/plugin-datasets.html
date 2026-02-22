@@ -1,0 +1,18 @@
+{# Plugin datasets list — HTMX partial #}
+{% if datasets %}
+    {% for ds in datasets %}
+    <button @click="selectPluginDataset({{ loop.index0 }}, '{{ ds.table }}', '{{ ds.plugin }}', '{{ ds.db_path }}')"
+        :class="selectedPluginIdx === {{ loop.index0 }} ? 'border-[#6366f1] bg-[#6366f1]/10' : 'border-[#30363d]'"
+        class="w-full text-left p-3 rounded-lg border hover:border-[#6366f1] hover:bg-[#6366f1]/5 transition-colors">
+        <div class="flex items-center gap-2">
+            <i data-lucide="database" class="w-4 h-4 text-[#a371f7]"></i>
+            <span class="text-sm font-medium">{{ ds.table }}</span>
+            <span class="text-xs text-[#8b949e] ml-auto">{{ ds.plugin }}</span>
+        </div>
+        {% if ds.description %}<div class="text-xs text-[#8b949e] mt-1">{{ ds.description }}</div>{% endif %}
+        <div class="text-xs text-[#484f58] mt-1 font-mono">sqlite_scan('{{ ds.db_path }}', '{{ ds.table }}')</div>
+    </button>
+    {% endfor %}
+{% else %}
+    <div class="text-xs text-[#8b949e] py-4 text-center">No plugin datasets available.<br/>Plugins with storage expose datasets here.</div>
+{% endif %}

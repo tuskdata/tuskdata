@@ -1,0 +1,30 @@
+{# Job result table — HTMX partial #}
+{% if error %}
+<div class="text-xs text-red-400 bg-red-500/10 rounded p-2">{{ error }}</div>
+{% elif columns %}
+<div class="overflow-x-auto rounded border border-[#30363d]">
+    <table class="w-full text-xs">
+        <thead class="bg-[#0d1117]">
+            <tr>
+                {% for col in columns %}
+                <th class="px-2 py-1.5 text-left text-[#8b949e] font-medium">{{ col.name }} <span class="text-[#484f58]">{{ col.type }}</span></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows[:50] %}
+            <tr class="hover:bg-[#21262d]">
+                {% for cell in row %}
+                <td class="px-2 py-1 border-t border-[#21262d] font-mono">{% if cell is none %}<span class="text-gray-600">NULL</span>{% else %}{{ cell }}{% endif %}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if truncated %}
+<div class="text-xs text-[#8b949e] mt-1">Showing first 1000 of {{ row_count }} rows</div>
+{% endif %}
+{% else %}
+<div class="text-xs text-[#8b949e]">No result data</div>
+{% endif %}

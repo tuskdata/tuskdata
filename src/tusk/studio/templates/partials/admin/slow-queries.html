@@ -1,0 +1,18 @@
+{% if available %}
+    {% if queries %}
+        {% for q in queries %}
+        <tr class="hover:bg-[#21262d]/50">
+            <td class="px-4 py-2 font-mono text-xs text-gray-400 max-w-md truncate" title="{{ q.query }}">{{ q.query[:120] }}</td>
+            <td class="px-4 py-2 text-right text-sm">{{ q.calls }}</td>
+            <td class="px-4 py-2 text-right text-sm {% if q.total_time_ms > 10000 %}text-red-400{% else %}text-gray-400{% endif %}">{{ "%.1f" | format(q.total_time_ms) }}ms</td>
+            <td class="px-4 py-2 text-right text-sm {% if q.mean_time_ms > 100 %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ "%.1f" | format(q.mean_time_ms) }}ms</td>
+            <td class="px-4 py-2 text-right text-sm text-gray-400">{{ q.rows }}</td>
+            <td class="px-4 py-2 text-right text-sm">{{ "%.1f" | format(q.hit_ratio) }}%</td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr><td colspan="6" class="p-4 text-gray-500">No slow queries recorded</td></tr>
+    {% endif %}
+{% else %}
+    <tr><td colspan="6" class="p-4 text-gray-500">pg_stat_statements extension not installed</td></tr>
+{% endif %}

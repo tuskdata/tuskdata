@@ -1,0 +1,118 @@
+{# Status Components
+
+   Macros: status_dot, stage_dots, progress_dots
+#}
+
+{% macro status_dot(status, size="sm", animate=true) %}
+{# Colored dot indicator for status values.
+
+   Args:
+       status: One of success, failed, error, running, pending, cancelled, skipped, etc.
+       size: "xs" (1.5), "sm" (2), "md" (3)
+       animate: Pulse animation for running/active states
+
+   Maps:
+       success/ok/healthy/online    → green
+       failed/error/unhealthy       → red
+       running/active/connected     → yellow (pulse)
+       pending/waiting/queued       → blue
+       cancelled/stopped/paused     → gray
+       skipped/inactive             → gray (no pulse)
+#}
+{% set sizes = {"xs": "w-1.5 h-1.5", "sm": "w-2 h-2", "md": "w-3 h-3"} %}
+{% set s = status | lower %}
+{% if s in ["success", "ok", "healthy", "online", "passed"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-green-500 flex-shrink-0" title="{{ status }}"></span>
+{% elif s in ["failed", "error", "unhealthy", "offline"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-red-500 flex-shrink-0" title="{{ status }}"></span>
+{% elif s in ["running", "active", "connected"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-yellow-500 flex-shrink-0 {% if animate %}animate-pulse{% endif %}" title="{{ status }}"></span>
+{% elif s in ["pending", "waiting", "queued"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-blue-500 flex-shrink-0" title="{{ status }}"></span>
+{% elif s in ["cancelled", "stopped", "paused"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-gray-500 flex-shrink-0" title="{{ status }}"></span>
+{% elif s in ["skipped", "inactive"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-gray-600 flex-shrink-0" title="{{ status }}"></span>
+{% elif s in ["warning"] %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-orange-500 flex-shrink-0" title="{{ status }}"></span>
+{% else %}
+<span class="inline-block {{ sizes[size] }} rounded-full bg-[#30363d] flex-shrink-0" title="{{ status }}"></span>
+{% endif %}
+{% endmacro %}
+
+
+{% macro stage_dots(stages, size="xs") %}
+{# Row of tiny dots showing stage pass/fail status, for run history rows.
+
+   Args:
+       stages: List of objects with .status attribute (or dicts with "status" key)
+       size: Dot size — "xs" (1.5), "sm" (2), "md" (3). Default "xs".
+#}
+{% for s in stages %}
+{{ status_dot(s.status, size=size, animate=false) }}
+{% endfor %}
+{% endmacro %}
+
+
+{% macro progress_stages(stages) %}
+{# Full-width progress bar split into colored segments per stage.
+   Use in run detail pages for visual progress overview.
+
+   Args:
+       stages: List of stage objects with .stage_name and .status attributes
+#}
+{% if stages | length > 0 %}
+<div class="card px-4 py-3">
+    <div class="flex items-center gap-1">
+        {% for stage in stages %}
+        <div class="flex-1 h-2 rounded-full
+            {% if stage.status == 'success' %}bg-green-500
+            {% elif stage.status == 'failed' %}bg-red-500
+            {% elif stage.status == 'running' %}bg-yellow-500 animate-pulse
+            {% elif stage.status == 'skipped' %}bg-gray-600
+            {% else %}bg-[#30363d]{% endif %}"
+             title="{{ stage.stage_name }}: {{ stage.status }}"></div>
+        {% endfor %}
+    </div>
+    <div class="flex justify-between mt-1 text-[10px] text-[#484f58]">
+        <span>{{ stages[0].stage_name }}</span>
+        {% if stages | length > 1 %}
+        <span>{{ stages[-1].stage_name }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro status_icon(status, size="sm") %}
+{# Circular icon indicator for stage statuses (larger, with icon inside).
+
+   Args:
+       status: success, failed, running, skipped, pending
+       size: "sm" (6), "md" (8)
+#}
+{% set sizes = {"sm": "w-6 h-6", "md": "w-8 h-8"} %}
+{% set icon_sizes = {"sm": "w-3.5 h-3.5", "md": "w-4 h-4"} %}
+{% if status == "success" %}
+<span class="{{ sizes[size] }} rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+    <i data-lucide="check" class="{{ icon_sizes[size] }} text-green-400"></i>
+</span>
+{% elif status == "failed" or status == "error" %}
+<span class="{{ sizes[size] }} rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+    <i data-lucide="x" class="{{ icon_sizes[size] }} text-red-400"></i>
+</span>
+{% elif status == "running" %}
+<span class="{{ sizes[size] }} rounded-full bg-yellow-500/20 flex items-center justify-center animate-pulse flex-shrink-0">
+    <i data-lucide="loader-2" class="{{ icon_sizes[size] }} text-yellow-400 animate-spin"></i>
+</span>
+{% elif status == "skipped" %}
+<span class="{{ sizes[size] }} rounded-full bg-gray-500/20 flex items-center justify-center flex-shrink-0">
+    <i data-lucide="skip-forward" class="{{ icon_sizes[size] }} text-gray-400"></i>
+</span>
+{% else %}
+<span class="{{ sizes[size] }} rounded-full bg-[#21262d] flex items-center justify-center flex-shrink-0">
+    <span class="w-2 h-2 rounded-full bg-[#484f58]"></span>
+</span>
+{% endif %}
+{% endmacro %}

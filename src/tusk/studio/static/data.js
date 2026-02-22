@@ -5,6 +5,88 @@ let datasets = [];  // Array of datasets {id, name, source_type, path, transform
 let activeDatasetId = null;  // Currently selected dataset
 let currentSchema = null;
 let selectedTransformType = null;
+let selectedEngine = localStorage.getItem('tusk_data_engine') || 'auto'; // Engine preference
+let pipelineCanvasVisible = localStorage.getItem('tusk_pipeline_canvas') === 'true';
+let _syncingFromCanvas = false; // Guard against circular sync
+
+// Data pipeline node types
+const DATA_NODE_TYPES = {
+    source:    { icon: 'database',     color: 'green',  ports: { in: [],        out: ['output'] } },
+    filter:    { icon: 'filter',       color: 'blue',   ports: { in: ['input'], out: ['output'] } },
+    select:    { icon: 'columns',      color: 'purple', ports: { in: ['input'], out: ['output'] } },
+    sort:      { icon: 'arrow-up-down', color: 'orange', ports: { in: ['input'], out: ['output'] } },
+    group_by:  { icon: 'group',        color: 'green',  ports: { in: ['input'], out: ['output'] } },
+    rename:    { icon: 'pencil',       color: 'blue',   ports: { in: ['input'], out: ['output'] } },
+    drop_nulls:{ icon: 'trash-2',      color: 'red',    ports: { in: ['input'], out: ['output'] } },
+    limit:     { icon: 'hash',         color: 'gray',   ports: { in: ['input'], out: ['output'] } },
+    join:      { icon: 'git-merge',    color: 'green',  ports: { in: ['left', 'right'], out: ['output'] } },
+};
+
+// Pipeline canvas instance (lazy init)
+let dataCanvas = null;
+
+function initPipelineCanvas() {
+    if (dataCanvas) return dataCanvas;
+    dataCanvas = tuskPipeline('data-pipeline', {
+        nodeTypes: DATA_NODE_TYPES,
+        onNodeDoubleClick: (node) => {
+            if (node.type === 'source') return;
+            // Find the transform index for this node
+            const transforms = getTransforms();
+            const idx = transforms.findIndex(t =>
+                t.type === node.type && JSON.stringify(t) === JSON.stringify(node.config)
+            );
+            if (idx >= 0) editTransform(idx);
+        },
+        onPipelineChange: (state) => {
+            if (_syncingFromCanvas) return;
+            // Sync canvas changes back to transforms array
+            const transforms = dataCanvas.toTransforms();
+            _syncingFromCanvas = true;
+            setTransforms(transforms);
+            renderTransforms();
+            saveState();
+            _syncingFromCanvas = false;
+        },
+    });
+    return dataCanvas;
+}
+
+// Sync current transforms → canvas visualization
+function syncCanvasFromTransforms() {
+    if (!dataCanvas || !pipelineCanvasVisible) return;
+    const ds = getActiveDataset();
+    if (!ds) {
+        dataCanvas.clear();
+        return;
+    }
+    _syncingFromCanvas = true;
+    dataCanvas.fromTransforms(ds, ds.transforms || []);
+    _syncingFromCanvas = false;
+}
+
+// Toggle canvas visibility
+window.togglePipelineCanvas = function() {
+    pipelineCanvasVisible = !pipelineCanvasVisible;
+    localStorage.setItem('tusk_pipeline_canvas', pipelineCanvasVisible);
+    const container = document.getElementById('pipeline-canvas-container');
+    const btn = document.getElementById('toggle-canvas-btn');
+    if (container) {
+        container.classList.toggle('hidden', !pipelineCanvasVisible);
+    }
+    if (btn) {
+        btn.classList.toggle('text-indigo-400', pipelineCanvasVisible);
+        btn.classList.toggle('text-[#8b949e]', !pipelineCanvasVisible);
+    }
+    if (pipelineCanvasVisible) {
+        initPipelineCanvas();
+        // Wait for Alpine to init, then sync
+        setTimeout(() => {
+            syncCanvasFromTransforms();
+            if (dataCanvas) dataCanvas.fitView();
+        }, 100);
+    }
+}
 
 // Get transforms for active dataset
 function getTransforms() {
@@ -201,27 +283,45 @@ function renderDatasets() {
 
     container.innerHTML = datasets.map(ds => {
         const isActive = ds.id === activeDatasetId;
-        const icon = ds.source_type === 'database' ? 'database' : 'file';
-        const iconColor = ds.source_type === 'database' ? 'text-[#58a6ff]' : 'text-[#f0883e]';
-        let info = ds.source_type === 'database' ? 'DB' : ds.source_type.toUpperCase();
+        const icon = ds._plugin ? 'puzzle' : ds.source_type === 'database' ? 'database' : 'file';
+        const iconColor = ds._plugin ? 'text-[#a371f7]' : ds.source_type === 'database' ? 'text-[#58a6ff]' : 'text-[#f0883e]';
+        let info = ds._plugin ? ds._plugin : ds.source_type === 'database' ? 'DB' : ds.source_type.toUpperCase();
         if (ds.osm_layer) info += ` · ${ds.osm_layer}`;
-        // Show column count for active dataset
         if (isActive && currentSchema) info += ` · ${currentSchema.length} cols`;
-
         return `
-            <div class="sidebar-item flex items-center gap-2 px-2 py-2 rounded cursor-pointer ${isActive ? 'bg-[#21262d] ring-1 ring-indigo-500' : 'hover:bg-[#21262d]'}" onclick="setActiveDataset('${ds.id}')">
-                <i data-lucide="${icon}" class="w-4 h-4 ${iconColor}"></i>
+            <div class="sidebar-item flex items-center gap-1.5 px-2 py-2 rounded cursor-pointer group ${isActive ? 'bg-[#21262d] ring-1 ring-indigo-500' : 'hover:bg-[#21262d]'}" onclick="setActiveDataset('${ds.id}')">
+                <i data-lucide="${icon}" class="w-4 h-4 ${iconColor} flex-shrink-0"></i>
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate">${ds.name}</div>
-                    <div class="text-xs text-[#8b949e]">${info}</div>
+                    <div class="text-sm font-medium truncate" id="ds-name-${ds.id}" title="${ds.name}">${ds.name}</div>
+                    <div class="text-xs text-[#8b949e] truncate">${info}</div>
                 </div>
-                <button onclick="event.stopPropagation(); removeDataset('${ds.id}')" class="p-1 hover:bg-[#30363d] rounded text-[#8b949e] hover:text-red-400" title="Remove">
-                    <i data-lucide="x" class="w-3 h-3"></i>
-                </button>
+                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button onclick="event.stopPropagation(); renameDataset('${ds.id}')" class="p-1 hover:bg-[#30363d] rounded text-[#8b949e] hover:text-white" title="Rename">
+                        <i data-lucide="pencil" class="w-3 h-3"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); removeDataset('${ds.id}')" class="p-1 hover:bg-[#30363d] rounded text-[#8b949e] hover:text-red-400" title="Remove">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
 
+    lucide.createIcons();
+}
+
+// Toggle cluster visibility for a dataset
+window.toggleClusterVisibility = function(id) {
+    const ds = datasets.find(d => d.id === id);
+    if (!ds) return;
+    ds.cluster_enabled = !ds.cluster_enabled;
+    renderDatasets();
+    saveState();
+    if (ds.cluster_enabled) {
+        showToast(`"${ds.name}" is now visible in cluster`, 'success');
+    } else {
+        showToast(`"${ds.name}" hidden from cluster`, 'info');
+    }
     lucide.createIcons();
 }
 
@@ -236,6 +336,7 @@ window.setActiveDataset = async function(id) {
 
     renderDatasets();
     renderTransforms();  // Will render transforms for the new active dataset
+    syncCanvasFromTransforms();
     saveState();
 
     // Auto-preview the data
@@ -265,6 +366,38 @@ window.removeDataset = function(id) {
     saveState();
 }
 
+// Rename dataset inline
+window.renameDataset = function(id) {
+    const ds = datasets.find(d => d.id === id);
+    if (!ds) return;
+    const el = document.getElementById('ds-name-' + id);
+    if (!el) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = ds.name;
+    input.className = 'bg-[#0d1117] border border-indigo-500 rounded px-1 py-0.5 text-sm w-full focus:outline-none';
+
+    function commit() {
+        const val = input.value.trim();
+        if (val) ds.name = val;
+        renderDatasets();
+        saveState();
+        lucide.createIcons();
+    }
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { renderDatasets(); lucide.createIcons(); }
+    });
+
+    el.innerHTML = '';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+}
+
 // Quick transform shortcut
 window.quickTransform = function(type) {
     if (!getActiveDataset()) {
@@ -276,8 +409,10 @@ window.quickTransform = function(type) {
 }
 
 // Load state when page loads
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize data page (works with both full page load and hx-boost navigation)
+function _initDataPage() {
     loadState();
+    renderSidebarPipelines();
 
     // Toggle filter value field based on operator
     const filterOp = document.getElementById('filter-operator');
@@ -288,16 +423,35 @@ document.addEventListener('DOMContentLoaded', () => {
             filterValueRow.style.display = noValueOps.includes(filterOp.value) ? 'none' : '';
         });
     }
-});
+
+    // Restore pipeline canvas visibility
+    if (pipelineCanvasVisible) {
+        const container = document.getElementById('pipeline-canvas-container');
+        const btn = document.getElementById('toggle-canvas-btn');
+        if (container) container.classList.remove('hidden');
+        if (btn) {
+            btn.classList.add('text-indigo-400');
+            btn.classList.remove('text-[#8b949e]');
+        }
+        initPipelineCanvas();
+        setTimeout(() => syncCanvasFromTransforms(), 200);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initDataPage);
+} else {
+    _initDataPage();
+}
 
 // File Browser
 window.showFileBrowser = function() {
-    document.getElementById('file-browser-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-file-browser'));
     browseTo('~');
 }
 
 window.hideFileBrowser = function() {
-    document.getElementById('file-browser-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-file-browser'));
 }
 
 async function browseTo(path) {
@@ -380,11 +534,12 @@ let dbConnections = [];
 
 window.showSourceModal = async function() {
     // Reset form fields
+    document.getElementById('source-name').value = '';
     document.getElementById('source-path').value = '';
     document.getElementById('osm-layer-section').classList.add('hidden');
     document.getElementById('source-schema').classList.add('hidden');
 
-    document.getElementById('source-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-source-modal'));
     setSourceTab('file');
     // Load connections for DB tab
     await loadSourceConnections();
@@ -392,36 +547,89 @@ window.showSourceModal = async function() {
 }
 
 window.hideSourceModal = function() {
-    document.getElementById('source-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-source-modal'));
     document.getElementById('source-schema').classList.add('hidden');
     document.getElementById('osm-layer-section').classList.add('hidden');
     document.getElementById('db-source-schema')?.classList.add('hidden');
-    // Reset form
     document.getElementById('source-path').value = '';
 }
 
 window.setSourceTab = function(tab) {
     currentSourceTab = tab;
-    const fileTab = document.getElementById('source-tab-file');
-    const dbTab = document.getElementById('source-tab-database');
-    const fileSection = document.getElementById('source-file-section');
-    const dbSection = document.getElementById('source-db-section');
+    const tabs = ['file', 'database', 'plugin'];
+    const sections = {
+        file: document.getElementById('source-file-section'),
+        database: document.getElementById('source-db-section'),
+        plugin: document.getElementById('source-plugin-section'),
+    };
 
-    if (tab === 'file') {
-        fileTab.classList.add('bg-[#21262d]', 'text-white');
-        fileTab.classList.remove('text-[#8b949e]');
-        dbTab.classList.remove('bg-[#21262d]', 'text-white');
-        dbTab.classList.add('text-[#8b949e]');
-        fileSection.classList.remove('hidden');
-        dbSection.classList.add('hidden');
-    } else {
-        dbTab.classList.add('bg-[#21262d]', 'text-white');
-        dbTab.classList.remove('text-[#8b949e]');
-        fileTab.classList.remove('bg-[#21262d]', 'text-white');
-        fileTab.classList.add('text-[#8b949e]');
-        dbSection.classList.remove('hidden');
-        fileSection.classList.add('hidden');
+    for (const t of tabs) {
+        const btn = document.getElementById('source-tab-' + t);
+        const section = sections[t];
+        if (!btn || !section) continue;
+        if (t === tab) {
+            btn.classList.add('bg-[#21262d]', 'text-white');
+            btn.classList.remove('text-[#8b949e]');
+            section.classList.remove('hidden');
+        } else {
+            btn.classList.remove('bg-[#21262d]', 'text-white');
+            btn.classList.add('text-[#8b949e]');
+            section.classList.add('hidden');
+        }
     }
+
+    if (tab === 'plugin') loadPluginDatasets();
+}
+
+let _pluginDatasets = [];
+let _selectedPluginDataset = null;
+
+async function loadPluginDatasets() {
+    const container = document.getElementById('plugin-datasets-list');
+    container.innerHTML = '<div class="text-xs text-[#8b949e] py-4 text-center">Loading...</div>';
+    _selectedPluginDataset = null;
+
+    try {
+        const res = await fetch('/api/data/plugin-datasets');
+        const data = await res.json();
+        _pluginDatasets = data.datasets || [];
+
+        if (_pluginDatasets.length === 0) {
+            container.innerHTML = '<div class="text-xs text-[#8b949e] py-4 text-center">No plugin datasets available.<br/>Plugins with storage expose datasets here.</div>';
+            return;
+        }
+
+        container.innerHTML = _pluginDatasets.map((ds, i) => `
+            <button onclick="selectPluginDataset(${i})" id="plugin-ds-${i}"
+                class="w-full text-left p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/5 transition-colors">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4 text-[#a371f7]"></i>
+                    <span class="text-sm font-medium">${ds.table}</span>
+                    <span class="text-xs text-[#8b949e] ml-auto">${ds.plugin}</span>
+                </div>
+                <div class="text-xs text-[#8b949e] mt-1">${ds.description || ''}</div>
+                <div class="text-xs text-[#484f58] mt-1 font-mono">sqlite_scan('${ds.db_path}', '${ds.table}')</div>
+            </button>
+        `).join('');
+        lucide.createIcons();
+    } catch (e) {
+        container.innerHTML = '<div class="text-xs text-red-400 py-4 text-center">Failed to load plugin datasets</div>';
+    }
+}
+
+window.selectPluginDataset = function(idx) {
+    _selectedPluginDataset = _pluginDatasets[idx];
+    // Highlight selected
+    _pluginDatasets.forEach((_, i) => {
+        const el = document.getElementById('plugin-ds-' + i);
+        if (el) {
+            if (i === idx) {
+                el.classList.add('border-[#6366f1]', 'bg-[#6366f1]/10');
+            } else {
+                el.classList.remove('border-[#6366f1]', 'bg-[#6366f1]/10');
+            }
+        }
+    });
 }
 
 window.setDbSourceType = function(type) {
@@ -575,6 +783,7 @@ window.previewSource = async function() {
 window.selectSource = async function() {
     // Generate unique ID
     const newId = 'ds_' + Date.now();
+    const customName = document.getElementById('source-name').value.trim();
     let newDataset;
 
     if (currentSourceTab === 'file') {
@@ -583,37 +792,52 @@ window.selectSource = async function() {
         if (!path) { showToast('Please enter a file path', 'warning'); return; }
 
         const sourceType = getSourceType(path);
+        // Auto-name: folder name if no custom name
+        const autoName = path.split('/').filter(Boolean).slice(-1)[0] || path.split('/').pop();
         newDataset = {
             id: newId,
-            name: path.split('/').pop(),
+            name: customName || autoName,
             source_type: sourceType,
             path: path,
             transforms: [],
             joinSources: []
         };
         if (sourceType === 'osm') newDataset.osm_layer = document.getElementById('osm-layer').value;
+    } else if (currentSourceTab === 'plugin') {
+        // Plugin dataset source (via DuckDB sqlite_scan)
+        if (!_selectedPluginDataset) { showToast('Please select a plugin dataset', 'warning'); return; }
+        const ds = _selectedPluginDataset;
+        newDataset = {
+            id: newId,
+            name: customName || ds.table,
+            source_type: 'database',
+            query: `SELECT * FROM sqlite_scan('${ds.db_path}', '${ds.table}')`,
+            transforms: [],
+            joinSources: [],
+            _plugin: ds.plugin,
+        };
     } else {
         // Database source
         const connId = document.getElementById('source-db-connection').value;
         if (!connId) { showToast('Please select a connection', 'warning'); return; }
 
         const conn = dbConnections.find(c => c.id === connId);
-        let name, query;
+        let autoName, query;
 
         if (currentDbSourceType === 'table') {
             const table = document.getElementById('source-db-table').value;
             if (!table) { showToast('Please select a table', 'warning'); return; }
-            name = table;
+            autoName = table;
             query = `SELECT * FROM ${table}`;
         } else {
             query = document.getElementById('source-db-query').value.trim();
             if (!query) { showToast('Please enter a query', 'warning'); return; }
-            name = 'Custom Query';
+            autoName = 'Custom Query';
         }
 
         newDataset = {
             id: newId,
-            name: name,
+            name: customName || autoName,
             source_type: 'database',
             connection_id: connId,
             connection_name: conn?.name,
@@ -647,6 +871,33 @@ window.changeLimit = function() {
     if (getActiveDataset()) previewData();
 }
 
+window.changeEngine = function() {
+    selectedEngine = document.getElementById('engine-select').value;
+    localStorage.setItem('tusk_data_engine', selectedEngine);
+    if (getActiveDataset()) previewData();
+}
+
+function updateEngineBadge(engineUsed, elapsedMs, fallback) {
+    const badge = document.getElementById('engine-badge');
+    if (!badge) return;
+    const colors = {
+        duckdb: 'text-[#f0c000] bg-[#f0c000]/10',
+        polars: 'text-[#58a6ff] bg-[#58a6ff]/10',
+    };
+    const label = engineUsed === 'duckdb' ? 'DuckDB' : 'Polars';
+    const fallbackNote = fallback ? ' (fallback)' : '';
+    const timeNote = elapsedMs != null ? ` · ${elapsedMs}ms` : '';
+    badge.className = `text-xs px-2 py-0.5 rounded-full ${colors[engineUsed] || colors.polars}`;
+    badge.textContent = `${label}${fallbackNote}${timeNote}`;
+    badge.classList.remove('hidden');
+}
+
+// Restore engine selector on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const sel = document.getElementById('engine-select');
+    if (sel) sel.value = selectedEngine;
+});
+
 async function previewData() {
     const currentSource = getActiveDataset();
     if (!currentSource) return;
@@ -673,12 +924,17 @@ async function previewData() {
         data = await res.json();
     } else {
         // File source
-        let url = `/api/data/files/preview?path=${encodeURIComponent(currentSource.path)}&limit=${limit}`;
+        let url = `/api/data/files/preview?path=${encodeURIComponent(currentSource.path)}&limit=${limit}&engine=${selectedEngine}`;
         if (currentSource.source_type === 'osm' && currentSource.osm_layer) {
             url += `&osm_layer=${encodeURIComponent(currentSource.osm_layer)}`;
         }
         const res = await fetch(url);
         data = await res.json();
+    }
+
+    // Show engine badge if available
+    if (data.engine_used) {
+        updateEngineBadge(data.engine_used, data.elapsed_ms, data.engine_fallback);
     }
 
     if (data.error) {
@@ -706,25 +962,23 @@ window.previewData = previewData;
 // Transform functions
 window.showAddTransformModal = function() {
     if (!getActiveDataset()) { showToast('Please select a dataset first', 'warning'); return; }
-    editingTransformIndex = null;  // Reset editing state
-    document.getElementById('transform-modal').classList.remove('hidden');
+    editingTransformIndex = null;
     document.getElementById('transform-type-select').classList.remove('hidden');
     document.getElementById('transform-config').classList.add('hidden');
     document.getElementById('add-transform-btn').classList.add('hidden');
     document.getElementById('add-transform-btn').textContent = 'Add Transform';
     selectedTransformType = null;
-    // Reset filter value field visibility
     const filterValueRow = document.getElementById('filter-value')?.parentElement;
     if (filterValueRow) filterValueRow.style.display = '';
-    // Reset operator to default
     const filterOp = document.getElementById('filter-operator');
     if (filterOp) filterOp.value = 'eq';
+    window.dispatchEvent(new Event('open-transform-modal'));
 }
 
 window.hideTransformModal = function() {
-    document.getElementById('transform-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-transform-modal'));
     document.querySelectorAll('[id^="config-"]').forEach(el => el.classList.add('hidden'));
-    editingTransformIndex = null;  // Reset editing state
+    editingTransformIndex = null;
 }
 
 window.selectTransformType = function(type) {
@@ -831,6 +1085,7 @@ window.addTransform = function() {
     setTransforms(transforms);
 
     renderTransforms();
+    syncCanvasFromTransforms();
     hideTransformModal();
     saveState();
 }
@@ -903,6 +1158,7 @@ window.removeTransform = function(index) {
     transforms.splice(index, 1);
     setTransforms(transforms);
     renderTransforms();
+    syncCanvasFromTransforms();
     saveState();
 }
 
@@ -913,11 +1169,11 @@ window.editTransform = function(index) {
     editingTransformIndex = index;
 
     // Open modal and select the transform type
-    document.getElementById('transform-modal').classList.remove('hidden');
     document.getElementById('transform-type-select').classList.add('hidden');
     document.getElementById('transform-config').classList.remove('hidden');
     document.getElementById('add-transform-btn').classList.remove('hidden');
     document.getElementById('add-transform-btn').textContent = 'Update Transform';
+    window.dispatchEvent(new Event('open-transform-modal'));
 
     selectedTransformType = t.type;
 
@@ -1019,7 +1275,7 @@ window.runPipeline = async function() {
     const res = await fetch('/api/data/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sources: allSources, transforms: getTransforms(), output_source_id: currentSource.id, limit })
+        body: JSON.stringify({ sources: allSources, transforms: getTransforms(), output_source_id: currentSource.id, limit, engine: selectedEngine })
     });
     const data = await res.json();
     if (data.error) {
@@ -1043,7 +1299,7 @@ let pgConnections = [];
 window.showImportModal = async function() {
     const currentSource = getActiveDataset();
     if (!currentSource) { showToast('Please select a dataset first', 'warning'); return; }
-    document.getElementById('import-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-import-modal'));
     document.getElementById('import-table-name').value = currentSource.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_');
     document.getElementById('import-db-type').value = 'duckdb';
     toggleImportOptions();
@@ -1069,7 +1325,7 @@ window.showImportModal = async function() {
 }
 
 window.hideImportModal = function() {
-    document.getElementById('import-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-import-modal'));
 }
 
 window.toggleImportOptions = function() {
@@ -1142,7 +1398,8 @@ window.importToDB = async function() {
 // Import to PostgreSQL with SSE progress streaming
 async function importPostgresWithProgress(payload, tableName) {
     // Show progress UI in the modal
-    const importBtn = document.querySelector('#import-modal button[onclick="importToDB()"]');
+    const importBtn = document.getElementById('import-btn');
+    if (!importBtn) { showToast('Import button not found', 'error'); return; }
     const originalBtnText = importBtn.innerHTML;
     importBtn.disabled = true;
     importBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Starting...`;
@@ -1238,13 +1495,13 @@ async function importPostgresWithProgress(payload, tableName) {
 window.showSavePipelineModal = function() {
     const currentSource = getActiveDataset();
     if (!currentSource) { showToast('Please select a dataset first', 'warning'); return; }
-    document.getElementById('save-pipeline-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-save-modal'));
     document.getElementById('save-pipeline-name').value = currentSource.name.replace(/\.[^.]+$/, '') + ' Pipeline';
     document.getElementById('save-pipeline-name').select();
 }
 
 window.hideSavePipelineModal = function() {
-    document.getElementById('save-pipeline-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-save-modal'));
 }
 
 window.savePipelineWithName = function() {
@@ -1278,16 +1535,17 @@ window.savePipelineWithName = function() {
 
     showToast('Pipeline saved!', 'success');
     hideSavePipelineModal();
+    renderSidebarPipelines();
 }
 
 window.showLoadPipelineModal = function() {
-    document.getElementById('load-pipeline-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-load-modal'));
     renderSavedPipelines();
     lucide.createIcons();
 }
 
 window.hideLoadPipelineModal = function() {
-    document.getElementById('load-pipeline-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-load-modal'));
 }
 
 function renderSavedPipelines() {
@@ -1367,6 +1625,68 @@ window.deletePipeline = function(index) {
     pipelines.splice(index, 1);
     localStorage.setItem('tusk_saved_pipelines', JSON.stringify(pipelines));
     renderSavedPipelines();
+    renderSidebarPipelines();
+}
+
+function renderSidebarPipelines() {
+    const container = document.getElementById('sidebar-pipelines');
+    if (!container) return;
+
+    let pipelines = [];
+    try {
+        pipelines = JSON.parse(localStorage.getItem('tusk_saved_pipelines') || '[]');
+    } catch (e) {}
+
+    if (pipelines.length === 0) {
+        container.innerHTML = '<div class="text-[#8b949e] text-xs py-1">No saved pipelines</div>';
+        return;
+    }
+
+    container.innerHTML = pipelines.map((p, i) => {
+        const clusterColor = p.cluster_enabled ? 'text-green-400' : 'text-[#484f58]';
+        const clusterTitle = p.cluster_enabled ? 'Shared with cluster' : 'Share with cluster';
+        return `
+        <div class="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-[#21262d] cursor-pointer group text-sm" onclick="loadPipeline(${i})">
+            <i data-lucide="git-branch" class="w-3.5 h-3.5 text-indigo-400 flex-shrink-0"></i>
+            <span class="truncate flex-1" title="${p.name}">${p.name}</span>
+            <span class="text-xs text-[#8b949e] flex-shrink-0">${p.transforms?.length || 0}t</span>
+            <button onclick="event.stopPropagation(); togglePipelineCluster(${i})" class="p-0.5 ${clusterColor} opacity-0 group-hover:opacity-100" title="${clusterTitle}">
+                <i data-lucide="globe" class="w-3 h-3"></i>
+            </button>
+            <button onclick="event.stopPropagation(); deletePipeline(${i})" class="p-0.5 hover:text-red-400 text-[#8b949e] opacity-0 group-hover:opacity-100" title="Delete">
+                <i data-lucide="x" class="w-3 h-3"></i>
+            </button>
+        </div>`;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+window.togglePipelineCluster = function(index) {
+    let pipelines = [];
+    try { pipelines = JSON.parse(localStorage.getItem('tusk_saved_pipelines') || '[]'); } catch (e) {}
+    if (index < 0 || index >= pipelines.length) return;
+
+    pipelines[index].cluster_enabled = !pipelines[index].cluster_enabled;
+    localStorage.setItem('tusk_saved_pipelines', JSON.stringify(pipelines));
+    renderSidebarPipelines();
+
+    const name = pipelines[index].name;
+    if (pipelines[index].cluster_enabled) {
+        showToast(`"${name}" shared with cluster`, 'success');
+    } else {
+        showToast(`"${name}" removed from cluster`, 'info');
+    }
+}
+
+function _flattenCoords(geom) {
+    const coords = [];
+    const t = geom.type, c = geom.coordinates;
+    if (t === 'Point') coords.push(c);
+    else if (t === 'MultiPoint' || t === 'LineString') coords.push(...c);
+    else if (t === 'MultiLineString' || t === 'Polygon') c.forEach(r => coords.push(...r));
+    else if (t === 'MultiPolygon') c.forEach(p => p.forEach(r => coords.push(...r)));
+    return coords.filter(c => Array.isArray(c) && c.length >= 2 && isFinite(c[0]) && isFinite(c[1]));
 }
 
 function detectGeoColumns(columns, rows) {
@@ -1376,14 +1696,19 @@ function detectGeoColumns(columns, rows) {
     const byName = columns.map((c, i) => geoNames.includes(c.name.toLowerCase()) ? i : -1).filter(i => i !== -1);
     if (byName.length > 0) return byName;
 
-    // Also check content - look for WKT patterns in first row
+    // Also check content - look for GeoJSON or WKT patterns in first row
     if (rows && rows.length > 0) {
-        const wktPattern = /^(POINT|POLYGON|MULTIPOLYGON|LINESTRING|MULTILINESTRING|GEOMETRYCOLLECTION)\s*\(/i;
+        const wktPattern = /^(POINT|POLYGON|MULTIPOLYGON|LINESTRING|MULTILINESTRING|GEOMETRYCOLLECTION)\s*(Z|M|ZM)?\s*\(/i;
+        const geoTypes = ['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'];
         for (let i = 0; i < columns.length; i++) {
             const val = rows[0][i];
-            if (typeof val === 'string' && wktPattern.test(val)) {
-                return [i];
+            if (typeof val !== 'string') continue;
+            // GeoJSON string (from ST_AsGeoJSON)
+            if (val.startsWith('{') && val.includes('"type"')) {
+                try { if (geoTypes.includes(JSON.parse(val).type)) return [i]; } catch (e) {}
             }
+            // WKT string (fallback / manual queries)
+            if (wktPattern.test(val)) return [i];
         }
     }
     return [];
@@ -1393,24 +1718,23 @@ function parseWKT(wkt) {
     if (!wkt || typeof wkt !== 'string') return null;
     let cleanWkt = wkt.replace(/^SRID=\d+;/i, '').trim();
 
+    // Strip Z/M/ZM dimension modifiers: "POLYGON Z ((" → "POLYGON (("
+    cleanWkt = cleanWkt.replace(/^(MULTI)?(POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)\s+(Z|M|ZM)\s*\(/i, '$1$2 (');
+
     // POINT
     const pointMatch = cleanWkt.match(/^POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
     if (pointMatch) return { type: 'Point', coordinates: [parseFloat(pointMatch[1]), parseFloat(pointMatch[2])] };
 
     // POLYGON
-    const polyMatch = cleanWkt.match(/^POLYGON\s*\(\((.+)\)\)/i);
-    if (polyMatch) {
-        const coords = polyMatch[1].split(',').map(p => { const [x, y] = p.trim().split(/\s+/).map(parseFloat); return [x, y]; });
-        return { type: 'Polygon', coordinates: [coords] };
+    if (/^POLYGON\s*\(/i.test(cleanWkt)) {
+        const rings = _extractPolygonRings(cleanWkt);
+        if (rings.length > 0) return { type: 'Polygon', coordinates: rings };
     }
 
     // MULTIPOLYGON
-    const multiPolyMatch = cleanWkt.match(/^MULTIPOLYGON\s*\(\(\((.+)\)\)\)/i);
-    if (multiPolyMatch) {
-        // Simplified: treat as single polygon from first ring
-        const firstRing = multiPolyMatch[1].split(')),((')[0];
-        const coords = firstRing.split(',').map(p => { const [x, y] = p.trim().split(/\s+/).map(parseFloat); return [x, y]; });
-        return { type: 'Polygon', coordinates: [coords] };
+    if (/^MULTIPOLYGON\s*\(/i.test(cleanWkt)) {
+        const polygons = _extractMultiPolygonCoords(cleanWkt);
+        if (polygons.length > 0) return { type: 'MultiPolygon', coordinates: polygons };
     }
 
     // LINESTRING
@@ -1421,20 +1745,123 @@ function parseWKT(wkt) {
     }
 
     // MULTILINESTRING
-    const multiLineMatch = cleanWkt.match(/^MULTILINESTRING\s*\(\((.+)\)\)/i);
-    if (multiLineMatch) {
-        const firstLine = multiLineMatch[1].split('),(')[0];
-        const coords = firstLine.split(',').map(p => { const [x, y] = p.trim().split(/\s+/).map(parseFloat); return [x, y]; });
-        return { type: 'LineString', coordinates: coords };
+    if (/^MULTILINESTRING\s*\(/i.test(cleanWkt)) {
+        const lines = _extractMultiLineCoords(cleanWkt);
+        if (lines.length > 0) return { type: 'MultiLineString', coordinates: lines };
     }
 
     return null;
 }
 
+function _extractPolygonRings(wkt) {
+    const start = wkt.indexOf('(');
+    const end = wkt.lastIndexOf(')');
+    if (start === -1 || end === -1) return [];
+    const content = wkt.slice(start + 1, end);
+    const rings = [];
+    let depth = 0, current = '';
+    for (const char of content) {
+        if (char === '(') { depth++; if (depth === 1) { current = ''; continue; } }
+        else if (char === ')') {
+            depth--;
+            if (depth === 0) {
+                const coords = [];
+                current.split(',').forEach(p => {
+                    const nums = p.trim().split(/\s+/);
+                    if (nums.length >= 2) coords.push([parseFloat(nums[0]), parseFloat(nums[1])]);
+                });
+                if (coords.length > 0) rings.push(coords);
+                current = '';
+                continue;
+            }
+        }
+        if (depth >= 1) current += char;
+    }
+    return rings;
+}
+
+function _extractMultiPolygonCoords(wkt) {
+    // MULTIPOLYGON(((x y, x y, ...), (hole)), ((x y, x y, ...)))
+    // Find the opening paren after MULTIPOLYGON keyword
+    const mIdx = wkt.toUpperCase().indexOf('MULTIPOLYGON');
+    if (mIdx === -1) return [];
+    const outerStart = wkt.indexOf('(', mIdx);
+    if (outerStart === -1) return [];
+
+    const polygons = [];
+    let depth = 0;
+    let polyStart = -1;
+
+    // Walk through, tracking depth to split individual polygons
+    // depth 1 = inside multipolygon wrapper
+    // depth 2 = inside a polygon's ring group
+    // depth 3 = inside a ring
+    for (let i = outerStart; i < wkt.length; i++) {
+        const ch = wkt[i];
+        if (ch === '(') {
+            depth++;
+            if (depth === 2) polyStart = i;
+        } else if (ch === ')') {
+            depth--;
+            if (depth === 1 && polyStart !== -1) {
+                const polyWkt = 'POLYGON' + wkt.slice(polyStart, i + 1);
+                const rings = _extractPolygonRings(polyWkt);
+                if (rings.length > 0) polygons.push(rings);
+                polyStart = -1;
+            }
+            if (depth === 0) break;
+        }
+    }
+    return polygons;
+}
+
+function _extractMultiLineCoords(wkt) {
+    const start = wkt.indexOf('(');
+    const end = wkt.lastIndexOf(')');
+    if (start === -1 || end === -1) return [];
+    const content = wkt.slice(start + 1, end);
+    const lines = [];
+    let depth = 0, current = '';
+    for (const char of content) {
+        if (char === '(') { depth++; if (depth === 1) { current = ''; continue; } }
+        else if (char === ')') {
+            depth--;
+            if (depth === 0) {
+                const coords = [];
+                current.split(',').forEach(p => {
+                    const nums = p.trim().split(/\s+/);
+                    if (nums.length >= 2) coords.push([parseFloat(nums[0]), parseFloat(nums[1])]);
+                });
+                if (coords.length > 0) lines.push(coords);
+                current = '';
+                continue;
+            }
+        }
+        if (depth >= 1) current += char;
+    }
+    return lines;
+}
+
+function geometryToGeoJSON(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && value.type) return value;
+    if (typeof value !== 'string') return null;
+    const v = value.trim();
+    // Try GeoJSON string
+    if (v.startsWith('{')) {
+        try {
+            const data = JSON.parse(v);
+            if (data.type) return data;
+        } catch (e) {}
+    }
+    // Try WKT/EWKT
+    return parseWKT(v);
+}
+
 function rowsToGeoJSON(columns, rows, geoColIdx) {
     const features = [];
     for (const row of rows) {
-        const geom = parseWKT(row[geoColIdx]);
+        const geom = geometryToGeoJSON(row[geoColIdx]);
         if (!geom) continue;
         const properties = {};
         columns.forEach((col, i) => { if (i !== geoColIdx) properties[col.name] = row[i]; });
@@ -1568,10 +1995,10 @@ window.showCode = async function() {
     const data = await res.json();
     generatedCode = data.code || '';
     document.getElementById('code-modal-content').textContent = generatedCode;
-    document.getElementById('code-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-code-modal'));
 }
 
-window.hideCodeModal = function() { document.getElementById('code-modal').classList.add('hidden'); }
+window.hideCodeModal = function() { window.dispatchEvent(new Event('close-code-modal')); }
 window.copyCodeFromModal = function() { navigator.clipboard.writeText(generatedCode); showToast('Copied to clipboard!', 'success', 2000); }
 
 // Export functionality
@@ -1618,26 +2045,95 @@ window.exportResults = async function(format) {
     }
 }
 
-// Map
-let currentPopup = null;
+// Map — destroy and recreate each time (same approach as studio.js)
 
 window.showMapModal = function() {
     if (!currentGeoJSON || !currentGeoJSON.features || currentGeoJSON.features.length === 0) {
         showToast('No geographic data available. Please load a dataset with geometry columns first.', 'warning');
         return;
     }
-    document.getElementById('map-modal').classList.remove('hidden');
-    if (!mapInstance) {
-        mapInstance = new maplibregl.Map({
-            container: 'map-container',
-            style: { version: 8, sources: { 'carto': { type: 'raster', tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'], tileSize: 256 } }, layers: [{ id: 'carto', type: 'raster', source: 'carto' }] },
-            center: [0, 20], zoom: 2
-        });
-        mapInstance.addControl(new maplibregl.NavigationControl());
 
-        // Popup on click for points
-        mapInstance.on('click', 'geojson-point', (e) => {
-            if (currentPopup) currentPopup.remove();
+    // Check for projected coordinates and show CRS bar if needed
+    if (window.tuskReproject) {
+        currentGeoJSON = window.tuskReproject(currentGeoJSON);
+    }
+
+    // Register callback for CRS reproject button
+    window._tuskMapUpdateCallback = function(reprojected, epsgCode) {
+        currentGeoJSON = reprojected;
+        if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+        setTimeout(() => _initDataMap(), 50);
+    };
+
+    window.dispatchEvent(new Event('open-map-modal'));
+    // Destroy previous map if any
+    if (mapInstance) {
+        mapInstance.remove();
+        mapInstance = null;
+    }
+    // Wait for modal to be visible so container has dimensions
+    setTimeout(() => _initDataMap(), 100);
+}
+
+window.hideMapModal = function() {
+    window.dispatchEvent(new Event('close-map-modal'));
+    if (mapInstance) {
+        mapInstance.remove();
+        mapInstance = null;
+    }
+}
+
+function _initDataMap() {
+    const container = document.getElementById('map-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    mapInstance = new maplibregl.Map({
+        container: container,
+        style: { version: 8, sources: { 'carto': { type: 'raster', tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'], tileSize: 256 } }, layers: [{ id: 'carto', type: 'raster', source: 'carto' }] },
+        center: [0, 20], zoom: 2
+    });
+    mapInstance.addControl(new maplibregl.NavigationControl());
+
+    mapInstance.on('load', () => {
+        if (!currentGeoJSON?.features.length) return;
+
+        // Add GeoJSON source and layers
+        mapInstance.addSource('geojson', { type: 'geojson', data: currentGeoJSON });
+        mapInstance.addLayer({
+            id: 'geojson-layer', type: 'fill', source: 'geojson',
+            paint: { 'fill-color': '#6366f1', 'fill-opacity': 0.5 },
+            filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']]
+        });
+        mapInstance.addLayer({
+            id: 'geojson-line', type: 'line', source: 'geojson',
+            paint: { 'line-color': '#6366f1', 'line-width': 3 },
+            filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'MultiLineString']]
+        });
+        mapInstance.addLayer({
+            id: 'geojson-point', type: 'circle', source: 'geojson',
+            paint: { 'circle-color': '#6366f1', 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 },
+            filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']]
+        });
+
+        // Fit bounds
+        const bounds = new maplibregl.LngLatBounds();
+        currentGeoJSON.features.forEach(f => {
+            const t = f.geometry.type, co = f.geometry.coordinates;
+            if (t === 'Point') bounds.extend(co);
+            else if (t === 'MultiPoint') co.forEach(c => bounds.extend(c));
+            else if (t === 'LineString') co.forEach(c => bounds.extend(c));
+            else if (t === 'MultiLineString') co.forEach(line => line.forEach(c => bounds.extend(c)));
+            else if (t === 'Polygon' && co[0]) co[0].forEach(c => bounds.extend(c));
+            else if (t === 'MultiPolygon') co.forEach(poly => { if (poly[0]) poly[0].forEach(c => bounds.extend(c)); });
+        });
+        if (!bounds.isEmpty()) mapInstance.fitBounds(bounds, { padding: 50, maxZoom: 15 });
+
+        // Click popup for features
+        let clickPopup = null;
+        function showClickPopup(e) {
+            if (!e.features || !e.features[0]) return;
+            if (clickPopup) clickPopup.remove();
             const props = e.features[0].properties;
             const html = `<div class="bg-[#161b22] text-white p-3 rounded-lg text-xs max-w-xs max-h-64 overflow-auto">
                 ${Object.entries(props).map(([k, v]) => {
@@ -1648,131 +2144,60 @@ window.showMapModal = function() {
                     return `<div class="mb-1"><span class="text-[#8b949e]">${k}:</span> <span class="text-[#58a6ff]">${val}</span></div>`;
                 }).join('')}
             </div>`;
-            currentPopup = new maplibregl.Popup({ closeButton: true, className: 'geo-popup' })
-                .setLngLat(e.lngLat)
-                .setHTML(html)
-                .addTo(mapInstance);
-        });
-
-        // Popup on click for polygons
-        mapInstance.on('click', 'geojson-layer', (e) => {
-            if (currentPopup) currentPopup.remove();
-            const props = e.features[0].properties;
-            const html = `<div class="bg-[#161b22] text-white p-3 rounded-lg text-xs max-w-xs max-h-64 overflow-auto">
-                ${Object.entries(props).map(([k, v]) => {
-                    let val = v;
-                    if (typeof v === 'string' && v.startsWith('{')) {
-                        try { val = JSON.stringify(JSON.parse(v), null, 2); } catch(e) {}
-                    }
-                    return `<div class="mb-1"><span class="text-[#8b949e]">${k}:</span> <span class="text-[#58a6ff]">${val}</span></div>`;
-                }).join('')}
-            </div>`;
-            currentPopup = new maplibregl.Popup({ closeButton: true, className: 'geo-popup' })
-                .setLngLat(e.lngLat)
-                .setHTML(html)
-                .addTo(mapInstance);
-        });
+            clickPopup = new maplibregl.Popup({ closeButton: true, className: 'geo-popup' })
+                .setLngLat(e.lngLat).setHTML(html).addTo(mapInstance);
+        }
+        mapInstance.on('click', 'geojson-point', showClickPopup);
+        mapInstance.on('click', 'geojson-layer', showClickPopup);
+        mapInstance.on('click', 'geojson-line', showClickPopup);
 
         // Hover tooltip
         let hoverPopup = null;
-
         function getFeatureLabel(props) {
-            // Try common label fields
             const labelFields = ['name', 'Name', 'NAME', 'title', 'label', 'id', 'ID', 'osm_id'];
             for (const field of labelFields) {
                 if (props[field]) return String(props[field]);
             }
-            // Check for OSM tags (could be JSON string or object)
             if (props.tags) {
                 let tags = props.tags;
-                if (typeof tags === 'string') {
-                    try { tags = JSON.parse(tags); } catch(e) { return null; }
-                }
+                if (typeof tags === 'string') { try { tags = JSON.parse(tags); } catch(e) { return null; } }
                 if (tags.name) return tags.name;
                 if (tags['name:en']) return tags['name:en'];
-                // Fallback to any key that contains 'name'
                 for (const [k, v] of Object.entries(tags)) {
                     if (k.toLowerCase().includes('name') && v) return String(v);
                 }
             }
-            // Fallback: first string property that's not too long
             for (const [k, v] of Object.entries(props)) {
-                if (typeof v === 'string' && v.length > 0 && v.length < 50 && !k.startsWith('_')) {
-                    return v;
-                }
+                if (typeof v === 'string' && v.length > 0 && v.length < 50 && !k.startsWith('_')) return v;
             }
             return null;
         }
-
         function showHoverTooltip(e) {
             if (!e.features || !e.features[0]) return;
-            const props = e.features[0].properties;
-            const label = getFeatureLabel(props);
+            const label = getFeatureLabel(e.features[0].properties);
             if (!label) return;
-
             if (hoverPopup) hoverPopup.remove();
-            hoverPopup = new maplibregl.Popup({
-                closeButton: false,
-                closeOnClick: false,
-                className: 'hover-tooltip',
-                offset: 10
-            })
+            hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'hover-tooltip', offset: 10 })
                 .setLngLat(e.lngLat)
                 .setHTML(`<div class="bg-[#1c2128] text-white px-2 py-1 rounded text-xs font-medium shadow-lg">${label}</div>`)
                 .addTo(mapInstance);
         }
+        function hideHoverTooltip() { if (hoverPopup) { hoverPopup.remove(); hoverPopup = null; } }
 
-        function hideHoverTooltip() {
-            if (hoverPopup) {
-                hoverPopup.remove();
-                hoverPopup = null;
-            }
-        }
-
-        // Cursor pointer and tooltip on hover
-        mapInstance.on('mouseenter', 'geojson-point', (e) => { mapInstance.getCanvas().style.cursor = 'pointer'; showHoverTooltip(e); });
-        mapInstance.on('mouseleave', 'geojson-point', () => { mapInstance.getCanvas().style.cursor = ''; hideHoverTooltip(); });
-        mapInstance.on('mousemove', 'geojson-point', showHoverTooltip);
-
-        mapInstance.on('mouseenter', 'geojson-layer', (e) => { mapInstance.getCanvas().style.cursor = 'pointer'; showHoverTooltip(e); });
-        mapInstance.on('mouseleave', 'geojson-layer', () => { mapInstance.getCanvas().style.cursor = ''; hideHoverTooltip(); });
-        mapInstance.on('mousemove', 'geojson-layer', showHoverTooltip);
-
-        mapInstance.on('mouseenter', 'geojson-line', (e) => { mapInstance.getCanvas().style.cursor = 'pointer'; showHoverTooltip(e); });
-        mapInstance.on('mouseleave', 'geojson-line', () => { mapInstance.getCanvas().style.cursor = ''; hideHoverTooltip(); });
-        mapInstance.on('mousemove', 'geojson-line', showHoverTooltip);
-    }
-    setTimeout(() => {
-        if (currentGeoJSON?.features.length) {
-            ['geojson-layer', 'geojson-line', 'geojson-point'].forEach(l => { if (mapInstance.getLayer(l)) mapInstance.removeLayer(l); });
-            if (mapInstance.getSource('geojson')) mapInstance.removeSource('geojson');
-            mapInstance.addSource('geojson', { type: 'geojson', data: currentGeoJSON });
-            mapInstance.addLayer({ id: 'geojson-layer', type: 'fill', source: 'geojson', paint: { 'fill-color': '#6366f1', 'fill-opacity': 0.5 }, filter: ['==', '$type', 'Polygon'] });
-            mapInstance.addLayer({ id: 'geojson-line', type: 'line', source: 'geojson', paint: { 'line-color': '#6366f1', 'line-width': 3 }, filter: ['==', '$type', 'LineString'] });
-            mapInstance.addLayer({ id: 'geojson-point', type: 'circle', source: 'geojson', paint: { 'circle-color': '#6366f1', 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 }, filter: ['==', '$type', 'Point'] });
-            const bounds = new maplibregl.LngLatBounds();
-            currentGeoJSON.features.forEach(f => {
-                if (f.geometry.type === 'Point') bounds.extend(f.geometry.coordinates);
-                else if (f.geometry.type === 'LineString') f.geometry.coordinates.forEach(c => bounds.extend(c));
-                else if (f.geometry.type === 'Polygon' && f.geometry.coordinates[0]) f.geometry.coordinates[0].forEach(c => bounds.extend(c));
-            });
-            if (!bounds.isEmpty()) mapInstance.fitBounds(bounds, { padding: 50 });
-        }
-    }, 100);
+        ['geojson-point', 'geojson-layer', 'geojson-line'].forEach(layer => {
+            mapInstance.on('mouseenter', layer, (e) => { mapInstance.getCanvas().style.cursor = 'pointer'; showHoverTooltip(e); });
+            mapInstance.on('mouseleave', layer, () => { mapInstance.getCanvas().style.cursor = ''; hideHoverTooltip(); });
+            mapInstance.on('mousemove', layer, showHoverTooltip);
+        });
+    });
 }
-
-window.hideMapModal = function() { document.getElementById('map-modal').classList.add('hidden'); }
 window.exportGeoJSON = function() {
     if (!currentGeoJSON) return;
     const blob = new Blob([JSON.stringify(currentGeoJSON, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'export.geojson'; a.click();
 }
 
-// Modal backdrop clicks
-['file-browser-modal', 'source-modal', 'transform-modal', 'code-modal', 'map-modal', 'import-modal', 'save-pipeline-modal', 'load-pipeline-modal'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('click', e => { if (e.target === e.currentTarget) e.target.classList.add('hidden'); });
-});
+// Modal backdrop clicks handled by Alpine.js x-show
 
 // Drag & Drop file support
 let dragCounter = 0;
@@ -1874,13 +2299,11 @@ document.addEventListener('drop', async (e) => {
 
 // DuckDB Extensions Modal
 window.showDuckDBExtensionsModal = function() {
-    document.getElementById('duckdb-extensions-modal').classList.remove('hidden');
-    lucide.createIcons();
-    refreshDuckDBExtensions();
+    window.dispatchEvent(new Event('open-extensions'));
 }
 
 window.hideDuckDBExtensionsModal = function() {
-    document.getElementById('duckdb-extensions-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-extensions'));
 }
 
 window.refreshDuckDBExtensions = async function() {

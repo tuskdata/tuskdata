@@ -1,0 +1,38 @@
+{% if tables %}
+    {% for t in tables %}
+    {% set needs_vacuum = t.dead_tuples > 1000 or t.bloat_ratio > 20 %}
+    <tr class="hover:bg-[#21262d]/50 {% if needs_vacuum %}bg-yellow-500/5{% endif %}">
+        <td class="px-4 py-3"><span class="font-mono text-sm">{{ t.schema }}.{{ t.table }}</span></td>
+        <td class="px-4 py-3 text-gray-400">{{ t.size_human }}</td>
+        <td class="px-4 py-3">
+            <span class="{% if t.dead_tuples > 1000 %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ t.dead_tuples }}</span>
+            <span class="text-gray-600 text-xs">/ {{ t.live_tuples }}</span>
+        </td>
+        <td class="px-4 py-3">
+            <span class="{% if t.bloat_ratio > 50 %}text-red-400{% elif t.bloat_ratio > 20 %}text-yellow-400{% else %}text-gray-400{% endif %} font-medium">{{ t.bloat_ratio }}%</span>
+        </td>
+        <td class="px-4 py-3 text-gray-500 text-xs">{{ t.last_vacuum or 'never' }}</td>
+        <td class="px-4 py-3 text-gray-500 text-xs">{{ t.last_analyze or 'never' }}</td>
+        <td class="px-4 py-3 text-right">
+            <div class="flex items-center justify-end gap-1">
+                <button hx-post="/api/admin/{{ conn_id }}/tables/{{ t.schema }}/{{ t.table }}/vacuum"
+                        hx-target="#bloat-list" hx-swap="innerHTML"
+                        class="text-blue-400 hover:bg-blue-500/20 px-2 py-1 rounded text-xs">Vacuum</button>
+                <button hx-post="/api/admin/{{ conn_id }}/tables/{{ t.schema }}/{{ t.table }}/vacuum"
+                        hx-vals='{"full": true}' hx-confirm="VACUUM FULL will lock the table. Continue?"
+                        hx-target="#bloat-list" hx-swap="innerHTML"
+                        class="text-orange-400 hover:bg-orange-500/20 px-2 py-1 rounded text-xs">Full</button>
+                <button hx-post="/api/admin/{{ conn_id }}/tables/{{ t.schema }}/{{ t.table }}/analyze"
+                        hx-target="#bloat-list" hx-swap="innerHTML"
+                        class="text-green-400 hover:bg-green-500/20 px-2 py-1 rounded text-xs">Analyze</button>
+                <button hx-post="/api/admin/{{ conn_id }}/tables/{{ t.schema }}/{{ t.table }}/reindex"
+                        hx-confirm="REINDEX will lock the table. Continue?"
+                        hx-target="#bloat-list" hx-swap="innerHTML"
+                        class="text-purple-400 hover:bg-purple-500/20 px-2 py-1 rounded text-xs">Reindex</button>
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="7" class="p-4 text-gray-500">No tables found</td></tr>
+{% endif %}

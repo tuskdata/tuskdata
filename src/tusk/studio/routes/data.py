@@ -1,5 +1,6 @@
 """API routes for Data/ETL with Polars"""
 
+import hashlib
 import uuid
 import tempfile
 import os
@@ -7,9 +8,9 @@ import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
-from litestar import Controller, get, post, put, delete
+from litestar import Controller, Request, get, post, put, delete
 from litestar.params import Body
-from litestar.response import File, Stream
+from litestar.response import File, Stream, Template
 from litestar.datastructures import UploadFile
 import msgspec
 import structlog
@@ -25,8 +26,81 @@ from tusk.engines.polars_engine import (
 )
 from tusk.engines.duckdb_engine import DuckDBEngine
 from tusk.core.connection import list_connections
+from tusk.studio.htmx import is_htmx
 
 log = structlog.get_logger()
+
+# ─── Parquet cache for CSV/JSON files ────────────────────────────
+CACHE_DIR = Path.home() / ".tusk" / "cache"
+
+
+def _cache_key(file_path: Path) -> str:
+    """Build cache key from file path + mtime + size."""
+    stat = file_path.stat()
+    raw = f"{file_path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _get_cache_path(file_path: Path) -> Path | None:
+    """Return existing Parquet cache path, or None if not cached / stale."""
+    if file_path.suffix.lower() == ".parquet":
+        return None
+    try:
+        cache = CACHE_DIR / f"{_cache_key(file_path)}.parquet"
+        return cache if cache.exists() else None
+    except Exception:
+        return None
+
+
+def _build_cache(file_path: Path, file_type: str, engine: DuckDBEngine) -> Path | None:
+    """Convert CSV/JSON to Parquet cache. Returns cache path on success."""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache = CACHE_DIR / f"{_cache_key(file_path)}.parquet"
+        if cache.exists():
+            return cache
+
+        fp = str(file_path)
+        if file_type in ("csv", "tsv"):
+            engine.conn.execute(
+                f"COPY (SELECT * FROM read_csv_auto('{fp}', max_line_size=20000000)) "
+                f"TO '{cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+        elif file_type == "json":
+            engine.conn.execute(
+                f"COPY (SELECT * FROM read_json_auto('{fp}', maximum_object_size=134217728)) "
+                f"TO '{cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+        else:
+            return None
+
+        log.info("Parquet cache built", source=fp, cache=str(cache),
+                 size_mb=round(cache.stat().st_size / 1048576, 1))
+        return cache
+    except Exception as e:
+        log.warning("Failed to build parquet cache", error=str(e))
+        return None
+
+
+def _validate_file_path(path: str) -> Path:
+    """Validate that a file path is safe (no traversal attacks)"""
+    p = Path(path).expanduser().resolve()
+
+    # Allow home directory and subdirectories
+    home = Path.home().resolve()
+    # Allow /tmp
+    tmp = Path("/tmp").resolve()
+
+    if not (str(p).startswith(str(home)) or str(p).startswith(str(tmp))):
+        raise ValueError(f"Access denied: path must be under home directory or /tmp")
+
+    # Block hidden directories (except common ones)
+    for part in p.parts:
+        if part.startswith(".") and part not in {".", "..", ".local", ".config"}:
+            raise ValueError(f"Access denied: hidden path component '{part}'")
+
+    return p
+
 
 # Shared DuckDB engine for previews
 _duckdb_engine = DuckDBEngine()
@@ -44,46 +118,114 @@ class DataController(Controller):
     path = "/api/data"
 
     @get("/files/schema")
-    async def get_file_schema(self, path: str, osm_layer: str | None = None) -> dict:
+    async def get_file_schema(self, path: str, osm_layer: str | None = None, engine: str = "auto") -> dict:
         """Get schema of a data file"""
-        return get_schema(path, osm_layer)
+        try:
+            p = _validate_file_path(path)
+        except ValueError as e:
+            return {"error": str(e)}
+
+        suffix = p.suffix.lower()
+
+        # DuckDB schema detection for standard files
+        if engine == "duckdb" and suffix not in (".pbf",):
+            file_type = {".csv": "csv", ".tsv": "tsv", ".parquet": "parquet", ".json": "json"}.get(suffix)
+            if file_type:
+                result = _duckdb_engine.preview_file(str(p), file_type, 1)
+                if not result.error:
+                    return {
+                        "columns": [{"name": c.name, "type": c.type} for c in result.columns],
+                        "engine_used": "duckdb",
+                    }
+
+        # Default: Polars schema (or auto for OSM)
+        schema = get_schema(str(p), osm_layer)
+        schema["engine_used"] = "polars"
+        return schema
 
     @get("/files/preview")
-    async def preview_data_file(self, path: str, limit: int = 100, osm_layer: str | None = None) -> dict:
-        """Preview contents of a data file using DuckDB (fast) or Polars (for OSM)"""
+    async def preview_data_file(self, path: str, limit: int = 100, osm_layer: str | None = None, engine: str = "auto") -> dict:
+        """Preview contents of a data file using DuckDB, Polars, or auto-select"""
         import time
         start = time.perf_counter()
 
-        p = Path(path).expanduser()
+        try:
+            p = _validate_file_path(path)
+        except ValueError as e:
+            return {"error": str(e)}
         suffix = p.suffix.lower()
 
-        # Use Polars for OSM files (DuckDB Spatial handles this differently)
-        if suffix == ".pbf" or path.endswith(".osm.pbf"):
-            return polars_preview_file(path, limit, osm_layer)
+        # OSM files always use Polars (DuckDB Spatial handles this differently)
+        if suffix == ".pbf" or str(p).endswith(".osm.pbf"):
+            result = polars_preview_file(str(p), limit, osm_layer)
+            elapsed = round((time.perf_counter() - start) * 1000, 2)
+            result["engine_used"] = "polars"
+            result["elapsed_ms"] = elapsed
+            return result
 
-        # Use DuckDB for standard files (faster)
         file_type = {".csv": "csv", ".tsv": "tsv", ".parquet": "parquet", ".json": "json"}.get(suffix)
         if not file_type:
             return {"error": f"Unsupported file type: {suffix}"}
 
-        result = _duckdb_engine.preview_file(str(p), file_type, limit)
+        # Engine selection: "polars" forces Polars, "duckdb" forces DuckDB, "auto" = DuckDB with Polars fallback
+        use_polars = engine == "polars"
+        use_duckdb = engine in ("auto", "duckdb")
+
+        if use_polars:
+            result = polars_preview_file(str(p), limit, osm_layer)
+            elapsed = round((time.perf_counter() - start) * 1000, 2)
+            result["engine_used"] = "polars"
+            result["elapsed_ms"] = elapsed
+            return result
+
+        # Check Parquet cache for CSV/JSON files
+        cached = _get_cache_path(p)
+        cache_hit = cached is not None
+        read_path = str(cached) if cached else str(p)
+        read_type = "parquet" if cached else file_type
+
+        # DuckDB path (auto or explicit duckdb)
+        result = _duckdb_engine.preview_file(read_path, read_type, limit)
         elapsed = round((time.perf_counter() - start) * 1000, 2)
 
         if result.error:
+            if engine == "duckdb":
+                return {"error": result.error, "engine_used": "duckdb", "elapsed_ms": elapsed}
             log.warning("DuckDB preview failed, falling back to Polars", error=result.error)
-            return polars_preview_file(path, limit, osm_layer)
+            fallback = polars_preview_file(str(p), limit, osm_layer)
+            elapsed = round((time.perf_counter() - start) * 1000, 2)
+            fallback["engine_used"] = "polars"
+            fallback["engine_fallback"] = True
+            fallback["elapsed_ms"] = elapsed
+            return fallback
 
-        log.info("DuckDB preview successful", path=str(p), rows=len(result.rows), ms=elapsed)
+        # Build cache in background for uncached CSV/JSON (< 500 MB)
+        if not cache_hit and file_type in ("csv", "tsv", "json"):
+            try:
+                if p.stat().st_size < 500_000_000:
+                    _build_cache(p, file_type, _duckdb_engine)
+            except Exception:
+                pass
+
+        log.info("DuckDB preview", path=str(p), rows=len(result.rows), ms=elapsed,
+                 cached=cache_hit, engine=engine)
         return {
             "columns": [{"name": c.name, "type": c.type} for c in result.columns],
             "rows": result.rows,
-            "row_count": len(result.rows)
+            "row_count": len(result.rows),
+            "engine_used": "duckdb",
+            "elapsed_ms": elapsed,
+            "cached": cache_hit,
         }
 
     @get("/osm/layers")
     async def get_osm_file_layers(self, path: str) -> dict:
         """Get available layers in an OSM file"""
-        return get_osm_layers(path)
+        try:
+            p = _validate_file_path(path)
+        except ValueError as e:
+            return {"error": str(e)}
+        return get_osm_layers(str(p))
 
     @get("/pipelines")
     async def list_pipelines(self) -> dict:
@@ -634,10 +776,13 @@ class DataController(Controller):
         return workspace_state_to_dict(state)
 
     @get("/workspace/list")
-    async def list_workspaces(self) -> dict:
+    async def list_workspaces(self, request: Request) -> dict | Template:
         """List all saved workspaces"""
         from tusk.core.workspace import list_workspaces as do_list
-        return {"workspaces": do_list()}
+        workspaces = do_list()
+        if is_htmx(request):
+            return Template("partials/data/saved-pipelines.html", context={"pipelines": workspaces})
+        return {"workspaces": workspaces}
 
     @delete("/workspace/{name:str}", status_code=200)
     async def delete_workspace(self, name: str) -> dict:
@@ -646,6 +791,123 @@ class DataController(Controller):
         if do_delete(name):
             return {"success": True}
         return {"error": "Workspace not found"}
+
+    # =========================================================================
+    # Cluster Catalog
+    # =========================================================================
+
+    @get("/plugin-datasets")
+    async def get_plugin_datasets(self, request: Request) -> dict | Template:
+        """Get datasets exposed by plugins (queryable via DuckDB sqlite_scan)"""
+        from tusk.plugins.registry import get_plugin_datasets as fetch_datasets
+        datasets = fetch_datasets()
+        if is_htmx(request):
+            return Template("partials/data/plugin-datasets.html", context={"datasets": datasets})
+        return {"datasets": datasets}
+
+    @post("/materialize")
+    async def materialize_to_parquet(self, data: dict = Body()) -> dict:
+        """Materialize a database query or pipeline source to a Parquet file.
+
+        Used by the cluster to convert PostgreSQL queries into files
+        that DataFusion workers can read.
+
+        Returns: {"path": "/path/to/file.parquet", "rows": N, "table_name": "..."}
+        """
+        source_type = data.get("source_type", "database")
+        query = data.get("query")
+        connection_id = data.get("connection_id")
+        path = data.get("path")
+        name = data.get("name", "materialized")
+
+        # For file sources, just return the path — no materialization needed
+        if source_type in ("csv", "tsv", "json", "parquet") and path:
+            return {"path": path, "table_name": name, "source_type": source_type}
+
+        # For database sources, run query via psycopg and save as Parquet
+        if source_type == "database" and query:
+            try:
+                import polars as pl
+                from tusk.engines import postgres
+                from tusk.core.connection import get_connection
+
+                config = get_connection(connection_id)
+                if not config:
+                    return {"error": f"Connection '{connection_id}' not found"}
+
+                result = await postgres.execute_query(config, query)
+                result_dict = result.to_dict()
+                if result_dict.get("error"):
+                    return {"error": result_dict["error"]}
+
+                columns = [c["name"] for c in result_dict.get("columns", [])]
+                rows = result_dict.get("rows", [])
+                if not columns or not rows:
+                    return {"error": "Query returned no data"}
+
+                # Build Polars DataFrame from result
+                col_data = {col: [row[i] for row in rows] for i, col in enumerate(columns)}
+                df = pl.DataFrame(col_data)
+
+                # Save to cache dir
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in name)
+                cache_file = CACHE_DIR / f"cluster_{safe_name}_{uuid.uuid4().hex[:8]}.parquet"
+                df.write_parquet(cache_file)
+
+                table_name = safe_name or "materialized"
+                log.info("Materialized to Parquet",
+                         source=name, path=str(cache_file),
+                         rows=df.height, size_mb=round(cache_file.stat().st_size / 1048576, 1))
+                return {
+                    "path": str(cache_file),
+                    "table_name": table_name,
+                    "rows": df.height,
+                    "source_type": "parquet",
+                }
+            except Exception as e:
+                log.error("Materialization failed", error=str(e))
+                return {"error": str(e)}
+
+        # For OSM sources, load via DuckDB spatial and save as Parquet
+        if source_type == "osm" and path:
+            try:
+                from tusk.engines.polars_engine import load_osm
+
+                osm_layer = data.get("osm_layer", "all")
+                df = load_osm(path, osm_layer)
+
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in name)
+                cache_file = CACHE_DIR / f"cluster_{safe_name}_{uuid.uuid4().hex[:8]}.parquet"
+                df.write_parquet(cache_file)
+
+                table_name = safe_name or "osm_data"
+                log.info("Materialized OSM to Parquet",
+                         source=path, path=str(cache_file),
+                         rows=df.height)
+                return {
+                    "path": str(cache_file),
+                    "table_name": table_name,
+                    "rows": df.height,
+                    "source_type": "parquet",
+                }
+            except Exception as e:
+                log.error("OSM materialization failed", error=str(e))
+                return {"error": str(e)}
+
+        return {"error": "Invalid source: provide query+connection_id or file path"}
+
+    @get("/catalog")
+    async def get_cluster_catalog(self) -> dict:
+        """Get datasets enabled for Cluster (DataFusion tables).
+
+        Returns tables that workers should register:
+        {"tables": [{"name": "ventas", "path": "/data/ventas.parquet", "format": "parquet"}, ...]}
+        """
+        from tusk.core.workspace import get_cluster_catalog
+        tables = get_cluster_catalog()
+        return {"tables": tables}
 
 
 def _parse_transform(t: dict) -> Transform | None:
@@ -691,6 +953,6 @@ def _parse_transform(t: dict) -> Transform | None:
                 how=t.get("how", "inner")
             )
     except (KeyError, TypeError) as e:
-        print(f"Error parsing transform: {e}")
+        pass
 
     return None

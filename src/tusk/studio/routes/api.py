@@ -262,9 +262,18 @@ class APIController(Controller):
 
     @post("/query")
     async def run_query(self, data: dict = Body()) -> dict:
-        """Execute a query"""
+        """Execute a query.
+
+        Optional pagination params (PostgreSQL only):
+            page: Page number (1-indexed)
+            page_size: Rows per page (default 100)
+
+        If page is provided, returns paginated results with total_count.
+        """
         conn_id = data.get("connection_id")
         sql = data.get("sql", "").strip()
+        page = data.get("page")  # Optional: for server-side pagination
+        page_size = data.get("page_size", 100)
 
         if not sql:
             return {"error": "No SQL provided"}
@@ -277,7 +286,13 @@ class APIController(Controller):
 
         try:
             if config.type == "postgres":
-                result = await postgres.execute_query(config, sql)
+                # Use paginated query if page is specified
+                if page is not None and page > 0:
+                    result = await postgres.execute_query_paginated(
+                        config, sql, page=page, page_size=page_size
+                    )
+                else:
+                    result = await postgres.execute_query(config, sql)
             elif config.type == "duckdb":
                 result = duckdb_engine.execute_query(config.path, sql)
             else:
@@ -293,7 +308,7 @@ class APIController(Controller):
                 connection_name=config.name,
                 sql=sql,
                 execution_time_ms=execution_time_ms,
-                row_count=result_dict.get("row_count"),
+                row_count=result_dict.get("total_count") or result_dict.get("row_count"),
                 error=result_dict.get("error")
             )
 
@@ -311,6 +326,45 @@ class APIController(Controller):
                 error=str(e)
             )
             return {"error": str(e)}
+
+    @post("/query/map-data")
+    async def get_map_data(self, data: dict = Body()) -> dict:
+        """Fetch geometry data optimized for map rendering.
+
+        This endpoint returns only geometry columns as GeoJSON, optimized for
+        rendering on a map. Useful for large datasets where you want to show
+        all features on a map but paginate the table view.
+
+        Args:
+            connection_id: Connection ID
+            sql: SQL query
+            simplify_tolerance: Optional geometry simplification (in coordinate units)
+            max_features: Maximum features to return (default 100000)
+
+        Returns:
+            GeoJSON FeatureCollection with total_count and truncated flag
+        """
+        conn_id = data.get("connection_id")
+        sql = data.get("sql", "").strip()
+        simplify_tolerance = data.get("simplify_tolerance")
+        max_features = data.get("max_features", 100_000)
+
+        if not sql:
+            return {"error": "No SQL provided"}
+
+        config = get_connection(conn_id)
+        if not config:
+            return {"error": "Connection not found"}
+
+        if config.type != "postgres":
+            return {"error": "Map data endpoint only available for PostgreSQL with PostGIS"}
+
+        return await postgres.fetch_geometries(
+            config,
+            sql,
+            simplify_tolerance=simplify_tolerance,
+            max_features=max_features,
+        )
 
     @get("/history")
     async def get_query_history(self, connection_id: str | None = None, limit: int = 50) -> dict:
@@ -484,3 +538,10 @@ class APIController(Controller):
         """Load an already installed DuckDB extension"""
         engine = duckdb_engine.get_duckdb_engine()
         return engine.load_extension(name)
+
+
+@get("/api/health")
+async def health_check() -> dict:
+    """Health check endpoint"""
+    import tusk
+    return {"status": "ok", "version": tusk.__version__}

@@ -188,6 +188,35 @@ def get_backup_path(filename: str) -> Path | None:
     return None
 
 
+def delete_backup(filename: str) -> tuple[bool, str]:
+    """Delete a backup file.
+
+    Args:
+        filename: Name of the backup file (e.g. 'mydb_2026-01-26_120000.sql.gz')
+
+    Returns:
+        (success, message) tuple
+    """
+    # Prevent directory traversal
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return False, "Invalid filename"
+
+    filepath = BACKUP_DIR / filename
+    if not filepath.exists():
+        return False, f"Backup not found: {filename}"
+
+    if not filepath.suffix == ".gz" or not filepath.name.endswith(".sql.gz"):
+        return False, "Not a valid backup file"
+
+    try:
+        filepath.unlink()
+        log.info("Backup deleted", filename=filename)
+        return True, f"Deleted {filename}"
+    except Exception as e:
+        log.error("Failed to delete backup", filename=filename, error=str(e))
+        return False, f"Failed to delete: {str(e)}"
+
+
 def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
     """Restore a database from backup
 

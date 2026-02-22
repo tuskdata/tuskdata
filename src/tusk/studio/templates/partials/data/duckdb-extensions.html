@@ -1,0 +1,27 @@
+{# DuckDB extensions list — HTMX partial #}
+{% if extensions %}
+    {% for ext in extensions %}
+    <div class="flex items-center justify-between px-4 py-3 border-b border-[#21262d] hover:bg-[#21262d]/50">
+        <div class="flex-1">
+            <div class="flex items-center gap-2">
+                <span class="font-medium">{{ ext.name }}</span>
+                {% if ext.loaded %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-[#3fb950]/20 text-[#3fb950]">Loaded</span>
+                {% elif ext.installed %}
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-[#8b949e]/20 text-[#8b949e]">Installed</span>
+                {% endif %}
+            </div>
+            {% if ext.description %}<div class="text-xs text-[#8b949e] mt-0.5">{{ ext.description }}</div>{% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if not ext.installed %}
+                <button @click="installDuckDBExtension('{{ ext.name }}')" class="px-2.5 py-1 text-xs bg-[#238636] hover:bg-[#2ea043] rounded">Install</button>
+            {% elif not ext.loaded %}
+                <button @click="loadDuckDBExtension('{{ ext.name }}')" class="px-2.5 py-1 text-xs bg-[#21262d] hover:bg-[#30363d] rounded">Load</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="p-4 text-[#8b949e] text-center">No extensions found</div>
+{% endif %}

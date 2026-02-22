@@ -1,24 +1,19 @@
 # Tusk
 
-Modern Data Platform - SQL Client, PostgreSQL Admin, Analytics Engine & Distributed Query Processing
+Modern Data Platform — SQL Client, PostgreSQL Admin, Analytics Engine, ETL Pipeline Builder & Plugin System
 
-> **⚠️ Experimental Project**: This is an experimental project built for learning and exploration purposes. Use at your own risk in production environments.
->
-> **🤖 Built with Claude**: This project was developed with significant assistance from [Claude](https://claude.ai) (Anthropic's AI assistant), demonstrating the potential of human-AI collaboration in software development.
+> **Built with Claude**: This project was developed with [Claude Code](https://claude.ai) (Anthropic's AI assistant).
 
 ## Features
 
 ### SQL Client (Studio)
 - Multi-connection support (PostgreSQL, SQLite, DuckDB)
-- Tabbed SQL editor with CodeMirror 6
-- Syntax highlighting and autocomplete
+- Tabbed SQL editor with CodeMirror 6 (syntax highlighting, autocomplete)
 - Schema browser with FK/PK indicators
-- Query history with persistence
-- Saved queries with folders
+- Query history and saved queries with folders
 - Results grid with sortable, resizable columns
 - Export to CSV/JSON
-- Keyboard shortcuts (Ctrl+Enter, Ctrl+S, etc.)
-- Light/Dark theme toggle
+- Keyboard shortcuts (Ctrl+Enter, Ctrl+S, Ctrl+N, etc.)
 
 ### PostgreSQL Admin
 - Server statistics dashboard with auto-refresh
@@ -26,52 +21,46 @@ Modern Data Platform - SQL Client, PostgreSQL Admin, Analytics Engine & Distribu
 - Locks monitor with blocking visualization
 - Backup/Restore with pg_dump/pg_restore
 - Table maintenance (VACUUM, ANALYZE, REINDEX)
-- Extensions manager (install/uninstall)
-- **Roles & Users management** (create, edit, delete roles)
-- **Database settings viewer** (important pg_settings)
+- Extensions manager
+- Roles & users management
+- Database settings viewer
+- Replication status and slow query analysis
 
 ### Analytics Engine (DuckDB)
-- DuckDB integration for analytical queries
-- File browser for data files
-- Parquet, CSV, JSON, SQLite support
+- In-process DuckDB for analytical queries
+- File browser with Parquet, CSV, JSON, SQLite support
 - Drag & drop file loading
 - Export results to Parquet
 - Engine selector (PostgreSQL/DuckDB)
 
-### Data/ETL (Polars)
-- Visual transform pipeline builder
-- OSM/PBF file support
-- 8 transform types (filter, select, sort, group by, rename, drop nulls, limit, join)
+### Data/ETL (Polars + DuckDB)
+- Visual transform pipeline builder (filter, select, sort, group by, rename, drop nulls, limit, join)
+- Engine selector: Auto/DuckDB/Polars with performance metrics
+- OSM/PBF file support via Polars
 - Auto-generated Polars code
-- Export to CSV/Parquet
-- Import to DuckDB/PostgreSQL
+- Export to CSV/Parquet, import to DuckDB/PostgreSQL
 - Drag & drop file upload
 
 ### Geo Integration
-- Auto-detect geometry columns
+- Auto-detect geometry columns (WKT, GeoJSON, EWKT, Hex WKB)
 - Map visualization with MapLibre GL
 - Points, lines, polygons rendering
-- Feature popups on click
+- Feature popups and hover tooltips
 - Export to GeoJSON
 
-### Cluster Mode
-- Distributed query processing
-- Scheduler + Worker architecture
-- Arrow Flight for data transfer
-- DataFusion query execution
+### Cluster Mode (Plugin)
+- Distributed query processing with DataFusion
+- Scheduler + Worker architecture via Arrow Flight
+- Job persistence to SQLite with retry support
 - Real-time cluster dashboard
-- Connect to remote schedulers from UI
-- Start/Stop local cluster from UI (single-node mode)
+- Connect to remote schedulers or start local cluster from UI
 
 ### User Management
-- Single mode (no auth) and Multi-user mode
-- User authentication with sessions
+- Single mode (no auth) and multi-user mode
+- Session-based authentication
 - 24 permissions across 6 categories
 - Default groups (Administrators, Data Engineers, Analysts, Viewers)
-- User management UI for admins
-- **Profile page** for users to manage their account
-- **Group assignment UI** with checkboxes
-- CLI commands for user management
+- User management UI and CLI commands
 
 ## Installation
 
@@ -85,7 +74,7 @@ pip install tuskdata[postgres]
 # With full web UI (recommended)
 pip install tuskdata[studio]
 
-# Everything (studio + admin + cluster)
+# Everything
 pip install tuskdata[all]
 ```
 
@@ -99,33 +88,16 @@ pip install -e ".[all]"
 
 ## Quick Start
 
-### Start the Web Studio
 ```bash
+# Start the web studio
 tusk studio
 # Open http://127.0.0.1:8000
-```
 
-### Start with Options
-```bash
+# Start with options
 tusk studio --host 0.0.0.0 --port 3000
-```
 
-### Start Cluster (Dev Mode)
-```bash
-# Start scheduler + 3 workers
+# Start cluster (dev mode, 3 workers)
 tusk cluster --workers 3
-```
-
-### Start Components Separately
-```bash
-# Terminal 1: Scheduler
-tusk scheduler --port 8814
-
-# Terminal 2: Worker
-tusk worker --scheduler localhost:8814 --port 8815
-
-# Terminal 3: Another Worker
-tusk worker --scheduler localhost:8814 --port 8816
 ```
 
 ## CLI Commands
@@ -138,208 +110,276 @@ tusk worker [options]     # Start a cluster worker
 tusk cluster [options]    # Start local cluster (dev mode)
 tusk users [subcommand]   # User management
 tusk auth [subcommand]    # Authentication management
+tusk plugins              # List installed plugins
 tusk version              # Show version
-tusk help                 # Show help
-```
-
-### Studio Options
-```
---host HOST           Host to bind to (default: 127.0.0.1)
---port, -p PORT       Port to bind to (default: 8000)
---pg-bin-path PATH    Path to PostgreSQL binaries
-```
-
-### Scheduler Options
-```
---host HOST           Host to bind to (default: 0.0.0.0)
---port, -p PORT       Port to bind to (default: 8814)
-```
-
-### Worker Options
-```
---scheduler HOST:PORT Scheduler address (default: localhost:8814)
---host HOST           Host to bind to (default: 0.0.0.0)
---port, -p PORT       Port to bind to (default: 8815)
-```
-
-### Cluster Options (Dev Mode)
-```
---workers, -w N       Number of workers (default: 3)
 ```
 
 ## Authentication
-
-Tusk supports two modes:
 
 ### Single Mode (Default)
 No authentication required. All features accessible.
 
 ### Multi-User Mode
-Enable multi-user authentication:
-
 ```bash
-# Enable auth mode
-tusk auth enable
-
-# Initialize (create admin user and default groups)
-tusk auth init
-
-# Start studio
-tusk studio
+tusk auth enable     # Enable auth mode
+tusk auth init       # Create admin user and default groups
+tusk studio          # Start studio (login required)
 ```
 
 Default credentials: `admin` / `admin`
 
-### User Management CLI
 ```bash
-tusk users list                     # List all users
-tusk users create john --admin      # Create admin user
-tusk users create jane              # Create regular user
-tusk users reset-password john      # Reset password
-tusk users delete john              # Delete user
+tusk users list                  # List all users
+tusk users create john --admin   # Create admin user
+tusk users create jane           # Create regular user
+tusk users reset-password john   # Reset password
 ```
 
-## Configuration
+## Plugin System
 
-Configuration files are stored in `~/.tusk/`:
+Tusk has an extensible plugin architecture. Plugins can add new pages, API endpoints, CLI commands, datasets, templates, static files, and reusable components.
 
-```
-~/.tusk/
-├── config.toml       # Global settings
-├── connections.toml  # Saved connections
-├── history.db        # Query history (SQLite)
-├── auth.db           # Users/groups (SQLite, multi-user mode)
-└── backups/          # Database backups
-```
+### Installing Plugins
 
-### View Configuration
 ```bash
-tusk config show
+pip install tusk-security    # Security analysis plugin
+pip install tusk-cluster     # Distributed query plugin
+tusk plugins                 # List installed plugins
+tusk studio                  # Plugins auto-register on startup
 ```
 
-### Set Configuration
-```bash
-tusk config set pg_bin_path /usr/local/pgsql/bin
-tusk config set port 3000
-tusk config set auth_mode multi
+### How Plugins Work
+
+Plugins are Python packages that register via `pyproject.toml` entry points. On startup, Tusk:
+
+1. **Discovers** plugins via `importlib.metadata.entry_points()`
+2. **Checks** version compatibility
+3. **Copies** plugin templates to `templates/plugins/{id}/`
+4. **Copies** plugin static files to `static/plugins/{id}/`
+5. **Mounts** plugin routes alongside core routes
+6. **Calls** `on_startup()` lifecycle hook
+
+Each plugin gets:
+- **Sidebar tab** with icon and label
+- **Isolated SQLite storage** at `~/.tusk/plugins/{id}.db`
+- **TOML config file** at `~/.tusk/plugins/{id}.toml`
+- **Template directory** accessible as `plugins/{id}/`
+- **Static files** served at `/static/plugins/{id}/`
+- **Dataset integration** — plugin tables queryable via DuckDB
+
+### Creating a Plugin
+
+```python
+# my_plugin/__init__.py
+from tusk.plugins.base import TuskPlugin
+from pathlib import Path
+
+class MyPlugin(TuskPlugin):
+    @property
+    def name(self) -> str:
+        return "tusk-myplugin"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def tab_label(self) -> str:
+        return "My Plugin"
+
+    @property
+    def tab_icon(self) -> str:
+        return "puzzle"  # Lucide icon name
+
+    @property
+    def requires_storage(self) -> bool:
+        return True
+
+    def get_templates_path(self) -> Path | None:
+        return Path(__file__).parent / "templates"
+
+    def get_static_path(self) -> Path | None:
+        return Path(__file__).parent / "static"
+
+    def get_route_handlers(self) -> list:
+        from .routes import MyPageController, MyAPIController
+        return [MyPageController, MyAPIController]
+
+    def get_datasets(self) -> list[dict]:
+        return [{"name": "items", "table": "items", "description": "Plugin items"}]
+
+    def get_cli_commands(self) -> dict:
+        return {"myplugin": self.handle_cli}
+
+    async def on_startup(self) -> None:
+        from .db import init_database
+        init_database()
 ```
 
-## Usage
+Register in `pyproject.toml`:
+```toml
+[project.entry-points."tusk.plugins"]
+myplugin = "my_plugin:MyPlugin"
+```
 
-### Data Page - Creating Pipelines
+### Plugin Templates & Components
 
-1. **Select a Data Source**: Click "Select Data File" to browse and select a CSV, Parquet, JSON, or OSM/PBF file. You can also drag & drop files directly.
+Plugins can use all core UI components via MiniJinja macros:
 
-2. **Add Transforms**: Click "Add Transform" to add operations like filter, sort, group by, etc.
+```html
+{# Plugin template — extends base.html like any core page #}
+{% extends "base.html" %}
+{% from "components/feedback.html" import badge, modal, alert %}
+{% from "components/card.html" import stat_card, info_card %}
+{% from "components/map.html" import map_assets, map_container, carto_dark_style %}
+{% from "components/htmx.html" import htmx_poll, htmx_tabs %}
 
-3. **Preview Results**: See real-time preview of your data with applied transforms.
+{% block content %}
+    {{ stat_card(label="Total Items", value=42, icon="box", color="blue") }}
 
-4. **Export**: Export results to CSV, Parquet, or import directly to DuckDB/PostgreSQL.
+    {% call modal(id="create-item", title="Create Item", icon="plus") %}
+        <form>...</form>
+    {% endcall %}
+{% endblock %}
+```
 
-5. **View Code**: Click "View Code" to see the auto-generated Polars code.
+Plugins can also create their own reusable components:
 
-### Studio Page - Running Queries
+```html
+{# Plugin-specific component at plugins/bi/components/chart.html #}
+{% macro bar_chart(data, x, y, height="300px") %}
+<div class="chart-container" style="height: {{ height }}">...</div>
+{% endmacro %}
+```
 
-1. **Add a Connection**: Click "+" in the Connections sidebar to add PostgreSQL, SQLite, or DuckDB connections.
+Other templates (core or plugin) can import these:
+```html
+{% from "plugins/bi/components/chart.html" import bar_chart %}
+{{ bar_chart(data=sales, x="month", y="revenue") }}
+```
 
-2. **Browse Schema**: Expand tables in the Schema panel to see columns, types, and keys.
+### Plugin Static Files
 
-3. **Write Queries**: Use the SQL editor with autocomplete (Ctrl+Space).
+Plugins with `get_static_path()` get their static files served automatically:
 
-4. **Execute**: Press Ctrl+Enter or click "Run" to execute queries.
+```
+my_plugin/
+├── __init__.py
+├── static/           # get_static_path() points here
+│   ├── chart.js      # Served at /static/plugins/myplugin/chart.js
+│   └── styles.css    # Served at /static/plugins/myplugin/styles.css
+└── templates/
+    └── dashboard.html
+```
 
-5. **Export**: Export results to CSV or JSON.
+```html
+{# In plugin template #}
+<script src="/static/plugins/myplugin/chart.js"></script>
+```
 
-### Admin Page - PostgreSQL Management
+## Component Library
 
-1. **Select a Server**: Choose a PostgreSQL connection from the sidebar.
+Tusk includes a MiniJinja macro library for consistent UI across core pages and plugins.
 
-2. **Monitor**: View real-time stats, active queries, and locks.
-
-3. **Maintain**: Run VACUUM, ANALYZE, or REINDEX on tables.
-
-4. **Manage Extensions**: Install or uninstall PostgreSQL extensions.
-
-5. **Manage Roles**: Create, edit, or delete database roles.
+| File | Macros |
+|------|--------|
+| `components/card.html` | `stat_card()`, `info_card()`, `simple_card()`, `loading_card()`, `metric_row()` |
+| `components/table.html` | `data_table()`, `simple_table()`, `key_value_table()` |
+| `components/forms.html` | `text_input()`, `select_input()`, `checkbox()`, `toggle()`, `button()`, `icon_button()`, `form_group()` |
+| `components/feedback.html` | `badge()`, `severity_badge()`, `status_badge()`, `alert()`, `empty_state()`, `modal()`, `confirmation_dialog()`, `loading_spinner()`, `progress_bar()`, `tooltip()` |
+| `components/htmx.html` | `htmx_table()`, `htmx_poll()`, `htmx_tabs()`, `htmx_search()`, `htmx_form()` |
+| `components/map.html` | `map_assets()`, `map_container()`, `map_dark_styles()`, `carto_dark_style()` |
 
 ## Architecture
 
 ### Project Structure
 ```
 src/tusk/
-├── cli.py           # CLI entry point
-├── core/            # Core functionality
-│   ├── config.py    # Global configuration
-│   ├── connection.py# Connection registry
-│   ├── auth.py      # Authentication system
-│   ├── files.py     # File scanning
-│   ├── geo.py       # GeoJSON/WKT utilities
-│   ├── history.py   # Query history
-│   ├── logging.py   # Structlog setup
-│   └── result.py    # QueryResult dataclass
-├── engines/         # Query engines
-│   ├── duckdb_engine.py  # DuckDB
-│   ├── polars_engine.py  # Polars ETL
-│   ├── postgres.py       # PostgreSQL
-│   └── sqlite.py         # SQLite
-├── admin/           # PostgreSQL admin
-│   ├── stats.py     # Server stats
-│   ├── processes.py # Active queries
-│   ├── backup.py    # Backup/restore
-│   ├── extensions.py# Extensions
-│   ├── roles.py     # Role management
-│   ├── settings.py  # Settings viewer
-│   └── maintenance.py # Table maintenance
-├── cluster/         # Distributed processing
-│   ├── models.py    # Job/Worker models
-│   ├── scheduler.py # Arrow Flight scheduler
-│   └── worker.py    # Arrow Flight worker
-└── studio/          # Web UI
-    ├── app.py       # Litestar app
-    ├── routes/      # API endpoints
-    ├── static/      # Static files (JS)
-    └── templates/   # HTML templates
+├── cli.py              # CLI entry point
+├── core/               # Core functionality
+│   ├── config.py       # Global configuration
+│   ├── connection.py   # Connection registry
+│   ├── auth.py         # Authentication system
+│   ├── files.py        # File scanning
+│   ├── geo.py          # GeoJSON/WKT utilities
+│   ├── history.py      # Query history
+│   ├── logging.py      # Structlog setup
+│   ├── scheduler.py    # Task scheduler
+│   └── result.py       # QueryResult struct
+├── engines/            # Query engines
+│   ├── duckdb_engine.py    # DuckDB analytics
+│   ├── polars_engine.py    # Polars ETL
+│   ├── postgres.py         # PostgreSQL
+│   └── sqlite.py           # SQLite
+├── admin/              # PostgreSQL admin modules
+│   ├── stats.py        # Server statistics
+│   ├── processes.py    # Active queries
+│   ├── backup.py       # Backup/restore
+│   ├── extensions.py   # Extensions manager
+│   ├── roles.py        # Role management
+│   ├── settings.py     # Settings viewer
+│   └── maintenance.py  # Table maintenance
+├── plugins/            # Plugin system
+│   ├── base.py         # TuskPlugin abstract base class
+│   ├── registry.py     # Discovery via entry_points
+│   ├── storage.py      # Per-plugin SQLite storage
+│   ├── config.py       # Per-plugin TOML config
+│   └── templates.py    # Template & static file loader
+└── studio/             # Web UI
+    ├── app.py           # Litestar application
+    ├── routes/          # API & page controllers
+    ├── static/          # JS, CSS, plugin statics
+    └── templates/       # HTML templates
+        ├── base.html        # Base layout (loads Alpine, HTMX, Tailwind, Lucide)
+        ├── components/      # Reusable MiniJinja macros
+        │   ├── card.html
+        │   ├── table.html
+        │   ├── forms.html
+        │   ├── feedback.html
+        │   ├── htmx.html
+        │   └── map.html
+        ├── partials/        # HTMX partial responses
+        └── plugins/         # Plugin templates (copied at startup)
 ```
 
-### Technologies
-- **Web Framework**: Litestar + Granian
-- **Database**: PostgreSQL (psycopg3), SQLite, DuckDB
-- **ETL**: Polars
-- **Distributed**: Arrow Flight + DataFusion
-- **Frontend**: TailwindCSS, CodeMirror 6, MapLibre GL, Lucide Icons
-- **Serialization**: msgspec
-- **Logging**: structlog
+### Tech Stack
 
-## Dependencies
+| Layer | Technology |
+|-------|-----------|
+| Web Framework | Litestar 2.x |
+| Server | Granian |
+| Templates | MiniJinja |
+| Serialization | msgspec (Structs) |
+| CSS | Tailwind CSS |
+| Interactivity | Alpine.js + HTMX |
+| Icons | Lucide |
+| Maps | MapLibre GL 4.1 |
+| DataFrames | Polars |
+| PostgreSQL | psycopg 3.x (async) |
+| Analytics | DuckDB |
+| Distributed | Arrow Flight + DataFusion |
+| Logging | structlog |
 
-```toml
-litestar >= 2.0
-granian >= 2.0
-psycopg[binary] >= 3.0
-msgspec >= 0.18
-duckdb >= 1.0
-polars >= 1.0
-pyarrow >= 17.0
-datafusion >= 51.0
-structlog >= 24.0
-psutil >= 5.9
+## Configuration
+
 ```
-
-## Development
+~/.tusk/
+├── config.toml          # Global settings
+├── connections.toml     # Saved connections
+├── history.db           # Query history (SQLite)
+├── auth.db              # Users/groups (multi-user mode)
+├── backups/             # Database backups
+└── plugins/             # Plugin storage
+    ├── security.db      # Plugin SQLite databases
+    ├── security.toml    # Plugin config files
+    └── ...
+```
 
 ```bash
-# Clone the repository
-git clone https://github.com/tuskdata/tuskdata.git
-cd tuskdata
-
-# Install in development mode with all features
-pip install -e ".[all]"
-
-# Run studio
-tusk studio
-
-# Or directly
-python -m tusk.cli studio
+tusk config show
+tusk config set pg_bin_path /usr/local/pgsql/bin
+tusk config set port 3000
+tusk config set auth_mode multi
 ```
 
 ## Keyboard Shortcuts
@@ -356,17 +396,10 @@ python -m tusk.cli studio
 
 ## Known Limitations
 
-1. **Cluster Mode**: Requires scheduler/workers to be running. The "Start Local Cluster" spawns a subprocess which may have permission issues on some systems.
-
-2. **Auth System**: In multi-user mode, sessions are stored in SQLite. Server restart does not invalidate sessions.
-
-3. **State Persistence**: Data page state uses localStorage which is browser-specific.
-
-4. **Large Files**: Performance may degrade with files larger than 500MB. Use appropriate limit settings.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. **Cluster Mode**: Requires scheduler/workers to be running. Local cluster spawns subprocesses.
+2. **Auth System**: Sessions stored in SQLite. Server restart does not invalidate sessions.
+3. **CDN Dependencies**: Frontend libraries (Tailwind, Alpine, HTMX, MapLibre, Lucide) loaded via CDN. No offline mode yet.
+4. **Large Files**: Performance may degrade with files larger than 500MB.
 
 ## License
 

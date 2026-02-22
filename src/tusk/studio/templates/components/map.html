@@ -1,0 +1,103 @@
+{# Map Components — MapLibre GL
+
+   Reusable macros for MapLibre GL map containers with dark theme.
+   ALL maps in Tusk use MapLibre GL (no Leaflet).
+
+   Macros: map_assets, map_container, map_dark_styles, carto_dark_style
+
+   Map initialization (new maplibregl.Map) remains in JS files.
+   These macros standardize the container, CDN tags, basemap, and dark theme.
+#}
+
+
+{% macro map_assets() %}
+{# MapLibre GL CDN script and CSS tags.
+   Place in {% block extra_head %} or at the top of {% block scripts %}.
+#}
+<script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{% endmacro %}
+
+
+{% macro map_container(id, height="100%", extra_classes="", rounded=true) %}
+{# Container div for a MapLibre instance.
+
+   Args:
+       id: DOM element ID (used by maplibregl.Map to attach)
+       height: CSS height value (default "100%")
+       extra_classes: Additional CSS classes
+       rounded: Whether to round corners (default true)
+#}
+<div id="{{ id }}"
+     class="w-full bg-[#0d1117] {% if rounded %}rounded-lg overflow-hidden{% endif %} {{ extra_classes }}"
+     style="height: {{ height }}; min-height: 200px;">
+</div>
+{% endmacro %}
+
+
+{% macro map_dark_styles() %}
+{# Dark theme CSS for MapLibre popups. Outputs a <style> block.
+   Include once per page that uses map popups.
+#}
+<style>
+.maplibregl-popup-content {
+    background: #161b22 !important;
+    color: #c9d1d9 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+}
+.maplibregl-popup-tip {
+    border-top-color: #161b22 !important;
+}
+.maplibregl-popup-close-button {
+    color: #8b949e;
+    font-size: 16px;
+    padding: 4px 8px;
+}
+.maplibregl-popup-close-button:hover {
+    color: white;
+    background: rgba(255,255,255,0.1);
+}
+.geo-popup .maplibregl-popup-content {
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+.hover-tooltip .maplibregl-popup-content {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+.hover-tooltip .maplibregl-popup-tip {
+    display: none;
+}
+</style>
+{% endmacro %}
+
+
+{% macro carto_dark_style() %}
+{# CARTO Dark Matter basemap style object for MapLibre GL.
+   Use directly in JS as the style parameter for new maplibregl.Map().
+#}
+{
+    version: 8,
+    sources: {
+        'carto-dark': {
+            type: 'raster',
+            tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+            tileSize: 256,
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+        }
+    },
+    layers: [{
+        id: 'carto-dark-layer',
+        type: 'raster',
+        source: 'carto-dark',
+        minzoom: 0,
+        maxzoom: 22
+    }]
+}
+{% endmacro %}

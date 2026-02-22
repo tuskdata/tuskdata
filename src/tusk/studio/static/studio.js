@@ -77,6 +77,11 @@ let filterText = '';
 let currentPage = 1;
 const PAGE_SIZE = 100;
 
+// Server-side pagination state
+let serverPagination = false;  // true when using server-side pagination
+let currentSql = '';  // SQL for re-fetching pages
+let mapGeoData = null;  // Separate geometry data for map
+
 // Generate a unique tab ID
 function generateTabId() {
     return `tab-${++tabCounter}`;
@@ -280,29 +285,54 @@ function renderResults() {
         return;
     }
 
-    const processedRows = getProcessedRows();
-    const totalFiltered = processedRows.length;
-    const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-    const startIdx = (currentPage - 1) * PAGE_SIZE;
-    const endIdx = Math.min(startIdx + PAGE_SIZE, totalFiltered);
-    const pageRows = processedRows.slice(startIdx, endIdx);
+    // Determine pagination mode
+    const isServerPaginated = serverPagination && currentResults.total_count !== undefined;
+    const totalCount = isServerPaginated ? currentResults.total_count : currentResults.row_count;
+
+    let processedRows, totalFiltered, totalPages, startIdx, endIdx, pageRows;
+
+    if (isServerPaginated) {
+        // Server-side pagination: rows are already the current page
+        processedRows = currentResults.rows || [];
+        totalFiltered = totalCount;
+        totalPages = Math.ceil(totalCount / PAGE_SIZE);
+        startIdx = (currentPage - 1) * PAGE_SIZE;
+        endIdx = Math.min(startIdx + currentResults.row_count, totalCount);
+        pageRows = processedRows;  // Already paginated by server
+    } else {
+        // Client-side pagination
+        processedRows = getProcessedRows();
+        totalFiltered = processedRows.length;
+        totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
+        startIdx = (currentPage - 1) * PAGE_SIZE;
+        endIdx = Math.min(startIdx + PAGE_SIZE, totalFiltered);
+        pageRows = processedRows.slice(startIdx, endIdx);
+    }
+
+    // Row count display
+    const rowCountDisplay = isServerPaginated
+        ? `${totalCount.toLocaleString()} total rows`
+        : `${currentResults.row_count} rows`;
 
     // Header with stats, filter, and export buttons
     headerEl.innerHTML = `
         <div class="flex items-center justify-between flex-wrap gap-2">
             <div class="flex items-center gap-2">
-                <span class="text-green-400">${currentResults.row_count} rows</span>
+                <span class="text-green-400">${rowCountDisplay}</span>
                 <span class="text-gray-500">·</span>
                 <span class="text-gray-400">${currentResults.execution_time_ms}ms</span>
-                ${filterText ? `<span class="text-gray-500">·</span><span class="text-yellow-400">${totalFiltered} filtered</span>` : ''}
+                ${isServerPaginated ? '<span class="text-gray-500">·</span><span class="text-blue-400 text-xs">Server paginated</span>' : ''}
+                ${!isServerPaginated && filterText ? `<span class="text-gray-500">·</span><span class="text-yellow-400">${totalFiltered} filtered</span>` : ''}
             </div>
             <div class="flex items-center gap-2">
-                <input type="text"
-                       id="results-filter"
-                       placeholder="Filter results..."
-                       value="${filterText}"
-                       onkeyup="filterResults(this.value)"
-                       class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-40 focus:outline-none focus:border-indigo-500">
+                ${!isServerPaginated ? `
+                    <input type="text"
+                           id="results-filter"
+                           placeholder="Filter results..."
+                           value="${filterText}"
+                           onkeyup="filterResults(this.value)"
+                           class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-40 focus:outline-none focus:border-indigo-500">
+                ` : ''}
                 ${hasGeoColumn() ? '<button onclick="showMapModal()" class="text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1"><span>🗺️</span> Map</button>' : ''}
                 <button onclick="exportCSV()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">CSV</button>
                 <button onclick="exportJSON()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">JSON</button>
@@ -381,6 +411,17 @@ window.filterResults = function(text) {
 
 // Go to page
 window.goToPage = function(page) {
+    // Server-side pagination: re-fetch from server
+    if (serverPagination && currentConnection?.type === 'postgres') {
+        const totalCount = currentResults?.total_count || 0;
+        const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+        if (page >= 1 && page <= totalPages) {
+            runQuery({ sql: currentSql, page: page, isPageFetch: true });
+        }
+        return;
+    }
+
+    // Client-side pagination
     const processedRows = getProcessedRows();
     const totalPages = Math.ceil(processedRows.length / PAGE_SIZE);
     if (page >= 1 && page <= totalPages) {
@@ -867,15 +908,17 @@ window.deleteConnection = async function(id) {
 // Query execution state
 let isRunning = false;
 
-window.runQuery = async function() {
+window.runQuery = async function(options = {}) {
     if (!currentConnection) {
-        alert('Select a connection first');
+        tuskToast('Select a connection first', 'warning');
         return;
     }
 
     if (isRunning) return;
 
-    const sqlText = editor.state.doc.toString();
+    const sqlText = options.sql || editor.state.doc.toString();
+    const page = options.page || 1;
+    const isPageFetch = options.isPageFetch || false;
 
     isRunning = true;
     queryAbortController = new AbortController();
@@ -899,32 +942,57 @@ window.runQuery = async function() {
                 <circle cx="12" cy="12" r="10" stroke-opacity="0.25" stroke-width="4"></circle>
                 <path d="M12 2a10 10 0 0110 10" stroke-width="4"></path>
             </svg>
-            Running query... <span class="text-gray-500">(press Escape or click Cancel to stop)</span>
+            ${isPageFetch ? 'Loading page...' : 'Running query...'} <span class="text-gray-500">(press Escape or click Cancel to stop)</span>
         </span>
     `;
-    document.getElementById('results-table').innerHTML = '';
+    if (!isPageFetch) {
+        document.getElementById('results-table').innerHTML = '';
+    }
 
     try {
+        // Determine if we should use server-side pagination
+        // Use pagination for PostgreSQL connections
+        const useServerPagination = currentConnection.type === 'postgres';
+
+        const body = {
+            connection_id: currentConnection.id,
+            sql: sqlText,
+        };
+
+        // For PostgreSQL, use server-side pagination
+        if (useServerPagination) {
+            body.page = page;
+            body.page_size = PAGE_SIZE;
+        }
+
         const res = await fetch('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ connection_id: currentConnection.id, sql: sqlText }),
+            body: JSON.stringify(body),
             signal: queryAbortController.signal
         });
 
         currentResults = await res.json();
 
-        // Reset sort/filter/page for new results
-        sortColumn = null;
-        sortDirection = 'asc';
-        filterText = '';
-        currentPage = 1;
+        // Check if we're in server-side pagination mode
+        serverPagination = currentResults.total_count !== undefined;
+        currentSql = sqlText;
+        currentPage = page;
+
+        // Reset sort/filter for new queries (not page fetches)
+        if (!isPageFetch) {
+            sortColumn = null;
+            sortDirection = 'asc';
+            filterText = '';
+            mapGeoData = null;  // Clear cached map data
+        }
 
         // Store results in active tab
         const activeTab = tabs.find(t => t.id === activeTabId);
         if (activeTab) {
             activeTab.sql = sqlText;
             activeTab.results = currentResults;
+            activeTab.serverPagination = serverPagination;
         }
 
         renderResults();
@@ -940,8 +1008,10 @@ window.runQuery = async function() {
         queryAbortController = null;
         resetRunButton();
 
-        // Refresh history after query execution
-        loadHistory();
+        // Refresh history after query execution (but not for page fetches)
+        if (!isPageFetch) {
+            loadHistory();
+        }
     }
 }
 
@@ -1002,7 +1072,7 @@ window.testConnection = async function() {
             btn.innerHTML = '✗ Failed';
             btn.classList.remove('bg-[#21262d]');
             btn.classList.add('bg-red-600');
-            alert('Connection failed: ' + result.message);
+            tuskToast('Connection failed: ' + result.message, 'error');
             setTimeout(() => {
                 btn.innerHTML = originalText;
                 btn.classList.remove('bg-red-600');
@@ -1010,7 +1080,7 @@ window.testConnection = async function() {
             }, 2000);
         }
     } catch (err) {
-        alert('Test failed: ' + err.message);
+        tuskToast('Test failed: ' + err.message, 'error');
         btn.innerHTML = originalText;
     } finally {
         btn.disabled = false;
@@ -1033,7 +1103,7 @@ window.showConnModal = function(editMode = false) {
         toggleConnFields();
     }
 
-    document.getElementById('conn-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-conn-modal'));
     document.getElementById('conn-name').focus();
 }
 
@@ -1043,7 +1113,7 @@ window.showEditConnModal = async function(connId) {
     const conn = await res.json();
 
     if (conn.error) {
-        alert('Could not load connection: ' + conn.error);
+        tuskToast('Could not load connection: ' + conn.error, 'error');
         return;
     }
 
@@ -1073,31 +1143,22 @@ window.showEditConnModal = async function(connId) {
         document.getElementById('conn-path').value = conn.path || '';
     }
 
-    document.getElementById('conn-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-conn-modal'));
     document.getElementById('conn-name').focus();
 }
 
 window.hideConnModal = function() {
-    document.getElementById('conn-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-conn-modal'));
     // Reset edit state
     document.getElementById('conn-edit-id').value = '';
 }
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-    // Escape - cancel query or close modals
+    // Escape - cancel running query (modal closing handled by Alpine.js)
     if (e.key === 'Escape') {
         if (isRunning && queryAbortController) {
             cancelQuery();
-        } else {
-            hideConnModal();
-            hideSettingsModal();
-            hideDatabasesModal();
-            hideSaveQueryModal();
-            hideFolderModal();
-            hideFilePreviewModal();
-            hideCreateFileModal();
-            hideParquetModal();
         }
     }
     // Ctrl+T / Cmd+T - new tab
@@ -1130,14 +1191,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Close modal on backdrop click
-document.getElementById('conn-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideConnModal();
-});
-
-document.getElementById('settings-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideSettingsModal();
-});
+// Modal backdrop clicks handled by Alpine.js x-show
 
 document.getElementById('conn-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -1167,7 +1221,7 @@ document.getElementById('conn-form').onsubmit = async (e) => {
     const result = await res.json();
 
     if (result.error) {
-        alert('Error: ' + result.error);
+        tuskToast('Error: ' + result.error, 'error');
         return;
     }
 
@@ -1183,12 +1237,12 @@ document.getElementById('conn-form').onsubmit = async (e) => {
 
 // Settings Modal Functions
 window.showSettingsModal = async function() {
-    document.getElementById('settings-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-settings-modal'));
     await loadPgPaths();
 }
 
 window.hideSettingsModal = function() {
-    document.getElementById('settings-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-settings-modal'));
 }
 
 async function loadPgPaths() {
@@ -1237,7 +1291,7 @@ window.setPgBinPath = async function() {
     if (result.success) {
         await loadPgPaths();
     } else {
-        alert(result.error);
+        tuskToast(result.error, 'error');
     }
 }
 
@@ -1356,7 +1410,7 @@ let currentDatabasesConnId = null;
 
 window.showDatabasesModal = async function(connId) {
     currentDatabasesConnId = connId;
-    document.getElementById('databases-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-databases-modal'));
     document.getElementById('databases-list').innerHTML = '<div class="text-gray-500">Loading databases...</div>';
 
     const res = await fetch(`/api/connections/${connId}/databases`);
@@ -1396,7 +1450,7 @@ window.showDatabasesModal = async function(connId) {
 }
 
 window.hideDatabasesModal = function() {
-    document.getElementById('databases-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-databases-modal'));
     currentDatabasesConnId = null;
 }
 
@@ -1412,7 +1466,7 @@ window.connectToDatabase = async function(dbName) {
     const result = await res.json();
 
     if (result.error) {
-        alert('Error: ' + result.error);
+        tuskToast('Error: ' + result.error, 'error');
         return;
     }
 
@@ -1423,10 +1477,7 @@ window.connectToDatabase = async function(dbName) {
     setTimeout(() => selectConnection(result.id, result.name, result.type), 100);
 }
 
-// Close databases modal on Escape and backdrop click
-document.getElementById('databases-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideDatabasesModal();
-});
+// Databases modal backdrop click handled by Alpine.js
 
 // Saved Queries Functions
 loadSavedQueries();
@@ -1498,7 +1549,7 @@ window.loadSavedQuery = async function(id) {
     const query = await res.json();
 
     if (query.error) {
-        alert('Error loading query: ' + query.error);
+        tuskToast('Error loading query: ' + query.error, 'error');
         return;
     }
 
@@ -1514,7 +1565,7 @@ window.showSaveQueryModal = function(editId = null) {
     const sql = editor ? editor.state.doc.toString() : '';
 
     if (!sql.trim()) {
-        alert('No query to save');
+        tuskToast('No query to save', 'warning');
         return;
     }
 
@@ -1524,12 +1575,12 @@ window.showSaveQueryModal = function(editId = null) {
     document.getElementById('save-query-folder').value = '';
     document.getElementById('save-query-preview').textContent = sql.slice(0, 200) + (sql.length > 200 ? '...' : '');
 
-    document.getElementById('save-query-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-save-query-modal'));
     document.getElementById('save-query-name').focus();
 }
 
 window.hideSaveQueryModal = function() {
-    document.getElementById('save-query-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-save-query-modal'));
 }
 
 window.editSavedQuery = async function(id) {
@@ -1537,7 +1588,7 @@ window.editSavedQuery = async function(id) {
     const query = await res.json();
 
     if (query.error) {
-        alert('Error loading query: ' + query.error);
+        tuskToast('Error loading query: ' + query.error, 'error');
         return;
     }
 
@@ -1547,7 +1598,7 @@ window.editSavedQuery = async function(id) {
     document.getElementById('save-query-folder').value = query.folder || '';
     document.getElementById('save-query-preview').textContent = query.sql.slice(0, 200) + (query.sql.length > 200 ? '...' : '');
 
-    document.getElementById('save-query-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-save-query-modal'));
     document.getElementById('save-query-name').focus();
 }
 
@@ -1567,7 +1618,7 @@ document.getElementById('save-query-form').onsubmit = async (e) => {
     const sql = editor ? editor.state.doc.toString() : '';
 
     if (!name) {
-        alert('Please enter a query name');
+        tuskToast('Please enter a query name', 'warning');
         return;
     }
 
@@ -1596,7 +1647,7 @@ document.getElementById('save-query-form').onsubmit = async (e) => {
     const result = await res.json();
 
     if (result.error) {
-        alert('Error: ' + result.error);
+        tuskToast('Error: ' + result.error, 'error');
         return;
     }
 
@@ -1612,10 +1663,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Close save query modal on backdrop click
-document.getElementById('save-query-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideSaveQueryModal();
-});
+// Save query modal backdrop click handled by Alpine.js
 
 // Save tabs before leaving the page
 window.addEventListener('beforeunload', () => {
@@ -1732,7 +1780,7 @@ async function loadFiles() {
 }
 
 window.showAddFolderModal = function() {
-    document.getElementById('folder-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-folder-modal'));
     document.getElementById('folder-path').focus();
 }
 
@@ -1741,12 +1789,12 @@ window.showAddFolderModal = function() {
 // ============================================================================
 
 window.showCreateFileModal = function() {
-    document.getElementById('create-file-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-create-file-modal'));
     document.getElementById('create-file-path').focus();
 }
 
 window.hideCreateFileModal = function() {
-    document.getElementById('create-file-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-create-file-modal'));
     document.getElementById('create-file-path').value = '';
 }
 
@@ -1770,22 +1818,19 @@ document.getElementById('create-file-form').onsubmit = async (e) => {
         if (result.success) {
             hideCreateFileModal();
             loadFiles();
-            alert(`Created ${fileType.toUpperCase()} database: ${result.path}`);
+            tuskToast(`Created ${fileType.toUpperCase()} database: ${result.path}`, 'success');
         } else {
-            alert('Error: ' + result.error);
+            tuskToast('Error: ' + result.error, 'error');
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        tuskToast('Error: ' + err.message, 'error');
     }
 }
 
-// Close create file modal on backdrop click
-document.getElementById('create-file-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideCreateFileModal();
-});
+// Create file modal backdrop click handled by Alpine.js
 
 window.hideFolderModal = function() {
-    document.getElementById('folder-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-folder-modal'));
     document.getElementById('folder-path').value = '';
 }
 
@@ -1816,7 +1861,7 @@ document.getElementById('folder-form').onsubmit = async (e) => {
     const result = await res.json();
 
     if (!result.success) {
-        alert('Error: ' + result.error);
+        tuskToast('Error: ' + result.error, 'error');
         return;
     }
 
@@ -1824,10 +1869,7 @@ document.getElementById('folder-form').onsubmit = async (e) => {
     loadFiles();
 }
 
-// Close folder modal on backdrop click
-document.getElementById('folder-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideFolderModal();
-});
+// Folder modal backdrop click handled by Alpine.js
 
 // ============================================================================
 // File Preview
@@ -1836,7 +1878,7 @@ document.getElementById('folder-modal').addEventListener('click', (e) => {
 window.previewFile = async function(path, fileType, name) {
     currentPreviewFile = { path, fileType, name };
 
-    document.getElementById('file-preview-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-file-preview-modal'));
     document.getElementById('file-preview-title').textContent = name;
     document.getElementById('file-preview-info').innerHTML = 'Loading...';
     document.getElementById('file-preview-content').innerHTML = '<div class="text-gray-500">Loading preview...</div>';
@@ -1947,7 +1989,7 @@ function renderPreviewTable(data) {
 }
 
 window.hideFilePreviewModal = function() {
-    document.getElementById('file-preview-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-file-preview-modal'));
     currentPreviewFile = null;
 }
 
@@ -1960,9 +2002,9 @@ window.insertFileQuery = function() {
     if (currentPreviewFile.fileType === 'parquet') {
         query = `SELECT * FROM read_parquet('${path}') LIMIT 100`;
     } else if (currentPreviewFile.fileType === 'csv' || currentPreviewFile.fileType === 'tsv') {
-        query = `SELECT * FROM read_csv_auto('${path}') LIMIT 100`;
+        query = `SELECT * FROM read_csv_auto('${path}', max_line_size=20000000) LIMIT 100`;
     } else if (currentPreviewFile.fileType === 'json') {
-        query = `SELECT * FROM read_json_auto('${path}') LIMIT 100`;
+        query = `SELECT * FROM read_json_auto('${path}', maximum_object_size=134217728) LIMIT 100`;
     } else if (currentPreviewFile.fileType === 'sqlite' && currentPreviewFile.table) {
         query = `SELECT * FROM sqlite_scan('${path}', '${currentPreviewFile.table}') LIMIT 100`;
     }
@@ -1977,10 +2019,7 @@ window.insertFileQuery = function() {
     }
 }
 
-// Close file preview modal on backdrop click
-document.getElementById('file-preview-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideFilePreviewModal();
-});
+// File preview modal backdrop click handled by Alpine.js
 
 // ============================================================================
 // Update runQuery to support DuckDB
@@ -2001,21 +2040,21 @@ window.runQuery = async function() {
 
 window.showParquetModal = function() {
     if (!currentResults || !currentResults.columns || currentResults.columns.length === 0) {
-        alert('No results to export');
+        tuskToast('No results to export', 'warning');
         return;
     }
 
     if (currentEngine !== 'duckdb') {
-        alert('Parquet export only available with DuckDB engine');
+        tuskToast('Parquet export only available with DuckDB engine', 'warning');
         return;
     }
 
-    document.getElementById('parquet-modal').classList.remove('hidden');
+    window.dispatchEvent(new Event('open-parquet-modal'));
     document.getElementById('parquet-path').focus();
 }
 
 window.hideParquetModal = function() {
-    document.getElementById('parquet-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-parquet-modal'));
     document.getElementById('parquet-path').value = '';
 }
 
@@ -2027,7 +2066,7 @@ document.getElementById('parquet-form').onsubmit = async (e) => {
 
     const sql = editor ? editor.state.doc.toString() : '';
     if (!sql.trim()) {
-        alert('No query to export');
+        tuskToast('No query to export', 'warning');
         return;
     }
 
@@ -2041,20 +2080,17 @@ document.getElementById('parquet-form').onsubmit = async (e) => {
         const result = await res.json();
 
         if (result.success) {
-            alert('Exported successfully to: ' + result.path);
+            tuskToast('Exported successfully to: ' + result.path, 'success');
             hideParquetModal();
         } else {
-            alert('Export failed: ' + result.error);
+            tuskToast('Export failed: ' + result.error, 'error');
         }
     } catch (err) {
-        alert('Export failed: ' + err.message);
+        tuskToast('Export failed: ' + err.message, 'error');
     }
 }
 
-// Close parquet modal on backdrop click
-document.getElementById('parquet-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideParquetModal();
-});
+// Parquet modal backdrop click handled by Alpine.js
 
 async function runDuckDBQuery() {
     if (isRunning) return;
@@ -2141,8 +2177,8 @@ function hasGeoColumn() {
 }
 
 // WKT patterns for geo detection
-const WKT_PATTERN = /^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i;
-const EWKT_PATTERN = /^SRID=\d+;(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i;
+const WKT_PATTERN = /^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*(Z|M|ZM)?\s*\(/i;
+const EWKT_PATTERN = /^SRID=\d+;(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*(Z|M|ZM)?\s*\(/i;
 
 function isGeometryValue(value) {
     if (value === null || value === undefined) return false;
@@ -2212,6 +2248,9 @@ function parseWKT(wkt) {
     if (wkt.toUpperCase().startsWith('SRID=')) {
         wkt = wkt.split(';')[1] || wkt;
     }
+
+    // Strip Z/M/ZM dimension modifiers: "POLYGON Z ((" → "POLYGON (("
+    wkt = wkt.replace(/^(MULTI)?(POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)\s+(Z|M|ZM)\s*\(/i, '$1$2 (');
 
     const upper = wkt.toUpperCase();
 
@@ -2341,39 +2380,35 @@ function extractMultiCoords(wkt) {
 }
 
 function extractMultiPolygonCoords(wkt) {
-    // Simplified extraction
-    const start = wkt.indexOf('((');
-    const end = wkt.lastIndexOf('))');
-    if (start === -1 || end === -1) return [];
+    // MULTIPOLYGON(((x y, x y, ...), (hole)), ((x y, x y, ...)))
+    // Find the opening paren after MULTIPOLYGON
+    const mIdx = wkt.toUpperCase().indexOf('MULTIPOLYGON');
+    if (mIdx === -1) return [];
+    const outerStart = wkt.indexOf('(', mIdx);
+    if (outerStart === -1) return [];
 
-    // Split by polygon boundaries
-    const content = wkt.slice(start, end + 2);
     const polygons = [];
-
-    // This is a simplified parser - works for basic cases
     let depth = 0;
-    let polygonContent = '';
+    let polyStart = -1;
 
-    for (let i = 0; i < content.length; i++) {
-        const char = content[i];
-        if (char === '(') depth++;
-        else if (char === ')') depth--;
-
-        polygonContent += char;
-
-        if (depth === 1 && content[i+1] === ',' && content[i+2] === '(') {
-            // End of polygon
-            const rings = extractPolygonRings(polygonContent);
-            if (rings.length > 0) polygons.push(rings);
-            polygonContent = '';
-            i += 2; // Skip ", ("
+    // Walk through, tracking depth to split individual polygons at depth=1
+    for (let i = outerStart; i < wkt.length; i++) {
+        const ch = wkt[i];
+        if (ch === '(') {
+            depth++;
+            // depth 2 = start of a polygon's ring group ((ring),(ring))
+            if (depth === 2) polyStart = i;
+        } else if (ch === ')') {
+            depth--;
+            // depth 1 = end of a polygon's ring group
+            if (depth === 1 && polyStart !== -1) {
+                const polyWkt = 'POLYGON' + wkt.slice(polyStart, i + 1);
+                const rings = extractPolygonRings(polyWkt);
+                if (rings.length > 0) polygons.push(rings);
+                polyStart = -1;
+            }
+            if (depth === 0) break;
         }
-    }
-
-    // Last polygon
-    if (polygonContent) {
-        const rings = extractPolygonRings(polygonContent);
-        if (rings.length > 0) polygons.push(rings);
     }
 
     return polygons;
@@ -2438,24 +2473,85 @@ function rowsToGeoJSON(columns, rows, geoColIdx) {
     return { type: 'FeatureCollection', features: features };
 }
 
-window.showMapModal = function() {
+window.showMapModal = async function() {
     if (!currentResults || !currentResults.columns) return;
 
     const geoIndices = detectGeoColumns(currentResults.columns, currentResults.rows || []);
     if (geoIndices.length === 0) {
-        alert('No geometry columns detected');
+        tuskToast('No geometry columns detected', 'warning');
         return;
     }
 
     geoColumnIndex = geoIndices[0]; // Use first geo column
+
+    // For server-paginated results, fetch all geometries from dedicated endpoint
+    if (serverPagination && currentConnection?.type === 'postgres' && currentSql) {
+        // Show loading state
+        window.dispatchEvent(new Event('open-map-modal'));
+        document.getElementById('map-feature-count').textContent = 'Loading geometries...';
+
+        try {
+            // Fetch geometries separately (only geometry column, optimized for map)
+            const res = await fetch('/api/query/map-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    connection_id: currentConnection.id,
+                    sql: currentSql,
+                    max_features: 100000,
+                    // simplify_tolerance: 0.0001,  // Optional: simplify large geometries
+                }),
+            });
+
+            const mapData = await res.json();
+
+            if (mapData.error) {
+                tuskToast(`Map data error: ${mapData.error}`, 'error');
+                window.dispatchEvent(new Event('close-map-modal'));
+                return;
+            }
+
+            currentGeoData = mapData;
+            mapGeoData = mapData;
+
+            const truncatedNote = mapData.truncated
+                ? ` (showing ${mapData.returned_count.toLocaleString()} of ${mapData.total_count.toLocaleString()})`
+                : '';
+            document.getElementById('map-feature-count').textContent =
+                `${mapData.features.length.toLocaleString()} features${truncatedNote}`;
+
+            setTimeout(() => initMap(), 100);
+            return;
+
+        } catch (err) {
+            tuskToast(`Failed to load map data: ${err.message}`, 'error');
+            window.dispatchEvent(new Event('close-map-modal'));
+            return;
+        }
+    }
+
+    // Client-side: build GeoJSON from current results
     currentGeoData = rowsToGeoJSON(currentResults.columns, currentResults.rows || [], geoColumnIndex);
 
     if (currentGeoData.features.length === 0) {
-        alert('No valid geometries found');
+        tuskToast('No valid geometries found', 'warning');
         return;
     }
 
-    document.getElementById('map-modal').classList.remove('hidden');
+    // Check for projected coordinates and show CRS bar if needed
+    if (window.tuskReproject) {
+        currentGeoData = window.tuskReproject(currentGeoData);
+    }
+
+    // Register callback for CRS reproject button
+    window._tuskMapUpdateCallback = function(reprojected, epsgCode) {
+        currentGeoData = reprojected;
+        document.getElementById('map-feature-count').textContent = `${currentGeoData.features.length} features (EPSG:${epsgCode} → 4326)`;
+        if (map) { map.remove(); map = null; }
+        setTimeout(() => initMap(), 50);
+    };
+
+    window.dispatchEvent(new Event('open-map-modal'));
     document.getElementById('map-feature-count').textContent = `${currentGeoData.features.length} features`;
 
     // Initialize map after modal is visible
@@ -2463,7 +2559,7 @@ window.showMapModal = function() {
 }
 
 window.hideMapModal = function() {
-    document.getElementById('map-modal').classList.add('hidden');
+    window.dispatchEvent(new Event('close-map-modal'));
     if (map) {
         map.remove();
         map = null;
@@ -2702,22 +2798,22 @@ function initMap() {
     });
 }
 
-function getAllCoords(geom) {
+function _rawCoords(geom) {
     const coords = [];
     const type = geom.type;
     const c = geom.coordinates;
+    if (type === 'Point') coords.push(c);
+    else if (type === 'MultiPoint' || type === 'LineString') coords.push(...c);
+    else if (type === 'MultiLineString' || type === 'Polygon') c.forEach(r => coords.push(...r));
+    else if (type === 'MultiPolygon') c.forEach(p => p.forEach(r => coords.push(...r)));
+    return coords.filter(c => Array.isArray(c) && c.length >= 2 && isFinite(c[0]) && isFinite(c[1]));
+}
 
-    if (type === 'Point') {
-        coords.push(c);
-    } else if (type === 'MultiPoint' || type === 'LineString') {
-        coords.push(...c);
-    } else if (type === 'MultiLineString' || type === 'Polygon') {
-        c.forEach(ring => coords.push(...ring));
-    } else if (type === 'MultiPolygon') {
-        c.forEach(poly => poly.forEach(ring => coords.push(...ring)));
-    }
-
-    return coords;
+function getAllCoords(geom) {
+    return _rawCoords(geom).filter(coord =>
+        coord[0] >= -180 && coord[0] <= 180 &&
+        coord[1] >= -90 && coord[1] <= 90
+    );
 }
 
 window.exportGeoJSON = function() {
@@ -2734,14 +2830,4 @@ window.exportGeoJSON = function() {
     URL.revokeObjectURL(url);
 }
 
-// Close map modal on backdrop click
-document.getElementById('map-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) hideMapModal();
-});
-
-// Close map modal on Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.getElementById('map-modal').classList.contains('hidden')) {
-        hideMapModal();
-    }
-});
+// Map modal backdrop click and escape handled by Alpine.js

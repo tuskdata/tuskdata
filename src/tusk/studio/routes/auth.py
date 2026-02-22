@@ -2,7 +2,7 @@
 
 from litestar import Controller, get, post, Response, Request
 from litestar.params import Body
-from litestar.response import Redirect
+from litestar.response import Redirect, Template
 
 from tusk.core.auth import (
     authenticate,
@@ -25,10 +25,14 @@ from tusk.core.auth import (
     get_user_groups,
     setup_default_groups,
     setup_admin_user,
+    log_audit,
+    get_audit_logs,
+    get_audit_log_count,
     PERMISSIONS,
 )
 from tusk.core.config import get_config
 from tusk.core.logging import get_logger
+from tusk.studio.htmx import is_htmx, htmx_toast
 
 log = get_logger("auth")
 
@@ -114,6 +118,7 @@ class AuthController(Controller):
         session = create_session(user.id, ip_address, user_agent)
 
         log.info("User logged in", username=username, user_id=user.id)
+        log_audit("login", user_id=user.id, resource="session", ip_address=ip_address)
 
         response = Response(
             content={
@@ -145,8 +150,12 @@ class AuthController(Controller):
         session_id = request.cookies.get(SESSION_COOKIE)
 
         if session_id:
+            session = get_session(session_id)
+            user_id = session.user_id if session else None
             delete_session(session_id)
             log.info("User logged out", session_id=session_id[:8])
+            ip_address = request.client.host if request.client else None
+            log_audit("logout", user_id=user_id, resource="session", ip_address=ip_address)
 
         response = Response(content={"success": True}, status_code=200)
         response.delete_cookie(SESSION_COOKIE)
@@ -192,10 +201,12 @@ class ProfileController(Controller):
         }
 
     @post("/")
-    async def update_profile(self, request: Request, data: dict = Body()) -> dict:
+    async def update_profile(self, request: Request, data: dict = Body()) -> Response | dict:
         """Update current user's profile"""
         user = await self._get_current_user(request)
         if not user:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Not authenticated", "error"))
             return {"error": "Not authenticated"}
 
         updates = {}
@@ -208,13 +219,17 @@ class ProfileController(Controller):
             update_user(user.id, **updates)
             log.info("Profile updated", user_id=user.id)
 
+        if is_htmx(request):
+            return Response(content="", status_code=200, headers=htmx_toast("Profile updated", "success"))
         return {"success": True}
 
     @post("/password")
-    async def change_password(self, request: Request, data: dict = Body()) -> dict:
+    async def change_password(self, request: Request, data: dict = Body()) -> Response | dict:
         """Change current user's password"""
         user = await self._get_current_user(request)
         if not user:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Not authenticated", "error"))
             return {"error": "Not authenticated"}
 
         current_password = data.get("current_password", "")
@@ -222,15 +237,23 @@ class ProfileController(Controller):
 
         # Verify current password
         if not authenticate(user.username, current_password):
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Current password is incorrect", "error"))
             return {"error": "Current password is incorrect"}
 
         if not new_password:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("New password required", "warning"))
             return {"error": "New password required"}
         if len(new_password) < 6:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Password must be at least 6 characters", "warning"))
             return {"error": "Password must be at least 6 characters"}
 
         update_password(user.id, new_password)
         log.info("Password changed", user_id=user.id)
+        if is_htmx(request):
+            return Response(content="", status_code=200, headers=htmx_toast("Password changed successfully", "success"))
         return {"success": True}
 
     async def _get_current_user(self, request: Request):
@@ -256,33 +279,40 @@ class UsersController(Controller):
     path = "/api/users"
 
     @get("/")
-    async def get_users(self, request: Request) -> dict:
+    async def get_users(self, request: Request) -> dict | Template:
         """List all users"""
         # Check permission
         if not await self._check_admin(request):
             return {"error": "Unauthorized", "users": []}
 
         users = list_users()
-        return {
-            "users": [
-                {
-                    "id": u.id,
-                    "username": u.username,
-                    "email": u.email,
-                    "display_name": u.display_name,
-                    "is_admin": u.is_admin,
-                    "is_active": u.is_active,
-                    "created_at": u.created_at,
-                    "last_login": u.last_login,
-                }
-                for u in users
-            ]
-        }
+        user_list = []
+        for u in users:
+            user_dict = {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "display_name": u.display_name,
+                "is_admin": u.is_admin,
+                "is_active": u.is_active,
+                "created_at": u.created_at,
+                "last_login": u.last_login,
+                "last_login_display": u.last_login if u.last_login else None,
+                "groups": [{"id": g.id, "name": g.name} for g in get_user_groups(u.id)],
+            }
+            user_list.append(user_dict)
+
+        if is_htmx(request):
+            return Template("partials/users/list.html", context={"users": user_list})
+
+        return {"users": user_list}
 
     @post("/")
-    async def create_new_user(self, request: Request, data: dict = Body()) -> dict:
+    async def create_new_user(self, request: Request, data: dict = Body()) -> Response | dict:
         """Create a new user"""
         if not await self._check_admin(request):
+            if is_htmx(request):
+                return Response(content="", status_code=403, headers=htmx_toast("Unauthorized", "error"))
             return {"error": "Unauthorized"}
 
         username = data.get("username", "").strip()
@@ -292,10 +322,16 @@ class UsersController(Controller):
         is_admin = data.get("is_admin", False)
 
         if not username:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Username required", "warning"))
             return {"error": "Username required"}
         if not password:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Password required", "warning"))
             return {"error": "Password required"}
         if len(password) < 6:
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast("Password must be at least 6 characters", "warning"))
             return {"error": "Password must be at least 6 characters"}
 
         try:
@@ -307,6 +343,12 @@ class UsersController(Controller):
                 is_admin=is_admin,
             )
             log.info("User created", username=username, user_id=user.id)
+            ip_address = request.client.host if request.client else None
+            log_audit("user.create", user_id=user.id, resource=username, ip_address=ip_address)
+
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast(f"User '{username}' created", "success"))
+
             return {
                 "success": True,
                 "user": {
@@ -316,6 +358,8 @@ class UsersController(Controller):
             }
         except Exception as e:
             log.error("Failed to create user", username=username, error=str(e))
+            if is_htmx(request):
+                return Response(content="", status_code=200, headers=htmx_toast(str(e), "error"))
             return {"error": str(e)}
 
     @get("/{user_id:str}")
@@ -383,13 +427,22 @@ class UsersController(Controller):
         return {"success": True}
 
     @post("/{user_id:str}/delete")
-    async def delete_existing_user(self, request: Request, user_id: str) -> dict:
+    async def delete_existing_user(self, request: Request, user_id: str) -> Response | Template | dict:
         """Delete user"""
         if not await self._check_admin(request):
+            if is_htmx(request):
+                return Response(content="", status_code=403, headers=htmx_toast("Unauthorized", "error"))
             return {"error": "Unauthorized"}
 
         delete_user(user_id)
         log.info("User deleted", user_id=user_id)
+        ip_address = request.client.host if request.client else None
+        log_audit("user.delete", user_id=user_id, resource=user_id, ip_address=ip_address)
+
+        if is_htmx(request):
+            # Re-render the users list
+            return await self.get_users(request)
+
         return {"success": True}
 
     @post("/{user_id:str}/groups")
@@ -443,21 +496,24 @@ class GroupsController(Controller):
     path = "/api/groups"
 
     @get("/")
-    async def get_groups(self, request: Request) -> dict:
+    async def get_groups(self, request: Request) -> dict | Template:
         """List all groups"""
         groups = list_groups()
-        return {
-            "groups": [
-                {
-                    "id": g.id,
-                    "name": g.name,
-                    "description": g.description,
-                    "permissions": g.permissions,
-                    "created_at": g.created_at,
-                }
-                for g in groups
-            ]
-        }
+        group_list = [
+            {
+                "id": g.id,
+                "name": g.name,
+                "description": g.description,
+                "permissions": g.permissions,
+                "created_at": g.created_at,
+            }
+            for g in groups
+        ]
+
+        if is_htmx(request):
+            return Template("partials/users/groups.html", context={"groups": group_list})
+
+        return {"groups": group_list}
 
     @post("/")
     async def create_new_group(self, request: Request, data: dict = Body()) -> dict:
@@ -543,3 +599,50 @@ class AuthSetupController(Controller):
                 "success": True,
                 "message": "Auth system already initialized",
             }
+
+
+class AuditLogController(Controller):
+    """Audit log API (admin only)"""
+
+    path = "/api/audit"
+
+    @get("/")
+    async def get_logs(self, request: Request) -> dict | Template:
+        """Get audit log entries"""
+        if not await self._check_admin(request):
+            return {"error": "Unauthorized", "entries": []}
+
+        # Parse query params
+        limit = int(request.query_params.get("limit", "100"))
+        offset = int(request.query_params.get("offset", "0"))
+        user_id = request.query_params.get("user_id")
+        action = request.query_params.get("action")
+
+        entries = get_audit_logs(limit=limit, offset=offset, user_id=user_id, action=action)
+        total = get_audit_log_count(user_id=user_id, action=action)
+
+        if is_htmx(request):
+            # Add display-friendly timestamps
+            for e in entries:
+                if hasattr(e, "timestamp") and e.timestamp:
+                    e.timestamp_display = e.timestamp
+            return Template("partials/users/audit.html", context={"entries": entries, "total": total})
+
+        return {"entries": entries, "total": total}
+
+    async def _check_admin(self, request: Request) -> bool:
+        """Check if current user is admin"""
+        config = get_config()
+        if config.auth_mode != "multi":
+            return True
+
+        session_id = request.cookies.get(SESSION_COOKIE)
+        if not session_id:
+            return False
+
+        session = get_session(session_id)
+        if not session:
+            return False
+
+        user = get_user_by_id(session.user_id)
+        return user is not None and user.is_admin

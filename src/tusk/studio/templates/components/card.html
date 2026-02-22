@@ -1,0 +1,83 @@
+{# Card Components
+
+   Macros: stat_card, info_card, simple_card, loading_card, metric_row
+#}
+
+{% macro stat_card(label, value, icon="", color="blue", change="", change_type="") %}
+{# Stats card with large number, label, optional icon and change indicator #}
+<div class="card p-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="text-3xl font-bold text-{{ color }}-400">{{ value }}</div>
+            <div class="text-sm text-[#8b949e] mt-1">{{ label }}</div>
+            {% if change %}
+            <div class="text-xs mt-1 {% if change_type == 'up' %}text-green-400{% elif change_type == 'down' %}text-red-400{% else %}text-{{ color }}-400{% endif %}">
+                {% if change_type == 'up' %}+{% elif change_type == 'down' %}-{% endif %}{{ change }}
+            </div>
+            {% endif %}
+        </div>
+        {% if icon %}
+        <div class="text-{{ color }}-400 opacity-50">
+            <i data-lucide="{{ icon }}" class="w-8 h-8"></i>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro info_card(title, icon="", actions="") %}
+{# Card with header and content area #}
+<div class="card">
+    <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            {% if icon %}
+            <i data-lucide="{{ icon }}" class="w-4 h-4 text-[#8b949e]"></i>
+            {% endif %}
+            <h3 class="font-semibold">{{ title }}</h3>
+        </div>
+        {% if actions %}
+        <div class="flex items-center gap-2">
+            {{ actions }}
+        </div>
+        {% endif %}
+    </div>
+    <div class="p-4">
+        {{ caller() }}
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro simple_card(padding="p-4") %}
+{# Plain card wrapper #}
+<div class="card {{ padding }}">
+    {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{% macro loading_card(message="Loading...") %}
+{# Card with loading spinner #}
+<div class="card p-8 text-center">
+    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mb-4"></div>
+    <div class="text-[#8b949e]">{{ message }}</div>
+</div>
+{% endmacro %}
+
+
+{% macro metric_row(items) %}
+{# Row of stat cards for metrics #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    {% for item in items %}
+    {{ stat_card(
+        label=item.label,
+        value=item.value,
+        icon=item.icon | default(""),
+        color=item.color | default("blue"),
+        change=item.change | default(""),
+        change_type=item.change_type | default("")
+    ) }}
+    {% endfor %}
+</div>
+{% endmacro %}

@@ -1,0 +1,23 @@
+{% for conn in connections %}
+<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] group" onclick="selectConnection('{{ conn.id }}')">
+    <span class="w-2 h-2 rounded-full {% if statuses[conn.id] == 'connected' %}bg-green-500{% elif statuses[conn.id] == 'error' %}bg-red-500{% else %}bg-gray-500{% endif %}" id="status-{{ conn.id }}"></span>
+    <span>{% if conn.type == 'postgres' %}&#128024;{% elif conn.type == 'sqlite' %}&#128451;&#65039;{% else %}&#129414;{% endif %}</span>
+    <span class="text-sm flex-1 truncate">{{ conn.name }}</span>
+    <div class="hidden group-hover:flex items-center gap-1">
+        {% if conn.type == 'postgres' %}
+        <button onclick="event.stopPropagation(); showDatabasesModal('{{ conn.id }}')" class="text-gray-500 hover:text-indigo-400 p-0.5" title="Browse databases">
+            <i data-lucide="database" class="w-3 h-3"></i>
+        </button>
+        {% endif %}
+        <button onclick="event.stopPropagation(); showEditConnModal('{{ conn.id }}')" class="text-gray-500 hover:text-white p-0.5" title="Edit">
+            <i data-lucide="pencil" class="w-3 h-3"></i>
+        </button>
+        <button onclick="event.stopPropagation(); deleteConnection('{{ conn.id }}')" class="text-gray-500 hover:text-red-400 p-0.5" title="Delete">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+        </button>
+    </div>
+</div>
+{% endfor %}
+{% if not connections %}
+<div class="text-gray-500 text-sm py-2">No connections yet</div>
+{% endif %}

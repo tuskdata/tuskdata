@@ -1,0 +1,35 @@
+{% if schemas %}
+{% for schema in schemas %}
+<div class="schema-group" data-schema="{{ schema.name }}">
+    <div class="flex items-center gap-1 py-1 cursor-pointer text-gray-400 hover:text-white" onclick="toggleSchemaGroup(this)">
+        <i data-lucide="chevron-right" class="w-3 h-3 transition-transform"></i>
+        <i data-lucide="folder" class="w-3.5 h-3.5 text-yellow-500"></i>
+        <span class="text-xs font-medium">{{ schema.name }}</span>
+        <span class="text-xs text-gray-500 ml-auto">{{ schema.tables | length }}</span>
+    </div>
+    <div class="hidden pl-4">
+        {% for table in schema.tables %}
+        <div class="table-item" data-table="{{ table.name }}">
+            <div class="flex items-center gap-1 py-1 cursor-pointer text-gray-400 hover:text-white group" onclick="toggleTableColumns(this)">
+                <i data-lucide="chevron-right" class="w-3 h-3 transition-transform"></i>
+                <i data-lucide="table" class="w-3.5 h-3.5 text-blue-400"></i>
+                <span class="text-xs truncate flex-1 cursor-pointer" ondblclick="insertTableName('{{ schema.name }}.{{ table.name }}')">{{ table.name }}</span>
+                <span class="row-count text-xs text-gray-500" id="rc-{{ schema.name }}-{{ table.name }}"></span>
+            </div>
+            <div class="hidden pl-4">
+                {% for col in table.columns %}
+                <div class="flex items-center gap-1 py-0.5 text-gray-500 hover:text-gray-300 cursor-pointer" ondblclick="insertColumnName('{{ col.name }}')">
+                    <i data-lucide="columns" class="w-3 h-3"></i>
+                    <span class="text-xs truncate">{{ col.name }}</span>
+                    <span class="text-xs text-gray-600 ml-auto">{{ col.type }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="text-gray-500 py-2">Select a connection</div>
+{% endif %}

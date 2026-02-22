@@ -1,0 +1,17 @@
+{% if logs %}
+<div class="space-y-1 font-mono text-xs">
+    {% for log in logs %}
+    <div class="flex gap-3 py-1 {% if log.level == 'ERROR' or log.level == 'FATAL' %}text-red-400{% elif log.level == 'WARNING' %}text-yellow-400{% else %}text-gray-400{% endif %}">
+        {% if log.timestamp %}<span class="text-gray-600 flex-shrink-0">{{ log.timestamp }}</span>{% endif %}
+        <span class="px-1.5 py-0.5 rounded text-xs {% if log.level == 'ERROR' or log.level == 'FATAL' %}bg-red-500/20{% elif log.level == 'WARNING' %}bg-yellow-500/20{% else %}bg-gray-500/20{% endif %} flex-shrink-0">{{ log.level }}</span>
+        <span class="truncate">{{ log.message }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-gray-500 text-sm space-y-2">
+    <p>No log entries available.</p>
+    <p class="text-xs">Reading server logs requires the <code class="bg-[#21262d] px-1.5 py-0.5 rounded">pg_read_server_files</code> role or superuser privileges. You can grant access with:</p>
+    <pre class="bg-[#0d1117] border border-[#30363d] rounded p-2 text-xs text-indigo-400">GRANT pg_read_server_files TO your_user;</pre>
+</div>
+{% endif %}

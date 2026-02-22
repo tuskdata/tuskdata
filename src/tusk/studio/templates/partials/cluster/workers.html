@@ -1,0 +1,38 @@
+{# Workers list — rendered as HTMX partial #}
+{% if workers %}
+    {% for w in workers %}
+    <div class="worker-card p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full {% if w.status == 'idle' %}bg-green-500{% elif w.status == 'busy' %}bg-yellow-500{% else %}bg-red-500{% endif %}"></span>
+                <span class="font-mono text-sm">{{ w.id }}</span>
+            </div>
+            <span class="text-xs px-1.5 py-0.5 rounded {% if w.status == 'idle' %}bg-green-500/20 text-green-400{% elif w.status == 'busy' %}bg-yellow-500/20 text-yellow-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                {% if w.status == 'idle' %}Idle{% elif w.status == 'busy' %}Busy{% else %}Offline{% endif %}
+            </span>
+        </div>
+        <div class="space-y-1.5">
+            <div>
+                <div class="flex justify-between text-xs mb-0.5">
+                    <span class="text-[#8b949e]">CPU</span>
+                    <span>{{ w.cpu_percent | round }}%</span>
+                </div>
+                <div class="h-1 bg-[#21262d] rounded-full overflow-hidden">
+                    <div class="h-full bg-indigo-500" style="width: {{ w.cpu_percent }}%"></div>
+                </div>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-0.5">
+                    <span class="text-[#8b949e]">Memory</span>
+                    <span>{{ w.memory_display }}</span>
+                </div>
+                <div class="h-1 bg-[#21262d] rounded-full overflow-hidden">
+                    <div class="h-full bg-purple-500" style="width: {{ w.memory_percent }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-[#8b949e] text-sm py-2">No workers connected</div>
+{% endif %}

@@ -1,0 +1,35 @@
+{% if backups %}
+    {% for b in backups %}
+    <div class="p-3 rounded-lg hover:bg-[#21262d] mb-2 border border-[#30363d]">
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <div class="font-mono text-sm">{{ b.filename }}</div>
+                <div class="text-xs text-gray-500">{{ b.size_human }} · {{ b.created }}</div>
+            </div>
+            <a href="/api/admin/backups/{{ b.filename }}"
+               class="text-indigo-400 hover:text-indigo-300 text-sm px-2 py-1 rounded hover:bg-indigo-500/20">Download</a>
+        </div>
+        <div class="flex gap-2">
+            <button hx-post="/api/admin/{{ conn_id }}/restore"
+                    hx-vals='{"filename": "{{ b.filename }}"}'
+                    hx-swap="none"
+                    hx-confirm="Restore backup to current database? This will overwrite existing data."
+                    class="flex-1 text-xs px-2 py-1.5 rounded bg-amber-600/20 text-amber-400 hover:bg-amber-600/30">
+                Restore to current DB
+            </button>
+            <button @click="showCreateDb('{{ b.filename }}')"
+                    class="flex-1 text-xs px-2 py-1.5 rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">
+                Create new DB
+            </button>
+            <button hx-delete="/api/admin/backups/{{ b.filename }}"
+                    hx-swap="none"
+                    hx-confirm="Delete backup {{ b.filename }}? This cannot be undone."
+                    class="text-xs px-2 py-1.5 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30">
+                Delete
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-gray-500">No backups found for this database</div>
+{% endif %}

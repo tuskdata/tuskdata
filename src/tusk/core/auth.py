@@ -777,6 +777,93 @@ def setup_default_groups() -> None:
 
 
 # Setup first admin user
+# Audit log operations
+def log_audit(
+    action: str,
+    user_id: str | None = None,
+    resource: str | None = None,
+    details: str | None = None,
+    ip_address: str | None = None,
+) -> None:
+    """Write an entry to the audit log"""
+    init_auth_db()
+
+    conn = sqlite3.connect(AUTH_DB)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO audit_log (user_id, action, resource, details, ip_address, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, action, resource, details, ip_address, datetime.now().isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_audit_logs(
+    limit: int = 100,
+    offset: int = 0,
+    user_id: str | None = None,
+    action: str | None = None,
+) -> list[dict]:
+    """Get audit log entries"""
+    init_auth_db()
+
+    conn = sqlite3.connect(AUTH_DB)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        query = """
+            SELECT al.*, u.username
+            FROM audit_log al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE 1=1
+        """
+        params: list = []
+
+        if user_id:
+            query += " AND al.user_id = ?"
+            params.append(user_id)
+        if action:
+            query += " AND al.action = ?"
+            params.append(action)
+
+        query += " ORDER BY al.timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_audit_log_count(user_id: str | None = None, action: str | None = None) -> int:
+    """Get total count of audit log entries"""
+    init_auth_db()
+
+    conn = sqlite3.connect(AUTH_DB)
+    cursor = conn.cursor()
+
+    try:
+        query = "SELECT COUNT(*) FROM audit_log WHERE 1=1"
+        params: list = []
+
+        if user_id:
+            query += " AND user_id = ?"
+            params.append(user_id)
+        if action:
+            query += " AND action = ?"
+            params.append(action)
+
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
+    finally:
+        conn.close()
+
+
 def setup_admin_user(username: str = "admin", password: str = "admin") -> User | None:
     """Create admin user if no users exist"""
     init_auth_db()

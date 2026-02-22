@@ -263,7 +263,7 @@
 
 ---
 
-## Phase 6: Cluster Mode - IN PROGRESS 🚧
+## Phase 6: Cluster Mode - DONE ✅
 
 > **Goal**: Distributed queries with multiple workers
 
@@ -305,7 +305,7 @@
 
 ---
 
-## Phase 7: User Management & Access Control - IN PROGRESS 🚧
+## Phase 7: User Management & Access Control - DONE ✅
 
 > **Goal**: Multi-user support with authentication and authorization
 > See full spec: `/specs/phase-7.md`
@@ -356,6 +356,81 @@
 
 ---
 
+## Phase 8: Plugin System & Component Library - DONE ✅
+
+> **Goal**: Extensible plugin architecture for Tusk
+> **Success**: tusk-cluster works as external plugin, component library used by all pages
+> See full spec: `/specs/phase-8.md`
+
+### Plugin System Core
+- [x] `tusk/plugins/__init__.py`
+- [x] `tusk/plugins/base.py` - TuskPlugin ABC
+- [x] `tusk/plugins/registry.py` - Discovery via entry_points
+- [x] `tusk/plugins/storage.py` - SQLite helpers (per-plugin DBs)
+- [x] `tusk/plugins/config.py` - TOML helpers
+- [x] `tusk/plugins/templates.py` - Template copying
+
+### Core Integration
+- [x] `tusk/studio/routes/base.py` - TuskController base class
+- [x] Modify `app.py` - Plugin lifecycle hooks
+- [x] Modify `cli.py` - Plugin commands
+- [x] Modify `templates/base.html` - Plugin tabs
+
+### Controller Migration
+- [x] Migrate `PageController` to TuskController
+- [x] `AdminController` - API only, no changes needed
+- [x] `DataController` - API only, no changes needed
+- [x] `FilesController` - API only, no changes needed
+- [x] Test all existing routes still work
+
+### Cluster → Plugin Migration (tusk-cluster)
+- [x] Create `tusk-cluster/` package structure
+- [x] Move `tusk/cluster/` code to plugin
+- [x] Create `ClusterPlugin` class
+- [x] Register via entry_points
+- [x] Remove cluster from core
+- [x] Test cluster works as external plugin
+
+### Component Library
+- [x] `templates/components/table.html`
+- [x] `templates/components/card.html`
+- [x] `templates/components/forms.html`
+- [x] `templates/components/feedback.html`
+- [x] `static/js/ui.js`
+
+---
+
+## Phase 9: Security Plugin (tusk-security) - IN PROGRESS 🚧
+
+> **Goal**: Security scanning plugin with code analysis, dependency audit, network scanning
+> **Requires**: Phase 8 completed
+> See full spec: `/specs/phase-9.md`
+> **Note**: Developed as external plugin in separate repository
+
+### Plugin Core
+- [x] Plugin scaffold (pyproject.toml, entry_points, SecurityPlugin class)
+- [x] Data models (msgspec Structs)
+- [x] SQLite schema and queries
+
+### Scanners
+- [x] Bandit - Code analysis (Python)
+- [x] pip-audit - Dependency vulnerabilities
+- [x] TCP Scanner - Network scanning (no root, asyncio)
+- [ ] ZMap - Network scanning (optional, requires sudo)
+- [x] AdGuard Home API - DNS visibility
+- [x] CycloneDX - SBOM generation
+
+### Routes & Templates
+- [x] Page controllers and API endpoints
+- [x] 6 UI pages (Dashboard, Code, Deps, Network, DNS, SBOM)
+- [x] Shared sidebar macro with Alpine.js modals
+
+### Pending
+- [ ] CLI commands (scan, audit, network, sbom)
+- [ ] Tests
+
+---
+
 ## Nice-to-haves (Deferred)
 
 - [x] Drag & drop files (data.html)
@@ -399,7 +474,7 @@
 ### Optional Dependencies
 > Make installation lighter by separating features into extras
 - [x] Reorganize pyproject.toml with optional-dependencies:
-  - `tusk[studio]` → duckdb, polars, psycopg, litestar, jinja2
+  - `tusk[studio]` → duckdb, polars, psycopg, litestar, minijinja
   - `tusk[cluster]` → datafusion, pyarrow
   - `tusk[admin]` → apscheduler
   - `tusk[postgres]` → psycopg

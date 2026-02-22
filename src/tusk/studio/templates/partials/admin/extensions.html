@@ -1,0 +1,30 @@
+{% for e in extensions %}
+{% if show_all or e.is_installed %}
+<div class="p-4 flex items-center justify-between hover:bg-[#21262d]/50">
+    <div>
+        <div class="flex items-center gap-2">
+            <span class="font-medium">{{ e.name }}</span>
+            {% if e.is_installed %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">v{{ e.installed_version }}</span>
+            {% else %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400">v{{ e.default_version }}</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-gray-500 mt-1">{{ e.description }}</div>
+    </div>
+    {% if e.is_installed %}
+    <button hx-post="/api/admin/{{ conn_id }}/extensions/{{ e.name }}/uninstall"
+            hx-target="#extensions-list" hx-swap="innerHTML"
+            hx-confirm="Uninstall extension {{ e.name }}?"
+            class="text-red-400 hover:bg-red-500/20 px-3 py-1 rounded text-sm">Uninstall</button>
+    {% else %}
+    <button hx-post="/api/admin/{{ conn_id }}/extensions/{{ e.name }}/install"
+            hx-target="#extensions-list" hx-swap="innerHTML"
+            class="text-green-400 hover:bg-green-500/20 px-3 py-1 rounded text-sm">Install</button>
+    {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+{% if not extensions %}
+<div class="p-4 text-gray-500">No extensions found</div>
+{% endif %}

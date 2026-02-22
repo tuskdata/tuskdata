@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "components/map.html" import map_assets %}
+{% from "components/pipeline.html" import pipeline_assets, pipeline_canvas %}
 
 {% block title %}Tusk Data - ETL Pipeline Builder{% endblock %}
 
 {% block head %}
-<!-- MapLibre for geo visualization -->
-<script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
-<link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{{ map_assets() }}
+{{ pipeline_assets() }}
 {% endblock %}
 
 {% block header_actions %}
@@ -25,12 +26,13 @@
     </div>
 </div>
 <!-- Left Sidebar - Sources & Transforms -->
-<aside class="w-64 sidebar flex flex-col flex-shrink-0 overflow-hidden">
+<aside id="data-sidebar" class="sidebar flex flex-col flex-shrink-0 overflow-hidden relative" x-data="resizableSidebar('data')" style="min-width: 180px; max-width: 480px;">
+    <div @mousedown="startResize($event)" class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#6366f1]/50 active:bg-[#6366f1] z-10 transition-colors"></div>
     <!-- Datasets Section -->
     <div class="p-3 border-b border-[#30363d]">
         <div class="flex items-center justify-between mb-3">
             <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">1. Datasets</span>
-            <button onclick="showSourceModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add dataset">
+            <button @click="showSourceModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add dataset">
                 <i data-lucide="plus" class="w-4 h-4"></i>
             </button>
         </div>
@@ -43,7 +45,7 @@
     <div class="flex-1 p-3 overflow-auto">
         <div class="flex items-center justify-between mb-3">
             <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">2. Transforms</span>
-            <button onclick="showAddTransformModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add transform">
+            <button @click="showAddTransformModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add transform">
                 <i data-lucide="plus" class="w-4 h-4"></i>
             </button>
         </div>
@@ -56,22 +58,56 @@
     <div class="p-3 border-t border-[#30363d]">
         <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">Quick Transforms</span>
         <div class="mt-2 space-y-1">
-            <button onclick="quickTransform('filter')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
-                <i data-lucide="filter" class="w-4 h-4 text-[#58a6ff]"></i>
-                Filter
+            <button @click="quickTransform('filter')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="filter" class="w-4 h-4 text-[#58a6ff]"></i> Filter
             </button>
-            <button onclick="quickTransform('select')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
-                <i data-lucide="columns" class="w-4 h-4 text-[#58a6ff]"></i>
-                Select Columns
+            <button @click="quickTransform('select')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="columns" class="w-4 h-4 text-[#58a6ff]"></i> Select Columns
             </button>
-            <button onclick="quickTransform('sort')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
-                <i data-lucide="arrow-up-down" class="w-4 h-4 text-[#58a6ff]"></i>
-                Sort
+            <button @click="quickTransform('sort')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="arrow-up-down" class="w-4 h-4 text-[#58a6ff]"></i> Sort
             </button>
-            <button onclick="quickTransform('group_by')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
-                <i data-lucide="group" class="w-4 h-4 text-[#58a6ff]"></i>
-                Group By
+            <button @click="quickTransform('group_by')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#21262d] text-sm flex items-center gap-2">
+                <i data-lucide="group" class="w-4 h-4 text-[#58a6ff]"></i> Group By
             </button>
+        </div>
+    </div>
+
+    <!-- Saved Pipelines -->
+    <div class="p-3 border-t border-[#30363d]" x-data="{ expanded: true }">
+        <div class="flex items-center justify-between mb-2 cursor-pointer" @click="expanded = !expanded; $nextTick(() => lucide.createIcons())">
+            <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide flex items-center gap-1">
+                <i data-lucide="bookmark" class="w-3.5 h-3.5"></i> Saved Pipelines
+            </span>
+            <svg x-show="expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#8b949e]"><path d="m6 9 6 6 6-6"/></svg>
+            <svg x-show="!expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#8b949e]"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div x-show="expanded" id="sidebar-pipelines" class="space-y-1 max-h-64 overflow-auto">
+            <div class="text-[#8b949e] text-xs py-1">No saved pipelines</div>
+        </div>
+    </div>
+
+    <!-- Downloads -->
+    <div class="p-3 border-t border-[#30363d]" x-data="{ expanded: false }">
+        <div class="flex items-center justify-between mb-2 cursor-pointer" @click="expanded = !expanded; if(expanded) htmx.trigger('#downloads-list', 'load'); $nextTick(() => lucide.createIcons())">
+            <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide flex items-center gap-1">
+                <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i> Downloads
+            </span>
+            <div class="flex items-center gap-1">
+                <button @click.stop="$dispatch('open-add-download')" class="p-0.5 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="Add download source">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                </button>
+                <svg x-show="expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#8b949e]"><path d="m6 9 6 6 6-6"/></svg>
+                <svg x-show="!expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#8b949e]"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+        </div>
+        <div x-show="expanded"
+             id="downloads-list"
+             class="max-h-48 overflow-auto"
+             hx-get="/api/downloads/sources"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+            <div class="text-[#8b949e] text-xs py-1">Loading...</div>
         </div>
     </div>
 
@@ -79,24 +115,21 @@
     <div class="p-3 border-t border-[#30363d] space-y-2">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-semibold text-[#8b949e] uppercase tracking-wide">3. Execute</span>
-            <button onclick="showDuckDBExtensionsModal()" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="DuckDB Extensions">
+            <button @click="$dispatch('open-extensions')" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white" title="DuckDB Extensions">
                 <i data-lucide="puzzle" class="w-4 h-4"></i>
             </button>
         </div>
-        <button onclick="runPipeline()" class="w-full bg-[#238636] hover:bg-[#2ea043] py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
-            <i data-lucide="play" class="w-4 h-4"></i>
-            Run Pipeline
+        <button @click="runPipeline()" class="w-full bg-[#238636] hover:bg-[#2ea043] py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+            <i data-lucide="play" class="w-4 h-4"></i> Run Pipeline
         </button>
         <div class="flex gap-2">
-            <button onclick="showImportModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5">
-                <i data-lucide="database" class="w-3.5 h-3.5"></i>
-                Import to DB
+            <button @click="showImportModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i> Import to DB
             </button>
-            <button onclick="showSavePipelineModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5" title="Save pipeline">
-                <i data-lucide="save" class="w-3.5 h-3.5"></i>
-                Save
+            <button @click="showSavePipelineModal()" class="flex-1 bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center gap-1.5" title="Save pipeline">
+                <i data-lucide="save" class="w-3.5 h-3.5"></i> Save
             </button>
-            <button onclick="showLoadPipelineModal()" class="bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center" title="Load saved pipeline">
+            <button @click="showLoadPipelineModal()" class="bg-[#21262d] hover:bg-[#30363d] py-2 px-3 rounded-lg text-sm flex items-center justify-center" title="Load saved pipeline">
                 <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
             </button>
         </div>
@@ -110,8 +143,22 @@
         <div class="flex items-center gap-3">
             <span class="text-sm font-medium">Preview</span>
             <span id="results-stats" class="text-xs text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded-full hidden"></span>
+            <span id="engine-badge" class="text-xs px-2 py-0.5 rounded-full hidden"></span>
         </div>
         <div class="flex items-center gap-2">
+            <button id="toggle-canvas-btn" onclick="togglePipelineCanvas()" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5" title="Toggle pipeline canvas">
+                <i data-lucide="workflow" class="w-3.5 h-3.5"></i> Canvas
+            </button>
+            <div class="w-px h-4 bg-[#30363d]"></div>
+            <label class="flex items-center gap-2 text-sm text-[#8b949e]">
+                <span>Engine:</span>
+                <select id="engine-select" onchange="changeEngine()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                    <option value="auto">Auto</option>
+                    <option value="duckdb">DuckDB</option>
+                    <option value="polars">Polars</option>
+                </select>
+            </label>
+            <div class="w-px h-4 bg-[#30363d]"></div>
             <label class="flex items-center gap-2 text-sm text-[#8b949e]">
                 <span>Rows:</span>
                 <select id="preview-limit" onchange="changeLimit()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
@@ -123,14 +170,17 @@
             </label>
             <div class="w-px h-4 bg-[#30363d]"></div>
             <button onclick="exportResults('csv')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                CSV
+                <i data-lucide="download" class="w-3.5 h-3.5"></i> CSV
             </button>
             <button onclick="exportResults('parquet')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                Parquet
+                <i data-lucide="download" class="w-3.5 h-3.5"></i> Parquet
             </button>
         </div>
+    </div>
+
+    <!-- Pipeline Canvas (collapsible) -->
+    <div id="pipeline-canvas-container" class="hidden border-b border-[#30363d]">
+        {{ pipeline_canvas(id="data-pipeline", height="280px", toolbar=true, minimap=false) }}
     </div>
 
     <!-- Results Table -->
@@ -159,40 +209,63 @@
 
 {% block modals %}
 <!-- File Browser Modal -->
-<div id="file-browser-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
-    <div class="bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-file-browser.window="open = true"
+     x-on:close-file-browser.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-[60] flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
             <h3 class="text-lg font-bold">Select File</h3>
-            <button onclick="hideFileBrowser()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            <button @click="open = false" class="text-gray-400 hover:text-white text-xl px-2">&times;</button>
         </div>
         <div class="px-4 py-2 border-b border-[#30363d] flex items-center gap-2">
-            <button onclick="browseParent()" class="p-1.5 hover:bg-[#21262d] rounded" title="Go up">
+            <button @click="browseParent()" class="p-1.5 hover:bg-[#21262d] rounded" title="Go up">
                 <i data-lucide="arrow-up" class="w-4 h-4"></i>
             </button>
-            <input id="browser-path" value="~" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter')browseTo(this.value)">
-            <button onclick="browseTo(document.getElementById('browser-path').value)" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm">Go</button>
+            <input id="browser-path" value="~" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-indigo-500" @keydown.enter="browseTo($el.value)">
+            <button @click="browseTo(document.getElementById('browser-path').value)" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm">Go</button>
         </div>
         <div id="browser-files" class="flex-1 overflow-auto p-2 min-h-[300px]">
             <div class="text-gray-500 text-center py-8">Loading...</div>
         </div>
         <div class="p-4 border-t border-[#30363d] flex justify-end">
-            <button onclick="hideFileBrowser()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
         </div>
     </div>
 </div>
 
 <!-- Source Modal -->
-<div id="source-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[550px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-source-modal.window="open = true"
+     x-on:close-source-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[550px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Add Dataset</h3>
+
+        <!-- Dataset Name (optional, shared across all tabs) -->
+        <div class="mb-4">
+            <label class="block text-sm text-gray-400 mb-1">Name <span class="text-[#484f58]">(optional)</span></label>
+            <input id="source-name" placeholder="Auto-generated from path if empty" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 text-sm">
+        </div>
 
         <!-- Source Type Tabs -->
         <div class="flex gap-1 mb-4 bg-[#0d1117] p-1 rounded-lg">
-            <button onclick="setSourceTab('file')" id="source-tab-file" class="flex-1 px-3 py-2 rounded text-sm font-medium bg-[#21262d] text-white">
+            <button @click="setSourceTab('file')" id="source-tab-file" class="flex-1 px-3 py-2 rounded text-sm font-medium bg-[#21262d] text-white">
                 <i data-lucide="file" class="w-4 h-4 inline mr-1"></i> File
             </button>
-            <button onclick="setSourceTab('database')" id="source-tab-database" class="flex-1 px-3 py-2 rounded text-sm font-medium text-[#8b949e] hover:text-white">
+            <button @click="setSourceTab('database')" id="source-tab-database" class="flex-1 px-3 py-2 rounded text-sm font-medium text-[#8b949e] hover:text-white">
                 <i data-lucide="database" class="w-4 h-4 inline mr-1"></i> Database
+            </button>
+            <button @click="setSourceTab('plugin')" id="source-tab-plugin" class="flex-1 px-3 py-2 rounded text-sm font-medium text-[#8b949e] hover:text-white">
+                <i data-lucide="puzzle" class="w-4 h-4 inline mr-1"></i> Plugins
             </button>
         </div>
 
@@ -201,10 +274,9 @@
             <div>
                 <label class="block text-sm text-gray-400 mb-1">File Path</label>
                 <div class="flex gap-2">
-                    <input id="source-path" placeholder="~/data/myfile.csv" onchange="detectFileType()" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm">
-                    <button onclick="showFileBrowser()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm flex items-center gap-1">
-                        <i data-lucide="folder-open" class="w-4 h-4"></i>
-                        Browse
+                    <input id="source-path" placeholder="~/data/myfile.csv" @change="detectFileType()" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm">
+                    <button @click="showFileBrowser()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm flex items-center gap-1">
+                        <i data-lucide="folder-open" class="w-4 h-4"></i> Browse
                     </button>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Supports CSV, Parquet, JSON and OSM (.osm.pbf) files</p>
@@ -218,7 +290,7 @@
                     <option value="all">All Data - Everything (nodes + ways + relations)</option>
                 </select>
             </div>
-            <button onclick="previewSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview file...</button>
+            <button @click="previewSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview file...</button>
             <div id="source-schema" class="hidden">
                 <label class="block text-sm text-gray-400 mb-1">Columns</label>
                 <div id="schema-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-40 overflow-auto text-xs font-mono"></div>
@@ -229,7 +301,7 @@
         <div id="source-db-section" class="hidden space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Connection</label>
-                <select id="source-db-connection" onchange="loadDbTables()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                <select id="source-db-connection" @change="loadDbTables()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
                     <option value="">Select a connection...</option>
                 </select>
                 <p class="text-xs text-gray-500 mt-1">Add connections from the Studio page</p>
@@ -237,8 +309,8 @@
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Source Type</label>
                 <div class="flex gap-2">
-                    <button onclick="setDbSourceType('table')" id="db-source-table-btn" class="flex-1 px-3 py-2 rounded bg-[#21262d] text-white text-sm">Table</button>
-                    <button onclick="setDbSourceType('query')" id="db-source-query-btn" class="flex-1 px-3 py-2 rounded bg-[#0d1117] text-[#8b949e] hover:text-white text-sm">Custom Query</button>
+                    <button @click="setDbSourceType('table')" id="db-source-table-btn" class="flex-1 px-3 py-2 rounded bg-[#21262d] text-white text-sm">Table</button>
+                    <button @click="setDbSourceType('query')" id="db-source-query-btn" class="flex-1 px-3 py-2 rounded bg-[#0d1117] text-[#8b949e] hover:text-white text-sm">Custom Query</button>
                 </div>
             </div>
             <div id="db-table-section">
@@ -251,54 +323,69 @@
                 <label class="block text-sm text-gray-400 mb-1">SQL Query</label>
                 <textarea id="source-db-query" rows="4" placeholder="SELECT * FROM my_table WHERE ..." class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm"></textarea>
             </div>
-            <button onclick="previewDbSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview data...</button>
+            <button @click="previewDbSource()" class="text-sm text-indigo-400 hover:text-indigo-300">Preview data...</button>
             <div id="db-source-schema" class="hidden">
                 <label class="block text-sm text-gray-400 mb-1">Columns</label>
                 <div id="db-schema-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-40 overflow-auto text-xs font-mono"></div>
             </div>
         </div>
 
+        <!-- Plugin Datasets Source -->
+        <div id="source-plugin-section" class="hidden space-y-4">
+            <p class="text-xs text-gray-500">Datasets exposed by installed plugins. Queryable via DuckDB <code class="text-[#f0883e]">sqlite_scan()</code>.</p>
+            <div id="plugin-datasets-list" class="space-y-2 max-h-64 overflow-auto">
+                <div class="text-xs text-[#8b949e] py-4 text-center">Loading plugin datasets...</div>
+            </div>
+        </div>
+
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideSourceModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button onclick="selectSource()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Select</button>
+            <button @click="open = false; $dispatch('close-source-modal')" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="selectSource()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Select</button>
         </div>
     </div>
 </div>
 
 <!-- Transform Modal -->
-<div id="transform-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-transform-modal.window="open = true"
+     x-on:close-transform-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <h3 class="text-lg font-bold mb-4">Add Transform</h3>
         <div id="transform-type-select" class="grid grid-cols-2 gap-2 mb-4">
-            <button onclick="selectTransformType('filter')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('filter')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#58a6ff]/20 rounded-lg"><i data-lucide="filter" class="w-4 h-4 text-[#58a6ff]"></i></div>
                 <div><div class="font-medium text-sm">Filter</div><div class="text-xs text-[#8b949e]">Filter rows by condition</div></div>
             </button>
-            <button onclick="selectTransformType('select')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('select')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#a371f7]/20 rounded-lg"><i data-lucide="columns" class="w-4 h-4 text-[#a371f7]"></i></div>
                 <div><div class="font-medium text-sm">Select</div><div class="text-xs text-[#8b949e]">Select specific columns</div></div>
             </button>
-            <button onclick="selectTransformType('sort')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('sort')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#f0883e]/20 rounded-lg"><i data-lucide="arrow-up-down" class="w-4 h-4 text-[#f0883e]"></i></div>
                 <div><div class="font-medium text-sm">Sort</div><div class="text-xs text-[#8b949e]">Sort by columns</div></div>
             </button>
-            <button onclick="selectTransformType('group_by')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('group_by')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#3fb950]/20 rounded-lg"><i data-lucide="group" class="w-4 h-4 text-[#3fb950]"></i></div>
                 <div><div class="font-medium text-sm">Group By</div><div class="text-xs text-[#8b949e]">Aggregate data</div></div>
             </button>
-            <button onclick="selectTransformType('rename')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('rename')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#58a6ff]/20 rounded-lg"><i data-lucide="pencil" class="w-4 h-4 text-[#58a6ff]"></i></div>
                 <div><div class="font-medium text-sm">Rename</div><div class="text-xs text-[#8b949e]">Rename columns</div></div>
             </button>
-            <button onclick="selectTransformType('drop_nulls')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('drop_nulls')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#f85149]/20 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4 text-[#f85149]"></i></div>
                 <div><div class="font-medium text-sm">Drop Nulls</div><div class="text-xs text-[#8b949e]">Remove null values</div></div>
             </button>
-            <button onclick="selectTransformType('limit')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('limit')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#8b949e]/20 rounded-lg"><i data-lucide="hash" class="w-4 h-4 text-[#8b949e]"></i></div>
                 <div><div class="font-medium text-sm">Limit</div><div class="text-xs text-[#8b949e]">Limit number of rows</div></div>
             </button>
-            <button onclick="selectTransformType('join')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+            <button @click="selectTransformType('join')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
                 <div class="p-2 bg-[#3fb950]/20 rounded-lg"><i data-lucide="git-merge" class="w-4 h-4 text-[#3fb950]"></i></div>
                 <div><div class="font-medium text-sm">Join</div><div class="text-xs text-[#8b949e]">Join with another dataset</div></div>
             </button>
@@ -388,7 +475,7 @@
                     <label class="block text-sm text-gray-400 mb-1">Join with File</label>
                     <div class="flex gap-2">
                         <input id="join-file-path" placeholder="~/data/other.csv" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
-                        <button onclick="browseJoinFile()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm">
+                        <button @click="browseJoinFile()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm">
                             <i data-lucide="folder-open" class="w-4 h-4"></i>
                         </button>
                     </div>
@@ -413,34 +500,79 @@
             </div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideTransformModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button id="add-transform-btn" onclick="addTransform()" class="hidden bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add</button>
+            <button @click="open = false; $dispatch('close-transform-modal')" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button id="add-transform-btn" @click="addTransform()" class="hidden bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add</button>
         </div>
     </div>
 </div>
 
 <!-- Map Modal -->
-<div id="map-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-map-modal.window="open = true"
+     x-on:close-map-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
             <h3 class="text-lg font-bold">Map View</h3>
             <div class="flex items-center gap-2">
-                <button onclick="exportGeoJSON()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Export GeoJSON</button>
-                <button onclick="hideMapModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+                <button @click="exportGeoJSON()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Export GeoJSON</button>
+                <button @click="open = false" class="text-gray-400 hover:text-white text-xl px-2">&times;</button>
             </div>
+        </div>
+        <div id="map-crs-bar" class="hidden px-4 py-2 border-b border-[#30363d] bg-[#f0883e]/10 flex items-center gap-3 text-sm">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-[#f0883e] flex-shrink-0"></i>
+            <span class="text-[#f0883e]">Projected coordinates detected</span>
+            <select id="map-crs-select" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs">
+                <option value="">Select source CRS...</option>
+                <optgroup label="UTM North">
+                    <option value="32614">EPSG:32614 — UTM 14N (Mexico)</option>
+                    <option value="32615">EPSG:32615 — UTM 15N (Central America)</option>
+                    <option value="32616">EPSG:32616 — UTM 16N (Cuba, Yucatán)</option>
+                    <option value="32617">EPSG:32617 — UTM 17N (Florida, Cuba)</option>
+                    <option value="32618">EPSG:32618 — UTM 18N (Eastern US, Jamaica)</option>
+                    <option value="32619">EPSG:32619 — UTM 19N (DR, Puerto Rico)</option>
+                    <option value="32620">EPSG:32620 — UTM 20N (Lesser Antilles)</option>
+                    <option value="32621">EPSG:32621 — UTM 21N (Guyana)</option>
+                </optgroup>
+                <optgroup label="UTM South">
+                    <option value="32718">EPSG:32718 — UTM 18S (Peru)</option>
+                    <option value="32719">EPSG:32719 — UTM 19S (Chile, Argentina)</option>
+                    <option value="32720">EPSG:32720 — UTM 20S (Brazil)</option>
+                    <option value="32721">EPSG:32721 — UTM 21S (Brazil)</option>
+                    <option value="32722">EPSG:32722 — UTM 22S (Brazil)</option>
+                    <option value="32723">EPSG:32723 — UTM 23S (Brazil)</option>
+                </optgroup>
+                <optgroup label="Other">
+                    <option value="3857">EPSG:3857 — Web Mercator</option>
+                    <option value="2002">EPSG:2002 — Dominican Republic</option>
+                </optgroup>
+            </select>
+            <input id="map-crs-custom" type="text" placeholder="or enter EPSG code" class="w-28 bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs">
+            <button onclick="window._applyReproject()" class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-xs font-medium">Reproject</button>
         </div>
         <div id="map-container" class="flex-1"></div>
     </div>
 </div>
 
 <!-- Code Modal -->
-<div id="code-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl w-[700px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-code-modal.window="open = true"
+     x-on:close-code-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl w-[700px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
             <h3 class="text-lg font-bold">Generated Polars Code</h3>
             <div class="flex items-center gap-2">
-                <button onclick="copyCodeFromModal()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Copy</button>
-                <button onclick="hideCodeModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+                <button @click="copyCodeFromModal()" class="text-xs px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Copy</button>
+                <button @click="open = false" class="text-gray-400 hover:text-white text-xl px-2">&times;</button>
             </div>
         </div>
         <div class="flex-1 overflow-auto p-4">
@@ -450,13 +582,20 @@
 </div>
 
 <!-- Import to DB Modal -->
-<div id="import-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-import-modal.window="open = true"
+     x-on:close-import-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Import to Database</h3>
         <div class="space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Database</label>
-                <select id="import-db-type" onchange="toggleImportOptions()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                <select id="import-db-type" @change="toggleImportOptions()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
                     <option value="duckdb">DuckDB (In-Memory)</option>
                     <option value="duckdb-file">DuckDB (File)</option>
                     <option value="postgres">PostgreSQL Connection</option>
@@ -485,18 +624,23 @@
             </div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideImportModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button onclick="importToDB()" class="bg-[#238636] hover:bg-[#2ea043] px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                <i data-lucide="database" class="w-4 h-4"></i>
-                Import
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button id="import-btn" @click="importToDB()" class="bg-[#238636] hover:bg-[#2ea043] px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                <i data-lucide="database" class="w-4 h-4"></i> Import
             </button>
         </div>
     </div>
 </div>
 
 <!-- Save Pipeline Modal -->
-<div id="save-pipeline-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-save-modal.window="open = true"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Save Pipeline</h3>
         <div class="space-y-4">
             <div>
@@ -505,42 +649,124 @@
             </div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideSavePipelineModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button onclick="savePipelineWithName()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="savePipelineWithName()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
         </div>
     </div>
 </div>
 
 <!-- Load Pipeline Modal -->
-<div id="load-pipeline-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-load-modal.window="open = true"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <h3 class="text-lg font-bold mb-4">Load Pipeline</h3>
         <div id="saved-pipelines-list" class="flex-1 overflow-auto space-y-2 min-h-[200px]">
             <div class="text-[#8b949e] text-center py-8">No saved pipelines</div>
         </div>
         <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button onclick="hideLoadPipelineModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button>
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Download Source Modal -->
+<div x-data="{ open: false, name: '', url: '', schedule: '', category: 'custom', format: 'auto' }"
+     x-show="open"
+     x-on:open-add-download.window="open = true; name = ''; url = ''; schedule = ''; category = 'custom'; format = 'auto'"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl" @click.stop>
+        <h3 class="text-lg font-bold mb-4">Add Download Source</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Name</label>
+                <input x-model="name" placeholder="My Data Source" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">URL</label>
+                <input x-model="url" placeholder="https://example.com/data.csv" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Category</label>
+                    <select x-model="category" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                        <option value="custom">Custom</option>
+                        <option value="government">Government</option>
+                        <option value="open-data">Open Data</option>
+                        <option value="api">API</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Format</label>
+                    <select x-model="format" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                        <option value="auto">Auto-detect</option>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="parquet">Parquet</option>
+                        <option value="xml">XML</option>
+                        <option value="zip">ZIP</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Schedule <span class="text-[#484f58]">(optional, cron expression)</span></label>
+                <input x-model="schedule" placeholder="0 */6 * * * (every 6 hours)" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
+        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+            <button @click="
+                if (!name || !url) { tuskToast('Name and URL are required', 'error'); return; }
+                fetch('/api/downloads/sources', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, url, category, format, schedule })
+                }).then(r => {
+                    if (r.ok) {
+                        tuskToast('Download source added', 'success');
+                        open = false;
+                        htmx.trigger('#downloads-list', 'load');
+                    } else {
+                        r.json().then(d => tuskToast(d.error || 'Failed to add source', 'error'));
+                    }
+                }).catch(e => tuskToast(e.message, 'error'));
+            " class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i> Add Source
+            </button>
         </div>
     </div>
 </div>
 
 <!-- DuckDB Extensions Modal -->
-<div id="duckdb-extensions-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-extensions.window="open = true; refreshDuckDBExtensions()"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl w-[600px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
         <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
             <h3 class="text-lg font-bold flex items-center gap-2">
-                <span>🦆</span> DuckDB Extensions
+                <i data-lucide="puzzle" class="w-5 h-5 text-[#8b949e]"></i> DuckDB Extensions
             </h3>
             <div class="flex items-center gap-2">
-                <button onclick="refreshDuckDBExtensions()" class="text-sm text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-[#21262d]">
+                <button @click="refreshDuckDBExtensions()" class="text-sm text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-[#21262d]">
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 </button>
-                <button onclick="hideDuckDBExtensionsModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+                <button @click="open = false" class="text-gray-400 hover:text-white text-xl px-2">&times;</button>
             </div>
         </div>
         <div class="px-4 py-2 border-b border-[#30363d] flex items-center gap-2">
             <label class="flex items-center gap-2 text-sm text-[#8b949e]">
-                <input type="checkbox" id="show-all-duckdb-ext" onchange="refreshDuckDBExtensions()" class="accent-indigo-500">
+                <input type="checkbox" id="show-all-duckdb-ext" @change="refreshDuckDBExtensions()" class="accent-indigo-500">
                 Show all available
             </label>
         </div>

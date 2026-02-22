@@ -227,29 +227,29 @@ async def get_role_grants(config: ConnectionConfig, name: str) -> dict:
     if not name.replace("_", "").isalnum():
         return {"error": f"Invalid role name: {name}"}
 
-    # Get database privileges
-    db_sql = f"""
-    SELECT datname, has_database_privilege('{name}', datname, 'CONNECT') as can_connect,
-           has_database_privilege('{name}', datname, 'CREATE') as can_create,
-           has_database_privilege('{name}', datname, 'TEMP') as can_temp
+    # Get database privileges (parameterized to prevent SQL injection)
+    db_sql = """
+    SELECT datname, has_database_privilege(%s, datname, 'CONNECT') as can_connect,
+           has_database_privilege(%s, datname, 'CREATE') as can_create,
+           has_database_privilege(%s, datname, 'TEMP') as can_temp
     FROM pg_database
     WHERE datistemplate = false
     ORDER BY datname
     """
 
     # Get schema privileges in current database
-    schema_sql = f"""
+    schema_sql = """
     SELECT nspname,
-           has_schema_privilege('{name}', nspname, 'USAGE') as can_usage,
-           has_schema_privilege('{name}', nspname, 'CREATE') as can_create
+           has_schema_privilege(%s, nspname, 'USAGE') as can_usage,
+           has_schema_privilege(%s, nspname, 'CREATE') as can_create
     FROM pg_namespace
-    WHERE nspname NOT LIKE 'pg_%' AND nspname != 'information_schema'
+    WHERE nspname NOT LIKE 'pg_%%' AND nspname != 'information_schema'
     ORDER BY nspname
     """
 
     try:
-        db_result = await execute_query(config, db_sql)
-        schema_result = await execute_query(config, schema_sql)
+        db_result = await execute_query(config, db_sql, params=(name, name, name))
+        schema_result = await execute_query(config, schema_sql, params=(name, name))
 
         databases = []
         for row in db_result.rows:

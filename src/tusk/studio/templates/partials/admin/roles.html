@@ -1,0 +1,24 @@
+{% if roles %}
+    {% for r in roles %}
+    <tr class="hover:bg-[#21262d]/50">
+        <td class="px-4 py-3">
+            <span class="font-mono">{{ r.name }}</span>
+        </td>
+        <td class="px-4 py-3">{% if r.can_login %}<span class="text-green-400">Yes</span>{% else %}<span class="text-gray-500">No</span>{% endif %}</td>
+        <td class="px-4 py-3">{% if r.is_superuser %}<span class="text-red-400">Yes</span>{% else %}<span class="text-gray-500">No</span>{% endif %}</td>
+        <td class="px-4 py-3">{% if r.can_create_db %}<span class="text-blue-400">Yes</span>{% else %}<span class="text-gray-500">No</span>{% endif %}</td>
+        <td class="px-4 py-3">{% if r.can_create_role %}<span class="text-purple-400">Yes</span>{% else %}<span class="text-gray-500">No</span>{% endif %}</td>
+        <td class="px-4 py-3 text-xs text-gray-400">{{ r.member_of | join(', ') if r.member_of else '-' }}</td>
+        <td class="px-4 py-3 text-right">
+            <button @click="editRole('{{ r.name }}', {{ r.can_login | lower }}, {{ r.is_superuser | lower }}, {{ r.can_create_db | lower }}, {{ r.can_create_role | lower }})"
+                    class="p-1.5 hover:bg-[#21262d] rounded" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+            <button hx-post="/api/admin/{{ conn_id }}/roles/{{ r.name }}/delete"
+                    hx-target="#roles-list" hx-swap="innerHTML"
+                    hx-confirm="Delete role {{ r.name }}?"
+                    class="p-1.5 hover:bg-red-500/20 text-red-400 rounded" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </td>
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="7" class="p-4 text-gray-500">No roles found</td></tr>
+{% endif %}

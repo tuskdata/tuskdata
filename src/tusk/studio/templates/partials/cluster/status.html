@@ -1,0 +1,42 @@
+{# Cluster status stats bar — rendered as HTMX partial #}
+<div class="flex items-center gap-6">
+    <div class="flex items-center gap-2">
+        <div class="p-2 bg-[#238636]/20 rounded-lg">
+            <i data-lucide="server" class="w-5 h-5 text-[#3fb950]"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold">{{ workers_online }}</div>
+            <div class="text-xs text-[#8b949e]">Workers Online</div>
+        </div>
+    </div>
+    <div class="w-px h-10 bg-[#30363d]"></div>
+    <div class="flex items-center gap-2">
+        <div class="p-2 bg-[#58a6ff]/20 rounded-lg">
+            <i data-lucide="activity" class="w-5 h-5 text-[#58a6ff]"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold">{{ active_jobs }}</div>
+            <div class="text-xs text-[#8b949e]">Active Jobs</div>
+        </div>
+    </div>
+    <div class="w-px h-10 bg-[#30363d]"></div>
+    <div class="flex items-center gap-2">
+        <div class="p-2 bg-[#a371f7]/20 rounded-lg">
+            <i data-lucide="check-circle" class="w-5 h-5 text-[#a371f7]"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold">{{ completed_jobs }}</div>
+            <div class="text-xs text-[#8b949e]">Completed</div>
+        </div>
+    </div>
+    <div class="w-px h-10 bg-[#30363d]"></div>
+    <div class="flex items-center gap-2">
+        <div class="p-2 bg-[#f0883e]/20 rounded-lg">
+            <i data-lucide="hard-drive" class="w-5 h-5 text-[#f0883e]"></i>
+        </div>
+        <div>
+            <div class="text-xl font-bold">{{ total_bytes }}</div>
+            <div class="text-xs text-[#8b949e]">Processed</div>
+        </div>
+    </div>
+</div>

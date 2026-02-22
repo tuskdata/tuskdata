@@ -1,0 +1,22 @@
+{# Groups grid — HTMX partial #}
+{% if groups %}
+    {% for g in groups %}
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h4 class="font-medium">{{ g.name }}</h4>
+            <span class="text-xs text-[#8b949e]">{{ g.permissions | length }} permissions</span>
+        </div>
+        <p class="text-sm text-[#8b949e] mb-3">{{ g.description or 'No description' }}</p>
+        <div class="flex flex-wrap gap-1">
+            {% for p in g.permissions[:3] %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-[#21262d] text-[#8b949e]">{{ p.split('.')[0] }}</span>
+            {% endfor %}
+            {% if g.permissions | length > 3 %}
+            <span class="px-1.5 py-0.5 rounded text-xs bg-[#21262d] text-[#8b949e]">+{{ g.permissions | length - 3 }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-[#8b949e]">No groups found</div>
+{% endif %}

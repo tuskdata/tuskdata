@@ -32,6 +32,9 @@
    Base Styles
    ============================================ */
 
+/* Alpine.js cloak — hide elements until Alpine initializes */
+[x-cloak] { display: none !important; }
+
 * { font-family: 'Inter', sans-serif; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 

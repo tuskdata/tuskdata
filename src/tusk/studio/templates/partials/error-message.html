@@ -1,0 +1,7 @@
+<div class="text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-4 m-4">
+    <div class="flex items-center gap-2 mb-1">
+        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+        <span class="font-medium">{{ title | default("Error") }}</span>
+    </div>
+    <pre class="text-sm mt-2 whitespace-pre-wrap text-red-300">{{ error }}</pre>
+</div>

@@ -4,10 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Tusk{% endblock %}</title>
+    {% if use_cdn %}
+    <!-- CDN mode (dev) — set TUSK_CDN=1 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.15.0/proj4.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    {% else %}
+    <!-- Vendor mode (production) — run: make vendor && make css -->
+    <link rel="stylesheet" href="/static/vendor/tailwind.min.css">
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/vendor/lucide.min.js"></script>
+    <script src="/static/vendor/proj4.min.js"></script>
+    <link rel="stylesheet" href="/static/vendor/fonts.css">
+    {% endif %}
     <link rel="stylesheet" href="/static/styles.css">
     {% block head %}{% endblock %}
     {% block styles %}<style></style>{% endblock %}
@@ -18,9 +32,9 @@
         <div class="flex items-center gap-6">
             <!-- Logo -->
             <div class="flex items-center gap-2">
-                <span class="text-2xl">🦣</span>
+                <span class="text-2xl">&#129443;</span>
                 <span class="font-bold text-lg">Tusk</span>
-                <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded font-medium">v0.1</span>
+                <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded font-medium">v{{ version }}</span>
             </div>
 
             <!-- Main Navigation -->
@@ -37,11 +51,13 @@
                     <i data-lucide="git-branch" class="w-4 h-4"></i>
                     Data
                 </a>
-                {% if features.cluster %}
-                <a href="/cluster" class="nav-tab {% if active_page == 'cluster' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
-                    <i data-lucide="server" class="w-4 h-4"></i>
-                    Cluster
+                {% if plugin_tabs %}
+                {% for tab in plugin_tabs %}
+                <a href="{{ tab.url }}" class="nav-tab {% if active_page == tab.id %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="{{ tab.icon }}" class="w-4 h-4"></i>
+                    {{ tab.label }}
                 </a>
+                {% endfor %}
                 {% endif %}
             </div>
         </div>
@@ -96,7 +112,142 @@
     <div id="toast-container" class="toast-container"></div>
 
     <script>
-        // Init Lucide icons and theme
+        // ─── GeoJSON CRS detection & reprojection ────────────────────
+        // Detects projected coordinates and shows CRS selector bar.
+        // For PostgreSQL data, ST_Transform(geom, 4326) already converts server-side.
+        // This handles files loaded via Polars/DuckDB without CRS metadata.
+
+        window.tuskReproject = function(geojson) {
+            if (!geojson || !geojson.features || !geojson.features.length) return geojson;
+
+            // Sample coords to check if projected
+            const sample = [];
+            for (const f of geojson.features) {
+                if (!f.geometry || !f.geometry.coordinates) continue;
+                const flat = _tuskFlatCoords(f.geometry);
+                if (flat.length) sample.push(...flat.slice(0, 5));
+                if (sample.length >= 10) break;
+            }
+            if (!sample.length) return geojson;
+
+            const allWGS84 = sample.every(c => c[0] >= -180 && c[0] <= 180 && c[1] >= -90 && c[1] <= 90);
+            if (allWGS84) {
+                // Hide CRS bar if shown
+                const bar = document.getElementById('map-crs-bar');
+                if (bar) bar.classList.add('hidden');
+                return geojson;
+            }
+
+            // Show CRS selector bar
+            const bar = document.getElementById('map-crs-bar');
+            if (bar) {
+                bar.classList.remove('hidden');
+                lucide.createIcons({ nameAttr: 'data-lucide', attrs: {} });
+            }
+
+            // Store original (unreprojectd) GeoJSON for re-use when user picks CRS
+            window._tuskOriginalGeoJSON = JSON.parse(JSON.stringify(geojson));
+
+            return geojson;
+        };
+
+        // Called when user clicks "Reproject" button in the CRS bar
+        window._applyReproject = function() {
+            if (typeof proj4 === 'undefined') { tuskToast('proj4 library not loaded', 'error'); return; }
+
+            const select = document.getElementById('map-crs-select');
+            const custom = document.getElementById('map-crs-custom');
+            let epsg = (custom && custom.value.trim()) || (select && select.value);
+            if (!epsg) { tuskToast('Select or enter an EPSG code', 'warning'); return; }
+
+            epsg = epsg.replace(/^epsg:/i, '').trim();
+            const code = parseInt(epsg);
+            if (!code || code < 1) { tuskToast('Invalid EPSG code', 'error'); return; }
+
+            // Build proj4 string for the EPSG code
+            let srcProj;
+            if (code === 3857) {
+                srcProj = 'EPSG:3857';
+            } else if (code >= 32601 && code <= 32660) {
+                srcProj = `+proj=utm +zone=${code - 32600} +datum=WGS84 +units=m +no_defs`;
+            } else if (code >= 32701 && code <= 32760) {
+                srcProj = `+proj=utm +zone=${code - 32700} +south +datum=WGS84 +units=m +no_defs`;
+            } else if (code === 2002) {
+                // Dominican Republic 2002
+                srcProj = '+proj=tmerc +lat_0=18.83333333333333 +lon_0=-71.83333333333333 +k=0.999995 +x_0=200000 +y_0=10000 +ellps=clrk66 +towgs84=-307.7,-146.2,343.8,0,0,0,0 +units=m +no_defs';
+            } else {
+                // Try fetching from proj4 registry
+                try {
+                    srcProj = proj4.defs(`EPSG:${code}`);
+                    if (!srcProj) { tuskToast(`EPSG:${code} not found. Try a UTM zone (326xx/327xx) or 3857.`, 'warning'); return; }
+                } catch(e) { tuskToast(`EPSG:${code} not recognized`, 'error'); return; }
+            }
+
+            // Get fresh copy of original data
+            const geojson = JSON.parse(JSON.stringify(window._tuskOriginalGeoJSON));
+
+            // Reproject all coordinates
+            for (const f of geojson.features) {
+                if (!f.geometry || !f.geometry.coordinates) continue;
+                f.geometry.coordinates = _tuskReprojectCoords(f.geometry.coordinates, f.geometry.type, srcProj);
+            }
+
+            // Update the current GeoJSON and re-render map
+            if (window._tuskMapUpdateCallback) {
+                window._tuskMapUpdateCallback(geojson, code);
+            }
+
+            tuskToast(`Reprojected from EPSG:${code} to WGS84`, 'success');
+        };
+
+        function _tuskFlatCoords(geom) {
+            const out = [], t = geom.type, c = geom.coordinates;
+            if (t === 'Point') out.push(c);
+            else if (t === 'MultiPoint' || t === 'LineString') out.push(...c);
+            else if (t === 'MultiLineString' || t === 'Polygon') c.forEach(r => out.push(...r));
+            else if (t === 'MultiPolygon') c.forEach(p => p.forEach(r => out.push(...r)));
+            return out.filter(c => Array.isArray(c) && c.length >= 2 && isFinite(c[0]) && isFinite(c[1]));
+        }
+
+        function _tuskReprojectCoords(coords, type, srcProj) {
+            const xf = (c) => { const r = proj4(srcProj, 'EPSG:4326', [c[0], c[1]]); return c.length > 2 ? [r[0], r[1], c[2]] : r; };
+            if (type === 'Point') return xf(coords);
+            if (type === 'MultiPoint' || type === 'LineString') return coords.map(xf);
+            if (type === 'MultiLineString' || type === 'Polygon') return coords.map(ring => ring.map(xf));
+            if (type === 'MultiPolygon') return coords.map(poly => poly.map(ring => ring.map(xf)));
+            return coords;
+        }
+
+        // ─── HTMX global config ───────────────────────────────────
+        // Re-init Lucide icons after every HTMX swap
+        document.addEventListener('htmx:afterSwap', () => {
+            lucide.createIcons();
+        });
+
+        // Toast integration: server sends HX-Trigger: {"tuskToast": {"message":"…","variant":"…"}}
+        document.addEventListener('tuskToast', (e) => {
+            const d = e.detail || {};
+            if (d.message) {
+                showToast(d.message, d.variant || 'info');
+            }
+        });
+
+        // Global HTMX error handler
+        document.addEventListener('htmx:responseError', (e) => {
+            const xhr = e.detail.xhr;
+            let msg = 'Request failed';
+            if (xhr && xhr.status) {
+                msg = `Request failed (${xhr.status})`;
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.error) msg = data.error;
+                    if (data.detail) msg = data.detail;
+                } catch (_) {}
+            }
+            showToast(msg, 'error');
+        });
+
+        // ─── Init ─────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
             checkAuthStatus();
@@ -202,6 +353,45 @@
         }
 
         window.tuskToast = showToast;
+
+        // ─── Resizable sidebar (Alpine component) ────────────────
+        // Register immediately if Alpine is loaded (hx-boost navigation),
+        // otherwise wait for alpine:init (first page load)
+        function _registerResizableSidebar() {
+            Alpine.data('resizableSidebar', (key) => ({
+                width: parseInt(localStorage.getItem('sidebar-w-' + key)) || 256,
+                _resizing: false,
+                init() {
+                    this.$el.style.width = this.width + 'px';
+                    const onMove = (e) => {
+                        if (!this._resizing) return;
+                        const rect = this.$el.getBoundingClientRect();
+                        this.width = Math.min(480, Math.max(180, e.clientX - rect.left));
+                        this.$el.style.width = this.width + 'px';
+                    };
+                    const onUp = () => {
+                        if (!this._resizing) return;
+                        this._resizing = false;
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        localStorage.setItem('sidebar-w-' + key, this.width);
+                    };
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                },
+                startResize(e) {
+                    e.preventDefault();
+                    this._resizing = true;
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                }
+            }));
+        }
+        if (window.Alpine) {
+            _registerResizableSidebar();
+        } else {
+            document.addEventListener('alpine:init', _registerResizableSidebar);
+        }
     </script>
     {% block scripts %}{% endblock %}
 </body>

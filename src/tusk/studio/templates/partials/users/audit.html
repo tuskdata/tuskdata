@@ -1,0 +1,26 @@
+{# Audit log table rows — HTMX partial #}
+{% if entries %}
+    {% for e in entries %}
+    <tr class="border-b border-[#30363d] hover:bg-[#21262d]">
+        <td class="px-4 py-3 text-sm text-[#8b949e]">{{ e.timestamp_display or '-' }}</td>
+        <td class="px-4 py-3 text-sm">{{ e.username or e.user_id or '-' }}</td>
+        <td class="px-4 py-3">
+            {% set action_colors = {
+                'login': 'bg-green-500/20 text-green-400',
+                'logout': 'bg-[#21262d] text-[#8b949e]',
+                'user.create': 'bg-blue-500/20 text-blue-400',
+                'user.update': 'bg-yellow-500/20 text-yellow-400',
+                'user.delete': 'bg-red-500/20 text-red-400',
+                'password.change': 'bg-orange-500/20 text-orange-400',
+                'group.assign': 'bg-purple-500/20 text-purple-400'
+            } %}
+            <span class="px-2 py-1 rounded text-xs {{ action_colors[e.action] | default('bg-[#21262d] text-[#8b949e]') }}">{{ e.action }}</span>
+        </td>
+        <td class="px-4 py-3 text-sm text-[#8b949e]">{{ e.resource or '-' }}</td>
+        <td class="px-4 py-3 text-sm text-[#8b949e] truncate max-w-xs">{{ e.details or '-' }}</td>
+        <td class="px-4 py-3 text-sm font-mono text-[#8b949e]">{{ e.ip_address or '-' }}</td>
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="6" class="px-4 py-8 text-center text-[#8b949e]">No audit log entries</td></tr>
+{% endif %}

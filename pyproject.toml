@@ -1,11 +1,11 @@
 [project]
 name = "tuskdata"
-version = "0.1.2"
+version = "0.2.0"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
 authors = [
-    { name = "TuskData Team" }
+    { name = "Jearel Alcantara" }
 ]
 keywords = ["postgresql", "admin", "analytics", "duckdb", "polars", "etl", "sql", "database"]
 classifiers = [
@@ -43,8 +43,7 @@ studio = [
     "tuskdata[postgres]",
     "litestar>=2.0",         # Web framework
     "granian>=2.0",          # ASGI server
-    "jinja2>=3.0",           # HTML templates
-    "minijinja>=2.0",        # Rust-based templates
+    "minijinja>=2.0",        # Rust-based templates (MiniJinja)
     "duckdb>=1.0",           # Analytics engine
     "polars>=1.0",           # DataFrame transforms
     "pyarrow>=17.0",         # Arrow format support
@@ -57,10 +56,9 @@ admin = [
     "psutil>=5.9",           # System metrics
 ]
 
-# Cluster mode (distributed queries)
+# Cluster mode plugin (distributed queries with DataFusion)
 cluster = [
-    "datafusion>=51.0",      # Distributed query engine
-    "pyarrow>=17.0",         # Arrow Flight
+    "tusk-cluster>=0.1.0",   # Cluster plugin (brings datafusion, pyarrow)
 ]
 
 # Everything

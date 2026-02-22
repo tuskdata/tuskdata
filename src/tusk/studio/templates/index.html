@@ -1,11 +1,10 @@
 {% extends "base.html" %}
+{% from "components/map.html" import map_assets %}
 
 {% block title %}Tusk Studio{% endblock %}
 
 {% block head %}
-<!-- MapLibre GL JS for geo visualization -->
-<script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
-<link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{{ map_assets() }}
 {% endblock %}
 
 {% block styles %}
@@ -20,7 +19,8 @@
 
 {% block content %}
 <!-- Sidebar -->
-<aside class="sidebar w-64 flex flex-col">
+<aside class="sidebar flex flex-col flex-shrink-0 overflow-hidden relative" x-data="resizableSidebar('studio')" style="min-width: 180px; max-width: 480px;">
+    <div @mousedown="startResize($event)" class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#6366f1]/50 active:bg-[#6366f1] z-10 transition-colors"></div>
     <!-- Connections -->
     <div class="p-3 border-b border-[#30363d]">
         <div class="flex items-center justify-between mb-2">
@@ -33,7 +33,7 @@
         <div class="mt-2 pt-2 border-t border-[#30363d]/50">
             <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d]" id="duckdb-connection" onclick="selectDuckDB()">
                 <span class="w-2 h-2 rounded-full bg-gray-500" id="duckdb-status"></span>
-                <span>🦆</span>
+                <span>&#129414;</span>
                 <span class="text-sm flex-1">DuckDB (Local)</span>
             </div>
         </div>
@@ -104,22 +104,22 @@
         <div class="flex items-center gap-3 mb-3">
             <span class="text-xs text-gray-500">Engine:</span>
             <div class="flex bg-[#0d1117] rounded-lg p-0.5">
-                <button id="engine-postgres" onclick="setEngine('postgres')" class="engine-btn active px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🐘</span> PostgreSQL</button>
-                <button id="engine-sqlite" onclick="setEngine('sqlite')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🗃️</span> SQLite</button>
-                <button id="engine-duckdb" onclick="setEngine('duckdb')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>🦆</span> DuckDB</button>
+                <button id="engine-postgres" onclick="setEngine('postgres')" class="engine-btn active px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>&#128024;</span> PostgreSQL</button>
+                <button id="engine-sqlite" onclick="setEngine('sqlite')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>&#128451;&#65039;</span> SQLite</button>
+                <button id="engine-duckdb" onclick="setEngine('duckdb')" class="engine-btn px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"><span>&#129414;</span> DuckDB</button>
             </div>
             <span id="engine-info" class="text-xs text-gray-500"></span>
         </div>
         <div id="sql-editor" class="rounded-lg border border-[#30363d] overflow-hidden"></div>
         <div class="flex justify-between items-center mt-3">
             <span class="text-xs text-gray-500">
-                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Enter</kbd> run ·
-                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">S</kbd> save ·
+                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Enter</kbd> run &middot;
+                <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">S</kbd> save &middot;
                 <kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-[#21262d] rounded text-gray-400">T</kbd> new tab
             </span>
             <div class="flex gap-2">
                 <button onclick="showSaveQueryModal()" class="bg-[#21262d] hover:bg-[#30363d] px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i data-lucide="bookmark" class="w-4 h-4"></i> Save</button>
-                <button id="run-btn" onclick="runQuery()" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"><span>▶</span> Run</button>
+                <button id="run-btn" onclick="runQuery()" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"><span>&#9654;</span> Run</button>
             </div>
         </div>
     </div>
@@ -134,8 +134,15 @@
 
 {% block modals %}
 <!-- Connection Modal -->
-<div id="conn-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[420px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-conn-modal.window="open = true"
+     x-on:close-conn-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[420px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 id="conn-modal-title" class="text-lg font-bold mb-4">Add Connection</h3>
         <form id="conn-form" class="space-y-4">
             <input type="hidden" name="edit_id" id="conn-edit-id" value="">
@@ -144,9 +151,9 @@
                 <input name="name" id="conn-name" placeholder="My Database" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" required>
             </div>
             <div id="conn-type-selector" class="flex gap-4 flex-wrap">
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="postgres" checked onchange="toggleConnFields()" class="accent-indigo-500"><span>🐘 PostgreSQL</span></label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="sqlite" onchange="toggleConnFields()" class="accent-indigo-500"><span>🗃️ SQLite</span></label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="duckdb" onchange="toggleConnFields()" class="accent-indigo-500"><span>🦆 DuckDB</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="postgres" checked onchange="toggleConnFields()" class="accent-indigo-500"><span>&#128024; PostgreSQL</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="sqlite" onchange="toggleConnFields()" class="accent-indigo-500"><span>&#128451;&#65039; SQLite</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="duckdb" onchange="toggleConnFields()" class="accent-indigo-500"><span>&#129414; DuckDB</span></label>
             </div>
             <div id="postgres-fields" class="space-y-3">
                 <div class="grid grid-cols-3 gap-3">
@@ -156,7 +163,7 @@
                 <div><label class="block text-sm text-gray-400 mb-1">Database</label><input name="database" id="conn-database" placeholder="postgres" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-sm text-gray-400 mb-1">User</label><input name="user" id="conn-user" placeholder="postgres" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
-                    <div><label class="block text-sm text-gray-400 mb-1">Password</label><input name="password" id="conn-password" type="password" placeholder="••••••" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"><p id="password-hint" class="text-xs text-gray-500 mt-1 hidden">Leave empty to keep current</p></div>
+                    <div><label class="block text-sm text-gray-400 mb-1">Password</label><input name="password" id="conn-password" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"><p id="password-hint" class="text-xs text-gray-500 mt-1 hidden">Leave empty to keep current</p></div>
                 </div>
             </div>
             <div id="file-db-fields" class="hidden">
@@ -166,7 +173,7 @@
             <div class="flex gap-3 justify-between pt-2">
                 <button type="button" onclick="testConnection()" class="px-4 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-sm">Test Connection</button>
                 <div class="flex gap-3">
-                    <button type="button" onclick="hideConnModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                    <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                     <button type="submit" id="conn-submit-btn" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Connect</button>
                 </div>
             </div>
@@ -175,17 +182,31 @@
 </div>
 
 <!-- Databases Modal -->
-<div id="databases-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
-        <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Databases on Server</h3><button onclick="hideDatabasesModal()" class="text-gray-400 hover:text-white text-xl">×</button></div>
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-databases-modal.window="open = true"
+     x-on:close-databases-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
+        <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Databases on Server</h3><button @click="open = false" class="text-gray-400 hover:text-white text-xl">&times;</button></div>
         <p class="text-sm text-gray-400 mb-4">Click on a database to create a connection.</p>
         <div id="databases-list" class="flex-1 overflow-auto space-y-2"><div class="text-gray-500">Loading...</div></div>
     </div>
 </div>
 
 <!-- Settings Modal -->
-<div id="settings-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-settings-modal.window="open = true"
+     x-on:close-settings-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[500px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Settings</h3>
         <div class="mb-6">
             <label class="block text-sm font-medium text-gray-300 mb-2">PostgreSQL Client Path</label>
@@ -197,13 +218,20 @@
             </div>
             <button onclick="clearPgBinPath()" class="text-sm text-gray-400 hover:text-white mt-2">Reset to auto-detect</button>
         </div>
-        <div class="flex justify-end pt-2 border-t border-[#30363d]"><button onclick="hideSettingsModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button></div>
+        <div class="flex justify-end pt-2 border-t border-[#30363d]"><button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Close</button></div>
     </div>
 </div>
 
 <!-- Save Query Modal -->
-<div id="save-query-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-save-query-modal.window="open = true"
+     x-on:close-save-query-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 id="save-query-title" class="text-lg font-bold mb-4">Save Query</h3>
         <form id="save-query-form" class="space-y-4">
             <input type="hidden" id="save-query-id" value="">
@@ -211,7 +239,7 @@
             <div><label class="block text-sm text-gray-400 mb-1">Folder (optional)</label><input id="save-query-folder" placeholder="e.g., Reports" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
             <div class="bg-[#0d1117] border border-[#30363d] rounded-lg p-3 max-h-32 overflow-auto"><pre id="save-query-preview" class="font-mono text-xs text-gray-400 whitespace-pre-wrap"></pre></div>
             <div class="flex gap-3 justify-end pt-2">
-                <button type="button" onclick="hideSaveQueryModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
             </div>
         </form>
@@ -219,20 +247,27 @@
 </div>
 
 <!-- Create File Modal -->
-<div id="create-file-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-create-file-modal.window="open = true"
+     x-on:close-create-file-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Create New Database</h3>
         <form id="create-file-form" class="space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-2">Database Type</label>
                 <div class="flex gap-4">
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="sqlite" checked class="accent-indigo-500"><span>🗃️ SQLite</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="duckdb" class="accent-indigo-500"><span>🦆 DuckDB</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="sqlite" checked class="accent-indigo-500"><span>&#128451;&#65039; SQLite</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="file_type" value="duckdb" class="accent-indigo-500"><span>&#129414; DuckDB</span></label>
                 </div>
             </div>
             <div><label class="block text-sm text-gray-400 mb-1">File Path</label><input id="create-file-path" placeholder="~/data/mydb.sqlite" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
             <div class="flex gap-3 justify-end pt-2">
-                <button type="button" onclick="hideCreateFileModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                 <button type="submit" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium">Create</button>
             </div>
         </form>
@@ -240,13 +275,20 @@
 </div>
 
 <!-- Folder Modal -->
-<div id="folder-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-folder-modal.window="open = true"
+     x-on:close-folder-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Add Data Folder</h3>
         <form id="folder-form" class="space-y-4">
             <div><label class="block text-sm text-gray-400 mb-1">Folder Path</label><input id="folder-path" placeholder="~/data" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
             <div class="flex gap-3 justify-end pt-2">
-                <button type="button" onclick="hideFolderModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add Folder</button>
             </div>
         </form>
@@ -254,13 +296,20 @@
 </div>
 
 <!-- Parquet Modal -->
-<div id="parquet-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-parquet-modal.window="open = true"
+     x-on:close-parquet-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[400px] border border-[#30363d] shadow-2xl" @click.stop>
         <h3 class="text-lg font-bold mb-4">Export to Parquet</h3>
         <form id="parquet-form" class="space-y-4">
             <div><label class="block text-sm text-gray-400 mb-1">Output Path</label><input id="parquet-path" placeholder="~/data/output.parquet" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 font-mono text-sm" required></div>
             <div class="flex gap-3 justify-end pt-2">
-                <button type="button" onclick="hideParquetModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
+                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Export</button>
             </div>
         </form>
@@ -268,27 +317,72 @@
 </div>
 
 <!-- File Preview Modal -->
-<div id="file-preview-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl p-6 w-[800px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col">
-        <div class="flex items-center justify-between mb-4"><h3 id="file-preview-title" class="text-lg font-bold">File Preview</h3><button onclick="hideFilePreviewModal()" class="text-gray-400 hover:text-white text-xl">×</button></div>
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-file-preview-modal.window="open = true"
+     x-on:close-file-preview-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[800px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
+        <div class="flex items-center justify-between mb-4"><h3 id="file-preview-title" class="text-lg font-bold">File Preview</h3><button @click="open = false" class="text-gray-400 hover:text-white text-xl">&times;</button></div>
         <div id="file-preview-info" class="text-sm text-gray-400 mb-3"></div>
         <div id="file-preview-content" class="flex-1 overflow-auto"><div class="text-gray-500">Loading...</div></div>
         <div class="flex gap-2 mt-4 pt-4 border-t border-[#30363d]">
             <button onclick="insertFileQuery()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium">Insert Query</button>
-            <button onclick="hideFilePreviewModal()" class="px-4 py-2 rounded-lg hover:bg-[#21262d] text-sm">Close</button>
+            <button @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d] text-sm">Close</button>
         </div>
     </div>
 </div>
 
 <!-- Map Modal -->
-<div id="map-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-    <div class="bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col overflow-hidden">
+<div x-data="{ open: false }"
+     x-show="open"
+     x-on:open-map-modal.window="open = true"
+     x-on:close-map-modal.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="absolute inset-0" @click="open = false"></div>
+    <div class="relative bg-[#161b22] rounded-xl w-[90vw] h-[85vh] border border-[#30363d] shadow-2xl flex flex-col overflow-hidden" @click.stop>
         <div class="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
             <div class="flex items-center gap-3"><h3 class="text-lg font-bold">Map View</h3><span id="map-feature-count" class="text-xs text-gray-400 bg-[#21262d] px-2 py-1 rounded">0 features</span></div>
             <div class="flex items-center gap-2">
                 <button onclick="exportGeoJSON()" class="text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white">Export GeoJSON</button>
-                <button onclick="hideMapModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+                <button @click="open = false" class="text-gray-400 hover:text-white text-xl px-2">&times;</button>
             </div>
+        </div>
+        <div id="map-crs-bar" class="hidden px-4 py-2 border-b border-[#30363d] bg-[#f0883e]/10 flex items-center gap-3 text-sm">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-[#f0883e] flex-shrink-0"></i>
+            <span class="text-[#f0883e]">Projected coordinates detected</span>
+            <select id="map-crs-select" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs">
+                <option value="">Select source CRS...</option>
+                <optgroup label="UTM North">
+                    <option value="32614">EPSG:32614 — UTM 14N (Mexico)</option>
+                    <option value="32615">EPSG:32615 — UTM 15N (Central America)</option>
+                    <option value="32616">EPSG:32616 — UTM 16N (Cuba, Yucatán)</option>
+                    <option value="32617">EPSG:32617 — UTM 17N (Florida, Cuba)</option>
+                    <option value="32618">EPSG:32618 — UTM 18N (Eastern US, Jamaica)</option>
+                    <option value="32619">EPSG:32619 — UTM 19N (DR, Puerto Rico)</option>
+                    <option value="32620">EPSG:32620 — UTM 20N (Lesser Antilles)</option>
+                    <option value="32621">EPSG:32621 — UTM 21N (Guyana)</option>
+                </optgroup>
+                <optgroup label="UTM South">
+                    <option value="32718">EPSG:32718 — UTM 18S (Peru)</option>
+                    <option value="32719">EPSG:32719 — UTM 19S (Chile, Argentina)</option>
+                    <option value="32720">EPSG:32720 — UTM 20S (Brazil)</option>
+                    <option value="32721">EPSG:32721 — UTM 21S (Brazil)</option>
+                    <option value="32722">EPSG:32722 — UTM 22S (Brazil)</option>
+                    <option value="32723">EPSG:32723 — UTM 23S (Brazil)</option>
+                </optgroup>
+                <optgroup label="Other">
+                    <option value="3857">EPSG:3857 — Web Mercator</option>
+                    <option value="2002">EPSG:2002 — Dominican Republic</option>
+                </optgroup>
+            </select>
+            <input id="map-crs-custom" type="text" placeholder="or enter EPSG code" class="w-28 bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs">
+            <button onclick="window._applyReproject()" class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-xs font-medium">Reproject</button>
         </div>
         <div id="map-container" class="flex-1"></div>
     </div>

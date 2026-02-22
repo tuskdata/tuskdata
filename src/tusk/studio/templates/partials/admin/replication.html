@@ -1,0 +1,27 @@
+{% if replication and replication.slots %}
+<div class="space-y-3">
+    {% for slot in replication.slots %}
+    <div class="p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="font-mono text-sm">{{ slot.slot_name }}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full {% if slot.active %}bg-green-500/20 text-green-400{% else %}bg-red-500/20 text-red-400{% endif %}">{% if slot.active %}Active{% else %}Inactive{% endif %}</span>
+            <span class="text-xs text-gray-500">{{ slot.slot_type }}</span>
+        </div>
+        {% if slot.client_addr %}
+        <div class="text-sm text-gray-400">Client: {{ slot.client_addr }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-gray-500">No replication slots configured</div>
+{% endif %}
+{% if wal_stats %}
+<div class="mt-4 p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
+    <div class="text-xs text-gray-500 mb-2">WAL Statistics</div>
+    <div class="grid grid-cols-2 gap-2 text-sm">
+        {% if wal_stats.wal_level %}<div class="text-gray-400">Level: <span class="text-white">{{ wal_stats.wal_level }}</span></div>{% endif %}
+        {% if wal_stats.archive_mode %}<div class="text-gray-400">Archive: <span class="text-white">{{ wal_stats.archive_mode }}</span></div>{% endif %}
+    </div>
+</div>
+{% endif %}

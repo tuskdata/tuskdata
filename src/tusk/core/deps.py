@@ -5,7 +5,7 @@ from typing import Literal
 
 # Feature to required packages mapping
 FEATURE_DEPS = {
-    "studio": ["litestar", "granian", "duckdb", "polars", "jinja2"],
+    "studio": ["litestar", "granian", "duckdb", "polars", "minijinja"],
     "postgres": ["psycopg"],
     "admin": ["apscheduler", "psutil"],
     "cluster": ["datafusion"],

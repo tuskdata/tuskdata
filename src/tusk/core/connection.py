@@ -2,6 +2,7 @@
 
 from typing import Literal
 from pathlib import Path
+from urllib.parse import quote
 import uuid
 import tomllib
 import tomli_w
@@ -35,7 +36,7 @@ class ConnectionConfig(msgspec.Struct):
         """PostgreSQL connection string"""
         if self.type != "postgres":
             raise ValueError("DSN only for PostgreSQL")
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return f"postgresql://{quote(self.user, safe='')}:{quote(self.password, safe='')}@{self.host}:{self.port}/{self.database}"
 
     def to_dict(self, include_password: bool = False) -> dict:
         """Convert to dictionary for serialization"""

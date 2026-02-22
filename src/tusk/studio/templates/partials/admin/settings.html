@@ -1,0 +1,12 @@
+{% if settings %}
+    {% for s in settings %}
+    <tr class="hover:bg-[#21262d]/50">
+        <td class="px-4 py-2 font-mono text-sm">{{ s.name }}{% if s.pending_restart %} <span class="text-xs text-yellow-400">restart needed</span>{% endif %}</td>
+        <td class="px-4 py-2 font-mono text-sm text-indigo-400">{{ s.formatted }}</td>
+        <td class="px-4 py-2 text-xs text-gray-500">{{ s.category }}</td>
+        <td class="px-4 py-2 text-xs text-gray-500">{{ s.description }}</td>
+    </tr>
+    {% endfor %}
+{% else %}
+    <tr><td colspan="4" class="p-4 text-gray-500">No settings found</td></tr>
+{% endif %}

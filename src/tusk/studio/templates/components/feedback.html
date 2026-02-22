@@ -1,0 +1,239 @@
+{# Feedback Components
+
+   Macros: badge, severity_badge, status_badge, alert, empty_state,
+           loading_spinner, progress_bar, tooltip, modal, confirmation_dialog
+#}
+
+{% macro badge(text, variant="info") %}
+{% set variants = {
+    "critical": "bg-red-500/20 text-red-400",
+    "high": "bg-orange-500/20 text-orange-400",
+    "medium": "bg-yellow-500/20 text-yellow-400",
+    "low": "bg-blue-500/20 text-blue-400",
+    "info": "bg-gray-500/20 text-gray-400",
+    "safe": "bg-green-500/20 text-green-400",
+    "success": "bg-green-500/20 text-green-400",
+    "warning": "bg-yellow-500/20 text-yellow-400",
+    "error": "bg-red-500/20 text-red-400",
+    "primary": "bg-blue-500/20 text-blue-400"
+} %}
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ variants[variant] | default(variants.info) }}">
+    {{ text }}
+</span>
+{% endmacro %}
+
+
+{% macro severity_badge(severity) %}
+{# Convenience macro for severity levels #}
+{% set severity_lower = severity | lower %}
+{% if severity_lower == "critical" %}
+    {{ badge(severity | upper, "critical") }}
+{% elif severity_lower == "high" %}
+    {{ badge(severity | upper, "high") }}
+{% elif severity_lower == "medium" %}
+    {{ badge(severity | upper, "medium") }}
+{% elif severity_lower == "low" %}
+    {{ badge(severity | upper, "low") }}
+{% elif severity_lower in ["safe", "ok", "good"] %}
+    {{ badge(severity | upper, "safe") }}
+{% else %}
+    {{ badge(severity, "info") }}
+{% endif %}
+{% endmacro %}
+
+
+{% macro status_badge(status) %}
+{# Convenience macro for status indicators #}
+{% set status_lower = status | lower %}
+{% if status_lower in ["active", "running", "online", "connected", "healthy"] %}
+    {{ badge(status, "success") }}
+{% elif status_lower in ["pending", "waiting", "queued"] %}
+    {{ badge(status, "warning") }}
+{% elif status_lower in ["error", "failed", "offline", "disconnected", "unhealthy"] %}
+    {{ badge(status, "error") }}
+{% elif status_lower in ["paused", "stopped", "inactive"] %}
+    {{ badge(status, "info") }}
+{% else %}
+    {{ badge(status, "info") }}
+{% endif %}
+{% endmacro %}
+
+
+{% macro alert(message, variant="info", dismissible=false, icon="") %}
+{% set variants = {
+    "info": "bg-blue-500/10 border-blue-500/30 text-blue-400",
+    "success": "bg-green-500/10 border-green-500/30 text-green-400",
+    "warning": "bg-yellow-500/10 border-yellow-500/30 text-yellow-400",
+    "error": "bg-red-500/10 border-red-500/30 text-red-400"
+} %}
+{% set default_icons = {
+    "info": "info",
+    "success": "check-circle",
+    "warning": "alert-triangle",
+    "error": "circle-x"
+} %}
+<div class="p-3 border rounded-lg {{ variants[variant] }}"
+     {% if dismissible %}x-data="{ show: true }" x-show="show" x-transition{% endif %}>
+    <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <i data-lucide="{{ icon or default_icons[variant] }}" class="w-4 h-4 flex-shrink-0"></i>
+            <span>{{ message }}</span>
+        </div>
+        {% if dismissible %}
+        <button @click="show = false" class="opacity-70 hover:opacity-100 flex-shrink-0">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro empty_state(message, icon="inbox", action_text="", action_url="", action_onclick="") %}
+<div class="text-center py-12">
+    <div class="mb-4 text-[#8b949e]">
+        <i data-lucide="{{ icon }}" class="w-12 h-12 mx-auto"></i>
+    </div>
+    <div class="text-[#8b949e] mb-4">{{ message }}</div>
+    {% if action_text %}
+        {% if action_url %}
+        <a href="{{ action_url }}" class="text-[#58a6ff] hover:underline">{{ action_text }}</a>
+        {% elif action_onclick %}
+        <button onclick="{{ action_onclick }}" class="text-[#58a6ff] hover:underline">{{ action_text }}</button>
+        {% endif %}
+    {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro loading_spinner(size="md", message="") %}
+{% set sizes = {
+    "sm": "h-4 w-4 border-2",
+    "md": "h-8 w-8 border-2",
+    "lg": "h-12 w-12 border-3"
+} %}
+<div class="flex flex-col items-center justify-center gap-3">
+    <div class="animate-spin rounded-full {{ sizes[size] }} border-blue-400 border-t-transparent"></div>
+    {% if message %}
+    <div class="text-sm text-[#8b949e]">{{ message }}</div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro progress_bar(value, max=100, color="blue", show_label=false) %}
+{% set percentage = (value / max * 100) | int %}
+<div class="w-full">
+    <div class="w-full bg-[#21262d] rounded-full h-2 overflow-hidden">
+        <div class="bg-{{ color }}-500 h-2 rounded-full transition-all duration-300"
+             style="width: {{ percentage }}%"></div>
+    </div>
+    {% if show_label %}
+    <div class="text-xs text-[#8b949e] mt-1 text-right">{{ percentage }}%</div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro tooltip(text, position="top") %}
+{# Wrap content in this macro for tooltip #}
+{% set positions = {
+    "top": "bottom-full left-1/2 -translate-x-1/2 mb-2",
+    "bottom": "top-full left-1/2 -translate-x-1/2 mt-2",
+    "left": "right-full top-1/2 -translate-y-1/2 mr-2",
+    "right": "left-full top-1/2 -translate-y-1/2 ml-2"
+} %}
+<div class="relative group inline-block">
+    {{ caller() }}
+    <div class="absolute {{ positions[position] }} hidden group-hover:block z-50
+                bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-xs text-white whitespace-nowrap shadow-lg">
+        {{ text }}
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro modal(id, title, event="", max_width="max-w-lg", icon="", danger=false, close_event="") %}
+{# Generic modal wrapper for arbitrary content. Use with {% call %}.
+   Opens via Alpine event dispatch: $dispatch('open-{id}') or custom event name.
+
+   Args:
+       id: Unique modal ID (used for DOM id and events)
+       title: Modal header title
+       event: Custom open event name (default: "open-{id}")
+       max_width: Tailwind max-width class (default "max-w-lg")
+       icon: Optional Lucide icon in header
+       danger: Red-tinted header if true
+       close_event: Optional event name dispatched on close
+
+   Usage:
+       {% call modal(id="edit-user", title="Edit User", icon="user") %}
+           <form>...</form>
+       {% endcall %}
+
+       <!-- trigger with: $dispatch('open-edit-user') -->
+#}
+{% set open_event = event or ("open-" ~ id) %}
+<div id="{{ id }}"
+     x-data="{ open: false }"
+     x-show="open"
+     x-on:{{ open_event }}.window="open = true"
+     x-on:keydown.escape.window="open = false"
+     {% if close_event %}x-on:{{ close_event }}.window="open = false"{% endif %}
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="open = false" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"></div>
+    <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg {{ max_width }} w-full mx-4 shadow-xl"
+         @click.stop
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-[#30363d]">
+            <div class="flex items-center gap-2">
+                {% if icon %}
+                <i data-lucide="{{ icon }}" class="w-5 h-5 {% if danger %}text-red-400{% else %}text-[#8b949e]{% endif %}"></i>
+                {% endif %}
+                <h3 class="text-lg font-semibold {% if danger %}text-red-400{% endif %}">{{ title }}</h3>
+            </div>
+            <button @click="open = false" class="p-1 hover:bg-[#21262d] rounded text-[#8b949e] hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <!-- Content -->
+        <div class="px-6 py-4">
+            {{ caller() }}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro confirmation_dialog(id, title, message, confirm_text="Confirm", cancel_text="Cancel", danger=false) %}
+{# Modal dialog for confirmations. Use with Alpine.js #}
+<div id="{{ id }}"
+     x-data="{ open: false }"
+     x-show="open"
+     x-on:open-{{ id }}.window="open = true"
+     x-on:close-{{ id }}.window="open = false"
+     x-on:keydown.escape.window="open = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="open = false"></div>
+    <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+        <h3 class="text-lg font-semibold mb-2">{{ title }}</h3>
+        <p class="text-[#8b949e] mb-6">{{ message }}</p>
+        <div class="flex justify-end gap-3">
+            <button @click="open = false"
+                    class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm transition-colors">
+                {{ cancel_text }}
+            </button>
+            <button @click="$dispatch('confirm-{{ id }}'); open = false"
+                    class="px-4 py-2 rounded-lg text-sm transition-colors
+                           {% if danger %}bg-[#da3633] hover:bg-[#f85149]{% else %}bg-[#238636] hover:bg-[#2ea043]{% endif %}">
+                {{ confirm_text }}
+            </button>
+        </div>
+    </div>
+</div>
+{% endmacro %}

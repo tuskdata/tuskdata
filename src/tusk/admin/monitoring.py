@@ -475,16 +475,35 @@ async def get_logs(config: ConnectionConfig, limit: int = 100, level: str | None
                 lines = lines[-limit:]
 
                 for line in lines:
+                    if not line.strip():
+                        continue
                     # Simple parsing - PostgreSQL log format varies
-                    log_entry = {"raw": line, "level": "LOG"}
-                    if "ERROR" in line.upper():
-                        log_entry["level"] = "ERROR"
-                    elif "WARNING" in line.upper():
-                        log_entry["level"] = "WARNING"
-                    elif "FATAL" in line.upper():
-                        log_entry["level"] = "FATAL"
-                    elif "PANIC" in line.upper():
-                        log_entry["level"] = "PANIC"
+                    log_entry = {"raw": line, "level": "LOG", "timestamp": "", "message": line}
+
+                    # Try to extract timestamp (common formats: "2024-01-15 10:30:45..." or ISO)
+                    # PostgreSQL typically starts lines with timestamp
+                    if len(line) > 19 and (line[4] == '-' or line[10] == 'T' or line[10] == ' '):
+                        # Likely starts with a timestamp
+                        # Try splitting at known level keywords
+                        for lvl in ("FATAL", "PANIC", "ERROR", "WARNING", "LOG", "NOTICE", "INFO", "DEBUG"):
+                            idx = line.find(f" {lvl}:")
+                            if idx == -1:
+                                idx = line.find(f" {lvl}  ")
+                            if idx > 0:
+                                log_entry["timestamp"] = line[:idx].strip()
+                                log_entry["level"] = lvl
+                                log_entry["message"] = line[idx + len(lvl) + 2:].strip().lstrip(":")
+                                break
+                        else:
+                            # No level keyword found, use first ~23 chars as timestamp
+                            log_entry["timestamp"] = line[:23].strip()
+                            log_entry["message"] = line[23:].strip()
+                    else:
+                        # Detect level even without timestamp
+                        for lvl in ("FATAL", "PANIC", "ERROR", "WARNING", "LOG"):
+                            if lvl in line.upper():
+                                log_entry["level"] = lvl
+                                break
 
                     # Filter by level if specified
                     if level and log_entry["level"].upper() != level.upper():

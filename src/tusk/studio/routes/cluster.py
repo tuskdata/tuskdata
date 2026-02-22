@@ -3,11 +3,13 @@
 import asyncio
 import subprocess
 from datetime import datetime
-from litestar import Controller, get, post, delete
+from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
+from litestar.response import Template
 import msgspec
 
 from tusk.core.logging import get_logger
+from tusk.studio.htmx import is_htmx, htmx_toast
 
 log = get_logger("cluster_api")
 
@@ -39,7 +41,7 @@ class ClusterController(Controller):
     path = "/api/cluster"
 
     @get("/status")
-    async def get_status(self) -> dict:
+    async def get_status(self, request: Request) -> dict | Template:
         """Get overall cluster status"""
         workers = list(_cluster_state["workers"].values())
         jobs = list(_cluster_state["jobs"].values())
@@ -47,6 +49,18 @@ class ClusterController(Controller):
         online_workers = sum(1 for w in workers if w.get("status") != "offline")
         active_jobs = sum(1 for j in jobs if j.get("status") == "running")
         completed_jobs = sum(1 for j in jobs if j.get("status") == "completed")
+        total_bytes = sum(w.get("bytes_processed", 0) for w in workers)
+
+        if is_htmx(request):
+            return Template(
+                "partials/cluster/status.html",
+                context={
+                    "workers_online": online_workers,
+                    "active_jobs": active_jobs,
+                    "completed_jobs": completed_jobs,
+                    "total_bytes": _format_bytes(total_bytes),
+                },
+            )
 
         return {
             "scheduler_online": _cluster_state["scheduler"] is not None,
@@ -55,15 +69,15 @@ class ClusterController(Controller):
             "workers_total": len(workers),
             "active_jobs": active_jobs,
             "completed_jobs": completed_jobs,
-            "total_bytes_processed": sum(w.get("bytes_processed", 0) for w in workers),
+            "total_bytes_processed": total_bytes,
         }
 
     @get("/workers")
-    async def list_workers(self) -> dict:
+    async def list_workers(self, request: Request) -> dict | Template:
         """List all workers with metrics"""
         workers = []
         for worker_id, worker in _cluster_state["workers"].items():
-            workers.append({
+            w = {
                 "id": worker_id,
                 "address": worker.get("address", "unknown"),
                 "port": worker.get("port", 0),
@@ -71,10 +85,19 @@ class ClusterController(Controller):
                 "cpu_percent": worker.get("cpu_percent", 0),
                 "memory_mb": worker.get("memory_mb", 0),
                 "memory_percent": worker.get("memory_percent", 0),
+                "memory_display": _format_bytes(worker.get("memory_mb", 0) * 1024 * 1024),
                 "last_heartbeat": worker.get("last_heartbeat"),
                 "jobs_completed": worker.get("jobs_completed", 0),
                 "bytes_processed": worker.get("bytes_processed", 0),
-            })
+            }
+            workers.append(w)
+
+        if is_htmx(request):
+            return Template(
+                "partials/cluster/workers.html",
+                context={"workers": workers},
+            )
+
         return {"workers": workers}
 
     @post("/workers/register")
@@ -125,7 +148,7 @@ class ClusterController(Controller):
         return {"error": "Worker not found"}
 
     @get("/jobs")
-    async def list_jobs(self) -> dict:
+    async def list_jobs(self, request: Request) -> dict | Template:
         """List all jobs"""
         jobs = []
         for job_id, job in _cluster_state["jobs"].items():
@@ -146,6 +169,15 @@ class ClusterController(Controller):
 
         # Sort by created_at descending
         jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
+
+        if is_htmx(request):
+            active = [j for j in jobs if j["status"] in ("running", "pending")]
+            history = [j for j in jobs if j["status"] not in ("running", "pending")]
+            return Template(
+                "partials/cluster/jobs.html",
+                context={"active_jobs": active, "history_jobs": history[:20]},
+            )
+
         return {"jobs": jobs}
 
     @get("/jobs/{job_id:str}")
@@ -157,10 +189,13 @@ class ClusterController(Controller):
         return job
 
     @post("/jobs")
-    async def submit_job(self, data: dict = Body()) -> dict:
+    async def submit_job(self, request: Request, data: dict = Body()) -> dict | Template:
         """Submit a new job"""
         sql = data.get("sql")
         if not sql:
+            if is_htmx(request):
+                from litestar.response import Response
+                return Response(content="", status_code=200, headers=htmx_toast("Please enter a SQL query", "warning"))
             return {"error": "SQL query required"}
 
         from uuid import uuid4
@@ -412,6 +447,17 @@ class ClusterController(Controller):
         except Exception as e:
             log.error("Failed to stop local cluster", error=str(e))
             return {"error": str(e)}
+
+
+def _format_bytes(b: int | float) -> str:
+    """Format bytes to human-readable string."""
+    if b == 0:
+        return "0 B"
+    k = 1024
+    sizes = ["B", "KB", "MB", "GB", "TB"]
+    import math
+    i = int(math.floor(math.log(max(b, 1)) / math.log(k)))
+    return f"{b / k**i:.1f} {sizes[min(i, len(sizes)-1)]}"
 
 
 async def _simulate_job(job_id: str) -> None:

@@ -1,0 +1,74 @@
+{% if sources | length == 0 %}
+<div class="text-center text-[#8b949e] py-8 space-y-2">
+    <i data-lucide="download-cloud" class="w-8 h-8 mx-auto opacity-40"></i>
+    <p class="text-sm">No download sources configured.</p>
+    <p class="text-xs">Add a source to start downloading data files.</p>
+</div>
+{% else %}
+<div class="space-y-1">
+    {% for source in sources %}
+    <div class="group flex items-center gap-2 px-3 py-2 rounded hover:bg-[#161b22] cursor-pointer"
+         x-data="{ expanded: false }">
+        <div class="flex-1 min-w-0" @click="expanded = !expanded">
+            <div class="flex items-center gap-2">
+                {% if source.last_status == 'ok' %}
+                <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+                {% elif source.last_status == 'failed' %}
+                <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
+                {% elif source.last_status == 'unchanged' %}
+                <span class="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0"></span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0"></span>
+                {% endif %}
+                <span class="text-sm truncate">{{ source.name }}</span>
+            </div>
+            <div class="text-[10px] text-[#484f58] truncate ml-4" x-show="!expanded">
+                {{ source.url | truncate(length=50) }}
+            </div>
+        </div>
+
+        <!-- Quick download button -->
+        <button
+            class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#21262d]"
+            hx-post="/api/downloads/sources/{{ source.id }}/download"
+            hx-target="#downloads-list"
+            hx-swap="innerHTML"
+            hx-indicator="#dl-spinner-{{ source.id }}"
+            title="Download now"
+        >
+            <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-400"></i>
+        </button>
+        <span id="dl-spinner-{{ source.id }}" class="htmx-indicator">
+            <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-[#484f58]"></i>
+        </span>
+
+        <!-- Delete button -->
+        <button
+            class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#21262d]"
+            hx-delete="/api/downloads/sources/{{ source.id }}"
+            hx-target="#downloads-list"
+            hx-swap="innerHTML"
+            hx-confirm="Delete source '{{ source.name }}'?"
+            title="Delete source"
+        >
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i>
+        </button>
+
+        <!-- Expanded details -->
+        <div x-show="expanded" x-cloak class="absolute left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-lg p-3 shadow-lg z-10 text-xs space-y-1"
+             @click.outside="expanded = false" style="top: 100%; position: relative;">
+            <div><span class="text-[#484f58]">URL:</span> <span class="text-[#8b949e] break-all">{{ source.url }}</span></div>
+            {% if source.schedule %}
+            <div><span class="text-[#484f58]">Schedule:</span> <span class="text-[#8b949e]">{{ source.schedule }}</span></div>
+            {% endif %}
+            {% if source.last_downloaded %}
+            <div><span class="text-[#484f58]">Last:</span> <span class="text-[#8b949e]">{{ source.last_downloaded }}</span></div>
+            {% endif %}
+            {% if source.last_size > 0 %}
+            <div><span class="text-[#484f58]">Size:</span> <span class="text-[#8b949e]">{{ source.last_size | filesizeformat }}</span></div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

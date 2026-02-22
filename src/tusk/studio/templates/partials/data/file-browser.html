@@ -1,0 +1,21 @@
+{# File browser items — HTMX partial #}
+{% if items %}
+    {% for item in items %}
+    {% if item.type == "directory" %}
+    <div class="browser-item flex items-center gap-3 px-3 py-2 hover:bg-[#21262d] rounded-lg cursor-pointer"
+         @click="browseTo('{{ item.path }}')">
+        <i data-lucide="folder" class="w-5 h-5 text-yellow-500"></i>
+        <span class="flex-1">{{ item.name }}</span>
+    </div>
+    {% else %}
+    <div class="browser-item flex items-center gap-3 px-3 py-2 hover:bg-[#21262d] rounded-lg cursor-pointer"
+         @click="selectBrowserFile('{{ item.path }}')">
+        <i data-lucide="file" class="w-5 h-5 text-indigo-400"></i>
+        <span class="flex-1">{{ item.name }}</span>
+        <span class="text-xs text-gray-500">{{ item.size }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+{% else %}
+    <div class="text-gray-500 text-center py-8">No data files found</div>
+{% endif %}

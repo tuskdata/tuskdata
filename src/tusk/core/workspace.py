@@ -5,6 +5,7 @@ Saves and loads workspace state (datasets, transforms, join sources) to ~/.tusk/
 
 from pathlib import Path
 from datetime import datetime
+import tempfile
 import msgspec
 import structlog
 
@@ -26,6 +27,7 @@ class DatasetState(msgspec.Struct):
     osm_layer: str | None = None
     transforms: list[dict] = msgspec.field(default_factory=list)
     join_sources: list[dict] = msgspec.field(default_factory=list)
+    cluster_enabled: bool = False  # Available as table in Cluster
 
 
 class WorkspaceState(msgspec.Struct):
@@ -49,8 +51,16 @@ def save_workspace(state: WorkspaceState) -> dict:
         state.updated_at = datetime.now().isoformat()
 
         path = _workspace_path(state.name)
-        with open(path, "wb") as f:
-            f.write(msgspec.json.encode(state))
+
+        # Atomic write: write to temp file then rename
+        fd, tmp_path = tempfile.mkstemp(dir=WORKSPACES_DIR, suffix=".tmp")
+        try:
+            with open(fd, "wb") as f:
+                f.write(msgspec.json.encode(state))
+            Path(tmp_path).replace(path)
+        except:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
 
         log.info("Workspace saved", name=state.name, datasets=len(state.datasets))
         return {"success": True, "path": str(path)}
@@ -121,7 +131,8 @@ def workspace_state_from_dict(data: dict) -> WorkspaceState:
             query=ds.get("query"),
             osm_layer=ds.get("osm_layer"),
             transforms=ds.get("transforms", []),
-            join_sources=ds.get("joinSources", [])
+            join_sources=ds.get("joinSources", []),
+            cluster_enabled=ds.get("cluster_enabled", False)
         ))
 
     return WorkspaceState(
@@ -145,10 +156,69 @@ def workspace_state_to_dict(state: WorkspaceState) -> dict:
                 "query": ds.query,
                 "osm_layer": ds.osm_layer,
                 "transforms": ds.transforms,
-                "joinSources": ds.join_sources
+                "joinSources": ds.join_sources,
+                "cluster_enabled": ds.cluster_enabled
             }
             for ds in state.datasets
         ],
         "active_dataset_id": state.active_dataset_id,
         "updated_at": state.updated_at
     }
+
+
+def get_cluster_catalog() -> list[dict]:
+    """Get all datasets enabled for cluster.
+
+    Returns list of tables for DataFusion registration:
+    [{"name": "ventas", "path": "/data/ventas.parquet", "format": "parquet"}, ...]
+    """
+    from pathlib import Path
+
+    catalog = []
+
+    # Check all workspaces
+    if not WORKSPACES_DIR.exists():
+        return catalog
+
+    for workspace_path in WORKSPACES_DIR.glob("*.json"):
+        try:
+            with open(workspace_path, "rb") as f:
+                state = msgspec.json.decode(f.read(), type=WorkspaceState)
+
+            for ds in state.datasets:
+                if not ds.cluster_enabled or not ds.path:
+                    continue
+
+                # Determine format from extension
+                p = Path(ds.path).expanduser()
+                suffix = p.suffix.lower()
+
+                format_map = {
+                    ".parquet": "parquet",
+                    ".csv": "csv",
+                    ".tsv": "csv",
+                    ".json": "json",
+                }
+
+                file_format = format_map.get(suffix)
+                if not file_format:
+                    continue  # Skip unsupported formats
+
+                # Use dataset name as table name (sanitized, no extension)
+                raw_name = ds.name
+                # Strip file extension if present
+                if "." in raw_name:
+                    raw_name = raw_name.rsplit(".", 1)[0]
+                table_name = raw_name.lower().replace(" ", "_").replace("-", "_")
+
+                catalog.append({
+                    "name": table_name,
+                    "path": str(p),
+                    "format": file_format,
+                    "dataset_id": ds.id,
+                    "workspace": state.name,
+                })
+        except Exception:
+            continue
+
+    return catalog

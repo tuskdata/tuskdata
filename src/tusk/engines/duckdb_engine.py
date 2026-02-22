@@ -95,6 +95,29 @@ class DuckDBEngine:
                     ColumnInfo(name=desc[0], type=str(desc[1]))
                     for desc in result.description
                 ]
+
+                # Detect GEOMETRY columns and re-execute with ST_AsGeoJSON
+                geo_cols = [
+                    i for i, desc in enumerate(result.description)
+                    if str(desc[1]).upper() in ("GEOMETRY", "GEOGRAPHY")
+                ]
+
+                if geo_cols:
+                    try:
+                        wrapped = []
+                        for i, desc in enumerate(result.description):
+                            col_name = desc[0].replace('"', '""')
+                            if i in geo_cols:
+                                wrapped.append(f'ST_AsGeoJSON("{col_name}") AS "{col_name}"')
+                            else:
+                                wrapped.append(f'"{col_name}"')
+                        wrapped_sql = f"SELECT {', '.join(wrapped)} FROM ({sql}) AS _tusk_geo"
+                        result = self.conn.execute(wrapped_sql)
+                        for i in geo_cols:
+                            columns[i] = ColumnInfo(name=columns[i].name, type="GEOMETRY")
+                    except Exception:
+                        pass  # Fall through to fetch raw if wrapping fails
+
                 rows = result.fetchall()
 
             elapsed = (time.perf_counter() - start) * 1000
@@ -149,11 +172,11 @@ class DuckDBEngine:
         path = str(Path(path).expanduser())
         try:
             # Get row count
-            result = self.conn.execute(f"SELECT count(*) FROM read_csv_auto('{path}')")
+            result = self.conn.execute(f"SELECT count(*) FROM read_csv_auto('{path}', max_line_size=20000000)")
             row_count = result.fetchone()[0]
 
             # Get schema
-            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{path}')")
+            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{path}', max_line_size=20000000)")
             columns = [
                 {"name": row[0], "type": row[1]}
                 for row in schema_result.fetchall()
@@ -207,9 +230,9 @@ class DuckDBEngine:
         if file_type == "parquet":
             return self.execute(f"SELECT * FROM read_parquet('{path}') LIMIT {limit}")
         elif file_type in ("csv", "tsv"):
-            return self.execute(f"SELECT * FROM read_csv_auto('{path}') LIMIT {limit}")
+            return self.execute(f"SELECT * FROM read_csv_auto('{path}', max_line_size=20000000) LIMIT {limit}")
         elif file_type == "json":
-            return self.execute(f"SELECT * FROM read_json_auto('{path}') LIMIT {limit}")
+            return self.execute(f"SELECT * FROM read_json_auto('{path}', maximum_object_size=134217728) LIMIT {limit}")
         else:
             return QueryResult.from_error(f"Unsupported file type: {file_type}")
 

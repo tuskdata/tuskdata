@@ -1,0 +1,128 @@
+{# Layout Components
+
+   Macros: page_header, section_card, info_item, info_grid, collapsible
+#}
+
+{% macro page_header(title, back_url="", description="") %}
+{# Page header with optional back arrow, title, and action buttons area.
+
+   Args:
+       title: Page title (h1)
+       back_url: URL for back arrow (empty = no arrow)
+       description: Optional subtitle text
+
+   Usage:
+       {% call page_header("Pipeline Details", back_url="/ci") %}
+           <button class="...">Run Now</button>
+       {% endcall %}
+#}
+<div class="flex items-center justify-between">
+    <div>
+        <div class="flex items-center gap-3">
+            {% if back_url %}
+            <a href="{{ back_url }}" class="text-[#8b949e] hover:text-white">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </a>
+            {% endif %}
+            <h1 class="text-xl font-bold">{{ title }}</h1>
+        </div>
+        {% if description %}
+        <p class="text-sm text-[#8b949e] mt-1 {% if back_url %}ml-7{% endif %}">{{ description }}</p>
+        {% endif %}
+    </div>
+    <div class="flex items-center gap-2">
+        {{ caller() }}
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro section_card(title, subtitle="", icon="") %}
+{# Card with header bar and content. Content has NO padding — caller controls it.
+   Use for tables, lists, editors that need to go edge-to-edge inside the card.
+
+   Args:
+       title: Section title in header
+       subtitle: Optional right-aligned text in header
+       icon: Optional Lucide icon before title
+
+   Usage:
+       {% call section_card("Run History") %}
+           <table>...</table>
+       {% endcall %}
+#}
+<div class="card overflow-hidden">
+    <div class="p-4 border-b border-[#21262d] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            {% if icon %}
+            <i data-lucide="{{ icon }}" class="w-4 h-4 text-[#8b949e]"></i>
+            {% endif %}
+            <h2 class="font-semibold">{{ title }}</h2>
+        </div>
+        {% if subtitle %}
+        <span class="text-xs text-[#8b949e]">{{ subtitle }}</span>
+        {% endif %}
+    </div>
+    {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{% macro info_item(label, value, mono=false) %}
+{# Single label+value card cell for use inside info_grid.
+
+   Args:
+       label: Top label text
+       value: Value to display
+       mono: Use monospace font for value
+#}
+<div class="card p-3">
+    <div class="text-[#8b949e] text-xs mb-1">{{ label }}</div>
+    <div class="{% if mono %}font-mono text-xs{% endif %} truncate">{{ value }}</div>
+</div>
+{% endmacro %}
+
+
+{% macro info_grid(cols=4) %}
+{# Grid container for info_item cards.
+
+   Args:
+       cols: Number of columns (2, 3, or 4)
+
+   Usage:
+       {% call info_grid(4) %}
+           {{ info_item("Branch", "main", mono=true) }}
+           {{ info_item("Stages", "3 stages") }}
+       {% endcall %}
+#}
+<div class="grid grid-cols-{{ cols }} gap-4 text-sm">
+    {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{% macro collapsible(title, expanded=true, id="") %}
+{# Collapsible section with Alpine.js toggle and chevron animation.
+
+   Args:
+       title: Section header text
+       expanded: Start expanded or collapsed
+       id: Optional DOM id
+
+   Usage:
+       {% call collapsible("Full Log", expanded=false) %}
+           <pre>...</pre>
+       {% endcall %}
+#}
+<div x-data="{ show: {{ 'true' if expanded else 'false' }} }" {% if id %}id="{{ id }}"{% endif %}>
+    <div class="p-4 border-b border-[#21262d] flex items-center justify-between cursor-pointer"
+         @click="show = !show">
+        <h2 class="font-semibold">{{ title }}</h2>
+        <i data-lucide="chevron-down" class="w-4 h-4 text-[#484f58] transition-transform"
+           :class="show ? 'rotate-180' : ''"></i>
+    </div>
+    <div x-show="show" x-cloak>
+        {{ caller() }}
+    </div>
+</div>
+{% endmacro %}
