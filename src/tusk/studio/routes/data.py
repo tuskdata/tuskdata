@@ -20,7 +20,7 @@ from tusk.engines.polars_engine import (
     Pipeline, DataSource, Transform,
     FilterTransform, SelectTransform, RenameTransform, SortTransform,
     GroupByTransform, AddColumnTransform, DropNullsTransform,
-    LimitTransform, JoinTransform,
+    LimitTransform, JoinTransform, ConcatTransform, DistinctTransform, WindowTransform,
     generate_code, execute_pipeline, get_schema, preview_file as polars_preview_file, get_osm_layers,
     export_to_csv, export_to_parquet, import_to_duckdb, import_to_postgres
 )
@@ -54,27 +54,29 @@ def _get_cache_path(file_path: Path) -> Path | None:
 
 def _build_cache(file_path: Path, file_type: str, engine: DuckDBEngine) -> Path | None:
     """Convert CSV/JSON to Parquet cache. Returns cache path on success."""
+    from tusk.engines.duckdb_engine import _safe_path, _escape_duckdb_string
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         cache = CACHE_DIR / f"{_cache_key(file_path)}.parquet"
         if cache.exists():
             return cache
 
-        fp = str(file_path)
+        safe_fp = _safe_path(str(file_path))
+        safe_cache = _escape_duckdb_string(str(cache.resolve()))
         if file_type in ("csv", "tsv"):
             engine.conn.execute(
-                f"COPY (SELECT * FROM read_csv_auto('{fp}', max_line_size=20000000)) "
-                f"TO '{cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+                f"COPY (SELECT * FROM read_csv_auto('{safe_fp}', max_line_size=20000000)) "
+                f"TO '{safe_cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
             )
         elif file_type == "json":
             engine.conn.execute(
-                f"COPY (SELECT * FROM read_json_auto('{fp}', maximum_object_size=134217728)) "
-                f"TO '{cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+                f"COPY (SELECT * FROM read_json_auto('{safe_fp}', maximum_object_size=134217728)) "
+                f"TO '{safe_cache}' (FORMAT PARQUET, COMPRESSION ZSTD)"
             )
         else:
             return None
 
-        log.info("Parquet cache built", source=fp, cache=str(cache),
+        log.info("Parquet cache built", source=str(file_path), cache=str(cache),
                  size_mb=round(cache.stat().st_size / 1048576, 1))
         return cache
     except Exception as e:
@@ -731,18 +733,36 @@ class DataController(Controller):
     @post("/upload")
     async def upload_file(self, data: UploadFile) -> dict:
         """Upload a data file for processing"""
+        # Allowed file extensions for data files
+        ALLOWED_EXTENSIONS = {".csv", ".tsv", ".json", ".parquet", ".xlsx", ".xls",
+                              ".geojson", ".gpkg", ".pbf", ".shp", ".zip", ".gz", ".tar"}
+        MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
+
         try:
             # Get uploads directory (create if needed)
             uploads_dir = Path(tempfile.gettempdir()) / "tusk_uploads"
             uploads_dir.mkdir(exist_ok=True)
 
+            # Validate filename — strip path components to prevent traversal
+            raw_filename = data.filename or "uploaded_file"
+            filename = Path(raw_filename).name  # Strip any directory components
+            if not filename:
+                return {"error": "Invalid filename"}
+
+            # Validate extension
+            suffix = Path(filename).suffix.lower()
+            if suffix not in ALLOWED_EXTENSIONS:
+                return {"error": f"File type '{suffix}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"}
+
             # Generate unique filename to avoid conflicts
-            filename = data.filename or "uploaded_file"
             unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
             file_path = uploads_dir / unique_name
 
-            # Save the uploaded file
+            # Save the uploaded file with size limit check
             content = await data.read()
+            if len(content) > MAX_UPLOAD_SIZE:
+                return {"error": f"File too large ({len(content) / 1048576:.0f} MB). Maximum: {MAX_UPLOAD_SIZE / 1048576:.0f} MB"}
+
             with open(file_path, "wb") as f:
                 f.write(content)
 
@@ -951,6 +971,26 @@ def _parse_transform(t: dict) -> Transform | None:
                 left_on=t.get("left_on"),
                 right_on=t.get("right_on"),
                 how=t.get("how", "inner")
+            )
+        elif transform_type == "concat":
+            return ConcatTransform(
+                source_ids=t["source_ids"],
+                how=t.get("how", "vertical")
+            )
+        elif transform_type == "distinct":
+            return DistinctTransform(
+                subset=t.get("subset"),
+                keep=t.get("keep", "first")
+            )
+        elif transform_type == "window":
+            return WindowTransform(
+                function=t["function"],
+                order_by=t["order_by"],
+                partition_by=t.get("partition_by"),
+                alias=t.get("alias", "window_col"),
+                descending=t.get("descending", False),
+                column=t.get("column"),
+                offset=t.get("offset", 1),
             )
     except (KeyError, TypeError) as e:
         pass

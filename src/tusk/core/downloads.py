@@ -251,15 +251,25 @@ def _resolve_output_path(source: DownloadSource, backend: StorageBackend | None)
     """Determine local output path for a download."""
     base_dir = DOWNLOADS_DIR
     if backend and backend.type == "local" and backend.path:
-        base_dir = Path(backend.path).expanduser()
+        base_dir = Path(backend.path).expanduser().resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    # Derive filename from URL
+    # Derive filename from URL — sanitize to prevent path traversal
     url_path = source.url.rstrip("/").split("/")[-1].split("?")[0]
     if not url_path or url_path == "":
         url_path = f"{source.id}.download"
 
-    return base_dir / url_path
+    # Strip any directory components (e.g. "../" or absolute paths)
+    safe_name = Path(url_path).name
+    if not safe_name:
+        safe_name = f"{source.id}.download"
+
+    output = base_dir / safe_name
+    # Verify the resolved path stays within base_dir
+    if not str(output.resolve()).startswith(str(base_dir.resolve())):
+        output = base_dir / f"{source.id}.download"
+
+    return output
 
 
 def _decompress(file_path: Path) -> Path:
@@ -279,7 +289,17 @@ def _decompress(file_path: Path) -> Path:
         out_dir = file_path.parent / file_path.stem
         out_dir.mkdir(exist_ok=True)
         with zipfile.ZipFile(file_path, "r") as zf:
-            zf.extractall(out_dir)
+            # Validate all entries to prevent zip slip (path traversal)
+            for member in zf.namelist():
+                member_path = (out_dir / member).resolve()
+                if not str(member_path).startswith(str(out_dir.resolve())):
+                    log.warning("Zip slip attempt blocked", member=member)
+                    continue
+            # Extract only safe members
+            for member in zf.namelist():
+                member_path = (out_dir / member).resolve()
+                if str(member_path).startswith(str(out_dir.resolve())):
+                    zf.extract(member, out_dir)
         file_path.unlink()
         # Return the directory or first file
         files = list(out_dir.iterdir())
@@ -292,7 +312,15 @@ def _decompress(file_path: Path) -> Path:
         out_dir = file_path.parent / file_path.stem.replace(".tar", "")
         out_dir.mkdir(exist_ok=True)
         with tarfile.open(file_path, "r:gz") as tf:
-            tf.extractall(out_dir, filter="data")
+            # Filter out members with absolute paths or traversal
+            safe_members = []
+            for member in tf.getmembers():
+                member_path = (out_dir / member.name).resolve()
+                if str(member_path).startswith(str(out_dir.resolve())):
+                    safe_members.append(member)
+                else:
+                    log.warning("Tar path traversal blocked", member=member.name)
+            tf.extractall(out_dir, members=safe_members, filter="data")
         file_path.unlink()
         log.info("Decompressed tar.gz", output=str(out_dir))
         return out_dir

@@ -14,9 +14,13 @@ from tusk.core.connection import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_connections():
-    """Clear in-memory connection registry between tests."""
+def _clear_connections(monkeypatch):
+    """Clear in-memory connection registry between tests.
+
+    Also prevents save_connections_to_file from overwriting real connections.
+    """
     _connections.clear()
+    monkeypatch.setattr("tusk.core.connection.save_connections_to_file", lambda: None)
     yield
     _connections.clear()
 
@@ -76,7 +80,7 @@ class TestConnectionCRUD:
 
     def test_add_and_get(self):
         config = ConnectionConfig(name="test", type="postgres", host="localhost")
-        conn_id = add_connection(config)
+        conn_id = add_connection(config, persist=False)
         assert conn_id == config.id
 
         result = get_connection(conn_id)
@@ -84,14 +88,14 @@ class TestConnectionCRUD:
         assert result.name == "test"
 
     def test_list_connections(self):
-        add_connection(ConnectionConfig(name="conn1", type="postgres", host="h1"))
-        add_connection(ConnectionConfig(name="conn2", type="postgres", host="h2"))
+        add_connection(ConnectionConfig(name="conn1", type="postgres", host="h1"), persist=False)
+        add_connection(ConnectionConfig(name="conn2", type="postgres", host="h2"), persist=False)
         conns = list_connections()
         assert len(conns) == 2
 
     def test_delete_connection(self):
         config = ConnectionConfig(name="test", type="postgres", host="localhost")
-        add_connection(config)
+        add_connection(config, persist=False)
         assert delete_connection(config.id) is True
         assert get_connection(config.id) is None
 
@@ -100,7 +104,7 @@ class TestConnectionCRUD:
 
     def test_update_connection(self):
         config = ConnectionConfig(name="old", type="postgres", host="localhost")
-        add_connection(config)
+        add_connection(config, persist=False)
         updated = update_connection(config.id, name="new")
         assert updated is not None
         assert updated.name == "new"

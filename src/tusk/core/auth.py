@@ -2,6 +2,8 @@
 
 import hashlib
 import secrets
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -13,6 +15,44 @@ from tusk.core.config import get_config
 
 # Auth database path
 AUTH_DB = Path.home() / ".tusk" / "users.db"
+
+
+# ============================================================================
+# Rate Limiter (in-memory, per-IP)
+# ============================================================================
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = 5  # max attempts per window
+
+
+def check_login_rate_limit(ip: str) -> bool:
+    """Check if IP is within rate limit. Returns True if allowed."""
+    now = time.monotonic()
+    # Prune old entries
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_LIMIT_WINDOW]
+    return len(_login_attempts[ip]) < _RATE_LIMIT_MAX
+
+
+def record_login_attempt(ip: str) -> None:
+    """Record a login attempt for rate limiting."""
+    _login_attempts[ip].append(time.monotonic())
+
+
+# ============================================================================
+# CSRF Token Management
+# ============================================================================
+
+def generate_csrf_token() -> str:
+    """Generate a cryptographically secure CSRF token."""
+    return secrets.token_urlsafe(32)
+
+
+def validate_csrf_token(session_token: str, request_token: str) -> bool:
+    """Validate CSRF token from request matches session token."""
+    if not session_token or not request_token:
+        return False
+    return secrets.compare_digest(session_token, request_token)
 
 
 class User(msgspec.Struct):
@@ -217,23 +257,41 @@ def init_auth_db() -> None:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256 with salt (simple implementation)
+    """Hash a password using argon2id (recommended by OWASP).
 
-    For production, use bcrypt. This is a simpler version to avoid
-    additional dependencies.
+    Falls back to SHA-256 with salt if argon2-cffi is not installed.
     """
-    salt = secrets.token_hex(16)
-    hash_obj = hashlib.sha256((salt + password).encode())
-    return f"{salt}${hash_obj.hexdigest()}"
+    try:
+        from argon2 import PasswordHasher
+        ph = PasswordHasher()
+        return "argon2$" + ph.hash(password)
+    except ImportError:
+        # Fallback to SHA-256 if argon2-cffi not installed
+        salt = secrets.token_hex(16)
+        hash_obj = hashlib.sha256((salt + password).encode())
+        return f"{salt}${hash_obj.hexdigest()}"
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its hash"""
+    """Verify a password against its hash.
+
+    Supports both argon2 (preferred) and legacy SHA-256 hashes.
+    """
     try:
-        salt, stored_hash = password_hash.split("$")
-        hash_obj = hashlib.sha256((salt + password).encode())
-        return hash_obj.hexdigest() == stored_hash
-    except (ValueError, AttributeError):
+        if password_hash.startswith("argon2$"):
+            from argon2 import PasswordHasher
+            from argon2.exceptions import VerifyMismatchError
+            ph = PasswordHasher()
+            try:
+                return ph.verify(password_hash[7:], password)
+            except VerifyMismatchError:
+                return False
+        else:
+            # Legacy SHA-256 format: salt$hash
+            salt, stored_hash = password_hash.split("$")
+            hash_obj = hashlib.sha256((salt + password).encode())
+            return hash_obj.hexdigest() == stored_hash
+    except (ValueError, AttributeError, ImportError):
         return False
 
 

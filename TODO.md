@@ -431,6 +431,89 @@
 
 ---
 
+## v0.2.1: Security Hardening + ETL Overhaul — DONE ✅
+
+> **Goal**: Fix critical security issues, make ETL actually usable for multi-source workflows
+> **Target**: Production-safe core, real multi-source pipelines
+
+### P0 — Security Fixes (must ship)
+- [x] Password hashing: SHA-256 → argon2/bcrypt (`core/auth.py`)
+- [x] Fix SQL injection in role management (`admin/roles.py`)
+- [x] Fix directory traversal in backup delete (`admin/backup.py`)
+- [x] Fix PGPASSWORD exposure in environment (`admin/backup.py`)
+- [x] Fix SQL injection in DuckDB file paths (`duckdb_engine.py`)
+- [x] Fix path traversal in downloads (`core/downloads.py`)
+- [x] Fix command injection in post_download_hook (`routes/downloads.py`)
+- [x] Add file upload validation (size + type) (`routes/data.py`)
+- [x] Add CSRF protection on POST/PUT/DELETE endpoints
+- [x] Add rate limiting on login endpoint (`routes/auth.py`)
+- [x] Add auth checks to admin endpoints (`routes/admin.py`)
+- [x] Add auth checks to cluster endpoints (`cluster/routes/api.py`)
+- [x] Fix ZIP extraction path traversal (`core/downloads.py`)
+- [x] Fix OSM SQL injection in polars_engine.py
+- [x] Fix XSS in MapLibre popups and tab names
+
+### P1 — ETL Pipeline Overhaul
+- [x] Multi-source pipelines: chained joins (A JOIN B → result JOIN C)
+- [x] UNION / APPEND multiple sources
+- [x] Multiple aggregations per group_by (UI fix — backend already supports it)
+- [x] DISTINCT / dedup transform
+- [x] Preview right table in join UI (show columns)
+- [x] Window functions (row_number, rank, dense_rank, lag, lead, cum_sum, cum_max, cum_min)
+
+### P2 — Bug Fixes
+- [x] Fix missing `log` import in `admin/backup.py` (RuntimeError)
+- [ ] Fix missing `import msgspec` in tusk-ci `api.py`
+- [ ] Fix missing `_parse_discovery()` in tusk-ci
+- [x] Fix `connection.py` auto-save on add/delete/update (changes lost on restart)
+- [x] Fix bare `except:` in `workspace.py` (catches KeyboardInterrupt)
+
+### P3 — Stability & Polish
+- [x] Connection pooling for PostgreSQL (psycopg_pool)
+- [x] Query timeout enforcement (TUSK_QUERY_TIMEOUT env, default 5 min)
+- [x] HTMX error states (htmx:sendError, htmx:responseError handlers)
+- [x] CSRF double-submit cookie middleware
+- [x] Session cleanup scheduler (hourly)
+- [x] Temp export file cleanup scheduler (every 30 min)
+- [ ] Clean empty catch blocks in frontend JS
+- [ ] Fetch timeouts in frontend
+- [ ] Fix memory leaks (setInterval, event listeners)
+- [ ] Tests for engines and routes
+
+---
+
+## v0.3.0: Ibis Unified DataFrame API — PLANNED 📋
+
+> **Goal**: Replace direct Polars dependency with Ibis as universal DataFrame API
+> **Why**: Single pipeline definition that compiles to Polars, Pandas, DuckDB, DataFusion, or PostgreSQL
+
+### Core
+- [ ] Add `ibis-framework` as dependency
+- [ ] Create `tusk/engines/ibis_engine.py` — unified pipeline execution layer
+- [ ] Pipeline model targets Ibis expressions instead of Polars-specific code
+- [ ] Backend selector: Polars, Pandas, DuckDB, DataFusion (per pipeline or global)
+- [ ] Code generation outputs Ibis code (portable across backends)
+- [ ] Lazy evaluation by default (Ibis is lazy-first)
+
+### UI Changes
+- [ ] Engine/backend selector dropdown in Data tab (Polars / Pandas / DuckDB / DataFusion)
+- [ ] Show which backend is executing in status bar
+- [ ] "View Code" generates Ibis Python code (works with any backend)
+
+### Migration Path
+- [ ] Keep `polars_engine.py` as fallback for v0.2.x compatibility
+- [ ] Ibis engine as default, Polars engine as legacy option
+- [ ] Existing saved pipelines auto-convert to Ibis format
+
+### Benefits
+- Pandas users can use their preferred backend
+- DuckDB backend for large files (out-of-core processing)
+- DataFusion backend for distributed execution (integrates with tusk-cluster)
+- PostgreSQL backend for server-side execution (no data transfer)
+- Single API, multiple execution targets
+
+---
+
 ## Nice-to-haves (Deferred)
 
 - [x] Drag & drop files (data.html)

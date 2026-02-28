@@ -10,6 +10,7 @@ from tusk.studio.routes.data import DataController
 from tusk.studio.routes.auth import AuthController, UsersController, GroupsController, AuthSetupController, ProfileController, AuditLogController
 from tusk.studio.routes.scheduler import SchedulerController
 from tusk.studio.routes.downloads import DownloadsController
+from tusk.studio.routes.notifications import NotificationPageController, NotificationAPIController
 
 __all__ = [
     # Base
@@ -32,4 +33,6 @@ __all__ = [
     "AuditLogController",
     "SchedulerController",
     "DownloadsController",
+    "NotificationPageController",
+    "NotificationAPIController",
 ]

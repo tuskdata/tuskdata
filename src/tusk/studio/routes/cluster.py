@@ -6,10 +6,41 @@ from datetime import datetime
 from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
 from litestar.response import Template
+from litestar.exceptions import NotAuthorizedException
 import msgspec
 
 from tusk.core.logging import get_logger
+from tusk.core.config import get_config
 from tusk.studio.htmx import is_htmx, htmx_toast
+
+
+def _check_cluster_auth(connection: Request, _: object) -> None:
+    """Guard: require auth when auth_mode is 'multi'.
+
+    Worker registration/heartbeat endpoints are exempted
+    since they come from cluster workers, not browsers.
+    """
+    # Allow worker-to-scheduler API calls without session auth
+    path = connection.url.path
+    if any(p in path for p in ["/register", "/heartbeat", "/unregister"]):
+        return
+
+    config = get_config()
+    if config.auth_mode != "multi":
+        return
+
+    from tusk.core.auth import get_session, get_user_by_id
+    session_id = connection.cookies.get("tusk_session")
+    if not session_id:
+        raise NotAuthorizedException("Authentication required")
+
+    session = get_session(session_id)
+    if not session:
+        raise NotAuthorizedException("Invalid or expired session")
+
+    user = get_user_by_id(session.user_id)
+    if not user or not user.is_active:
+        raise NotAuthorizedException("User not found or inactive")
 
 log = get_logger("cluster_api")
 
@@ -39,6 +70,7 @@ class ClusterController(Controller):
     """API for Cluster management"""
 
     path = "/api/cluster"
+    guards = [_check_cluster_auth]
 
     @get("/status")
     async def get_status(self, request: Request) -> dict | Template:

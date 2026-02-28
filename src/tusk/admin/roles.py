@@ -1,8 +1,24 @@
 """PostgreSQL role/user management"""
 
+import re
+from datetime import datetime
 import msgspec
 from ..core.connection import ConnectionConfig
 from ..engines.postgres import execute_query
+
+# Valid role name: alphanumeric, underscores, hyphens (no SQL special chars)
+_VALID_ROLE_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_-]*$')
+
+
+def _validate_valid_until(value: str) -> bool:
+    """Validate that valid_until is a proper timestamp string."""
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            datetime.strptime(value, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 class Role(msgspec.Struct):
@@ -77,7 +93,7 @@ async def create_role(
     """Create a new role"""
 
     # Validate role name (prevent SQL injection)
-    if not name.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(name) or len(name) > 63:
         return {"success": False, "error": f"Invalid role name: {name}"}
 
     options = []
@@ -98,14 +114,11 @@ async def create_role(
         options.append("NOINHERIT")
 
     if connection_limit >= 0:
-        options.append(f"CONNECTION LIMIT {connection_limit}")
-
-    if password:
-        # Use parameterized approach isn't possible for DDL, so we escape
-        escaped_password = password.replace("'", "''")
-        options.append(f"PASSWORD '{escaped_password}'")
+        options.append(f"CONNECTION LIMIT {int(connection_limit)}")
 
     if valid_until:
+        if not _validate_valid_until(valid_until):
+            return {"success": False, "error": "Invalid valid_until format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS"}
         options.append(f"VALID UNTIL '{valid_until}'")
 
     sql = f'CREATE ROLE "{name}"'
@@ -115,10 +128,23 @@ async def create_role(
     try:
         await execute_query(config, sql)
 
+        # Set password separately using parameterized query via psycopg
+        # DDL can't use $1 params, but ALTER ROLE ... PASSWORD can use
+        # encrypted password via psycopg's safe escaping
+        if password:
+            import psycopg
+            dsn = config.dsn
+            async with await psycopg.AsyncConnection.connect(dsn) as conn:
+                # psycopg safely handles the password escaping
+                await conn.execute(
+                    f'ALTER ROLE "{name}" WITH PASSWORD %(pw)s',
+                    {"pw": password},
+                )
+
         # Grant membership in other roles
         if in_roles:
             for role in in_roles:
-                if role.replace("_", "").isalnum():
+                if _VALID_ROLE_RE.match(role):
                     await execute_query(config, f'GRANT "{role}" TO "{name}"')
 
         return {"success": True, "message": f"Role '{name}' created successfully"}
@@ -140,7 +166,7 @@ async def alter_role(
     """Alter an existing role"""
 
     # Validate role name
-    if not name.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(name) or len(name) > 63:
         return {"success": False, "error": f"Invalid role name: {name}"}
 
     options = []
@@ -154,20 +180,30 @@ async def alter_role(
     if createrole is not None:
         options.append("CREATEROLE" if createrole else "NOCREATEROLE")
     if connection_limit is not None:
-        options.append(f"CONNECTION LIMIT {connection_limit}")
-    if password:
-        escaped_password = password.replace("'", "''")
-        options.append(f"PASSWORD '{escaped_password}'")
+        options.append(f"CONNECTION LIMIT {int(connection_limit)}")
     if valid_until:
+        if not _validate_valid_until(valid_until):
+            return {"success": False, "error": "Invalid valid_until format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS"}
         options.append(f"VALID UNTIL '{valid_until}'")
 
-    if not options:
+    if not options and not password:
         return {"success": False, "error": "No changes specified"}
 
-    sql = f'ALTER ROLE "{name}" WITH ' + " ".join(options)
-
     try:
-        await execute_query(config, sql)
+        if options:
+            sql = f'ALTER ROLE "{name}" WITH ' + " ".join(options)
+            await execute_query(config, sql)
+
+        # Set password separately using parameterized query via psycopg
+        if password:
+            import psycopg
+            dsn = config.dsn
+            async with await psycopg.AsyncConnection.connect(dsn) as conn:
+                await conn.execute(
+                    f'ALTER ROLE "{name}" WITH PASSWORD %(pw)s',
+                    {"pw": password},
+                )
+
         return {"success": True, "message": f"Role '{name}' updated successfully"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -177,7 +213,7 @@ async def drop_role(config: ConnectionConfig, name: str) -> dict:
     """Drop a role"""
 
     # Validate role name
-    if not name.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(name) or len(name) > 63:
         return {"success": False, "error": f"Invalid role name: {name}"}
 
     # Don't allow dropping certain system-like roles
@@ -196,7 +232,7 @@ async def grant_role(config: ConnectionConfig, role: str, to_role: str) -> dict:
     """Grant membership in a role to another role"""
 
     # Validate role names
-    if not role.replace("_", "").isalnum() or not to_role.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(role) or not _VALID_ROLE_RE.match(to_role):
         return {"success": False, "error": "Invalid role name"}
 
     try:
@@ -210,7 +246,7 @@ async def revoke_role(config: ConnectionConfig, role: str, from_role: str) -> di
     """Revoke membership in a role from another role"""
 
     # Validate role names
-    if not role.replace("_", "").isalnum() or not from_role.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(role) or not _VALID_ROLE_RE.match(from_role):
         return {"success": False, "error": "Invalid role name"}
 
     try:
@@ -224,7 +260,7 @@ async def get_role_grants(config: ConnectionConfig, name: str) -> dict:
     """Get detailed grants for a role"""
 
     # Validate role name
-    if not name.replace("_", "").isalnum():
+    if not _VALID_ROLE_RE.match(name) or len(name) > 63:
         return {"error": f"Invalid role name: {name}"}
 
     # Get database privileges (parameterized to prevent SQL injection)

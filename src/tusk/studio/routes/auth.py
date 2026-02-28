@@ -28,6 +28,11 @@ from tusk.core.auth import (
     log_audit,
     get_audit_logs,
     get_audit_log_count,
+    check_login_rate_limit,
+    record_login_attempt,
+    generate_csrf_token,
+    validate_csrf_token,
+    cleanup_expired_sessions,
     PERMISSIONS,
 )
 from tusk.core.config import get_config
@@ -95,6 +100,15 @@ class AuthController(Controller):
                 status_code=400,
             )
 
+        # Rate limiting
+        client_ip = request.client.host if request.client else "unknown"
+        if not check_login_rate_limit(client_ip):
+            log.warning("Login rate limited", ip=client_ip)
+            return Response(
+                content={"error": "Too many login attempts. Please wait a minute."},
+                status_code=429,
+            )
+
         username = data.get("username", "").strip()
         password = data.get("password", "")
 
@@ -104,9 +118,11 @@ class AuthController(Controller):
                 status_code=400,
             )
 
+        record_login_attempt(client_ip)
+
         user = authenticate(username, password)
         if not user:
-            log.warning("Failed login attempt", username=username)
+            log.warning("Failed login attempt", username=username, ip=client_ip)
             return Response(
                 content={"error": "Invalid username or password"},
                 status_code=401,
@@ -498,6 +514,9 @@ class GroupsController(Controller):
     @get("/")
     async def get_groups(self, request: Request) -> dict | Template:
         """List all groups"""
+        if not await self._check_admin(request):
+            return {"error": "Unauthorized", "groups": []}
+
         groups = list_groups()
         group_list = [
             {
@@ -518,15 +537,8 @@ class GroupsController(Controller):
     @post("/")
     async def create_new_group(self, request: Request, data: dict = Body()) -> dict:
         """Create a new group"""
-        config = get_config()
-        if config.auth_mode == "multi":
-            session_id = request.cookies.get(SESSION_COOKIE)
-            if session_id:
-                session = get_session(session_id)
-                if session:
-                    user = get_user_by_id(session.user_id)
-                    if not user or not user.is_admin:
-                        return {"error": "Unauthorized"}
+        if not await self._check_admin(request):
+            return {"error": "Unauthorized"}
 
         name = data.get("name", "").strip()
         description = data.get("description", "").strip() or None
@@ -540,8 +552,11 @@ class GroupsController(Controller):
         return {"success": True, "group": {"id": group.id, "name": group.name}}
 
     @get("/{group_id:str}")
-    async def get_group_details(self, group_id: str) -> dict:
+    async def get_group_details(self, request: Request, group_id: str) -> dict:
         """Get group details"""
+        if not await self._check_admin(request):
+            return {"error": "Unauthorized"}
+
         group = get_group(group_id)
         if not group:
             return {"error": "Group not found"}
@@ -557,14 +572,34 @@ class GroupsController(Controller):
         }
 
     @get("/permissions")
-    async def get_all_permissions(self) -> dict:
+    async def get_all_permissions(self, request: Request) -> dict:
         """Get all available permissions"""
+        if not await self._check_admin(request):
+            return {"error": "Unauthorized"}
+
         return {
             "permissions": [
                 {"code": code, "description": desc}
                 for code, desc in PERMISSIONS.items()
             ]
         }
+
+    async def _check_admin(self, request: Request) -> bool:
+        """Check if current user is admin"""
+        config = get_config()
+        if config.auth_mode != "multi":
+            return True  # No auth = full access
+
+        session_id = request.cookies.get(SESSION_COOKIE)
+        if not session_id:
+            return False
+
+        session = get_session(session_id)
+        if not session:
+            return False
+
+        user = get_user_by_id(session.user_id)
+        return user is not None and user.is_admin
 
 
 class AuthSetupController(Controller):

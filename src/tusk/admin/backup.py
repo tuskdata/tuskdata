@@ -2,13 +2,47 @@
 
 import subprocess
 import os
+import tempfile
+import stat
 from pathlib import Path
 from datetime import datetime
 
+import structlog
 from tusk.core.connection import ConnectionConfig, TUSK_DIR
 from tusk.core.config import get_config
 
+log = structlog.get_logger("backup")
+
 BACKUP_DIR = TUSK_DIR / "backups"
+
+
+def _pg_env(config: ConnectionConfig) -> tuple[dict, Path | None]:
+    """Create environment for pg_dump/psql with secure password handling.
+
+    Uses a temporary .pgpass file instead of PGPASSWORD env var.
+    Returns (env_dict, pgpass_path_or_None).
+    Caller must delete pgpass_path when done.
+    """
+    env = os.environ.copy()
+    pgpass_path = None
+
+    if config.password:
+        # Create temp .pgpass file with restrictive permissions
+        fd, pgpass_path = tempfile.mkstemp(prefix="tusk_pgpass_")
+        pgpass_file = Path(pgpass_path)
+        # Escape colons and backslashes in pgpass fields
+        host = (config.host or "localhost").replace("\\", "\\\\").replace(":", "\\:")
+        port = str(config.port)
+        db = (config.database or "*").replace("\\", "\\\\").replace(":", "\\:")
+        user = (config.user or "postgres").replace("\\", "\\\\").replace(":", "\\:")
+        pw = config.password.replace("\\", "\\\\").replace(":", "\\:")
+        os.write(fd, f"{host}:{port}:{db}:{user}:{pw}\n".encode())
+        os.close(fd)
+        os.chmod(pgpass_path, stat.S_IRUSR)  # 0o400 — owner read only
+        env["PGPASSFILE"] = pgpass_path
+        pgpass_path = pgpass_file
+
+    return env, pgpass_path
 
 
 def _get_pg_bin_search_paths() -> list[Path]:
@@ -122,9 +156,7 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
         "--format=plain",
     ]
 
-    env = os.environ.copy()
-    if config.password:
-        env["PGPASSWORD"] = config.password
+    env, pgpass_path = _pg_env(config)
 
     try:
         # pg_dump | gzip > file
@@ -160,6 +192,9 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
     except Exception as e:
         filepath.unlink(missing_ok=True)
         return False, f"Backup failed: {str(e)}", None
+    finally:
+        if pgpass_path:
+            pgpass_path.unlink(missing_ok=True)
 
 
 def list_backups() -> list[dict]:
@@ -182,7 +217,15 @@ def list_backups() -> list[dict]:
 
 def get_backup_path(filename: str) -> Path | None:
     """Get full path to a backup file (for download)"""
+    # Prevent directory traversal
+    if Path(filename).name != filename:
+        return None
     filepath = BACKUP_DIR / filename
+    # Ensure resolved path stays within BACKUP_DIR
+    try:
+        filepath.resolve().relative_to(BACKUP_DIR.resolve())
+    except ValueError:
+        return None
     if filepath.exists() and filepath.is_file():
         return filepath
     return None
@@ -198,10 +241,15 @@ def delete_backup(filename: str) -> tuple[bool, str]:
         (success, message) tuple
     """
     # Prevent directory traversal
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if Path(filename).name != filename:
         return False, "Invalid filename"
 
     filepath = BACKUP_DIR / filename
+    # Ensure resolved path stays within BACKUP_DIR
+    try:
+        filepath.resolve().relative_to(BACKUP_DIR.resolve())
+    except ValueError:
+        return False, "Invalid filename"
     if not filepath.exists():
         return False, f"Backup not found: {filename}"
 
@@ -236,9 +284,7 @@ def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
         "-d", config.database or "postgres",
     ]
 
-    env = os.environ.copy()
-    if config.password:
-        env["PGPASSWORD"] = config.password
+    env, pgpass_path = _pg_env(config)
 
     try:
         # gunzip < file | psql
@@ -269,6 +315,9 @@ def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
         return False, f"psql not found at '{psql}'. Install PostgreSQL client tools or check Postgres.app installation."
     except Exception as e:
         return False, f"Restore failed: {str(e)}"
+    finally:
+        if pgpass_path:
+            pgpass_path.unlink(missing_ok=True)
 
 
 def get_createdb_path() -> str:
@@ -298,9 +347,7 @@ def create_database(config: ConnectionConfig, db_name: str, owner: str | None = 
 
     cmd.append(db_name)
 
-    env = os.environ.copy()
-    if config.password:
-        env["PGPASSWORD"] = config.password
+    env, pgpass_path = _pg_env(config)
 
     try:
         result = subprocess.run(
@@ -319,6 +366,9 @@ def create_database(config: ConnectionConfig, db_name: str, owner: str | None = 
         return False, f"createdb not found at '{createdb}'. Install PostgreSQL client tools."
     except Exception as e:
         return False, f"Create database failed: {str(e)}"
+    finally:
+        if pgpass_path:
+            pgpass_path.unlink(missing_ok=True)
 
 
 def create_database_from_backup(

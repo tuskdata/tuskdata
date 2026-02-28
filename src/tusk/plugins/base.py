@@ -210,6 +210,25 @@ class TuskPlugin(ABC):
         return {}
 
     # ─────────────────────────────────────────────────────────────
+    # Notifications
+    # ─────────────────────────────────────────────────────────────
+
+    def get_notification_events(self) -> list[dict]:
+        """Notification events this plugin provides.
+
+        Returns:
+            List of event descriptors:
+            [
+                {
+                    "event_key": "ci.pipeline.failed",
+                    "label": "Pipeline Failed",
+                    "description": "A pipeline run has failed",
+                }
+            ]
+        """
+        return []
+
+    # ─────────────────────────────────────────────────────────────
     # Lifecycle Hooks
     # ─────────────────────────────────────────────────────────────
 

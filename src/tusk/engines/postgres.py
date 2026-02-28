@@ -1,7 +1,9 @@
-"""PostgreSQL engine using psycopg3 async"""
+"""PostgreSQL engine using psycopg3 async with connection pooling"""
 
+import os
 import re
 import time
+from contextlib import asynccontextmanager
 import psycopg
 from psycopg.rows import tuple_row
 
@@ -10,6 +12,63 @@ from tusk.core.result import QueryResult, ColumnInfo
 from tusk.core.logging import get_logger
 
 log = get_logger("postgres")
+
+# ============================================================================
+# Connection Pool Manager
+# ============================================================================
+
+try:
+    from psycopg_pool import AsyncConnectionPool
+
+    _pools: dict[str, AsyncConnectionPool] = {}
+
+    async def _get_pool(dsn: str) -> AsyncConnectionPool:
+        """Get or create a connection pool for the given DSN."""
+        if dsn not in _pools:
+            pool = AsyncConnectionPool(
+                dsn,
+                min_size=1,
+                max_size=10,
+                max_idle=300,  # Close idle connections after 5 min
+                open=False,
+            )
+            await pool.open()
+            _pools[dsn] = pool
+            log.info("Connection pool created", dsn=dsn[:50] + "...")
+        return _pools[dsn]
+
+    async def close_pools() -> None:
+        """Close all connection pools (call on shutdown)."""
+        for dsn, pool in _pools.items():
+            await pool.close()
+        _pools.clear()
+        log.info("All connection pools closed")
+
+    _HAS_POOL = True
+except ImportError:
+    _HAS_POOL = False
+
+    async def close_pools() -> None:
+        pass
+
+
+# Query timeout in seconds (0 = no timeout). Set via TUSK_QUERY_TIMEOUT env var.
+QUERY_TIMEOUT_SEC = int(os.environ.get("TUSK_QUERY_TIMEOUT", "300"))  # 5 min default
+
+
+@asynccontextmanager
+async def _connect(dsn: str):
+    """Yield a connection from pool (if available) or a direct connection."""
+    if _HAS_POOL:
+        pool = await _get_pool(dsn)
+        async with pool.connection() as conn:
+            conn.row_factory = tuple_row
+            yield conn
+    else:
+        async with await psycopg.AsyncConnection.connect(
+            dsn, row_factory=tuple_row
+        ) as conn:
+            yield conn
 
 
 async def execute_query(config: ConnectionConfig, sql: str, *, params: tuple | None = None) -> QueryResult:
@@ -23,13 +82,12 @@ async def execute_query(config: ConnectionConfig, sql: str, *, params: tuple | N
     start = time.perf_counter()
 
     try:
-        async with await psycopg.AsyncConnection.connect(
-            config.dsn, row_factory=tuple_row
-        ) as conn:
+        async with _connect(config.dsn) as conn:
             async with conn.cursor() as cur:
+                if QUERY_TIMEOUT_SEC > 0:
+                    await cur.execute(f"SET statement_timeout = '{QUERY_TIMEOUT_SEC * 1000}'")
                 await cur.execute(sql, params)
 
-                # Get column info
                 columns = []
                 if cur.description:
                     columns = [
@@ -37,13 +95,10 @@ async def execute_query(config: ConnectionConfig, sql: str, *, params: tuple | N
                         for desc in cur.description
                     ]
 
-                # Fetch rows if SELECT-like query
                 rows = []
                 if cur.description:
                     rows = await cur.fetchall()
 
-                    # Detect hex WKB geometry values and convert to WKT
-                    # PostGIS returns geometry as hex WKB strings by default
                     if rows:
                         geo_cols = _detect_hex_wkb_columns(columns, rows)
                         if geo_cols:
@@ -66,19 +121,42 @@ async def execute_query(config: ConnectionConfig, sql: str, *, params: tuple | N
 
 _HEX_WKB_RE = re.compile(r'^(01|00)[0-9a-fA-F]{8,}$')
 
+# Column names that indicate geometry
+_GEO_COL_NAMES = {
+    "geom", "geometry", "the_geom", "shape", "geo", "wkb_geometry",
+    "point", "polygon", "linestring", "multipoint", "multipolygon",
+    "multilinestring", "geometrycollection",
+}
+
 
 def _detect_hex_wkb_columns(
     columns: list[ColumnInfo], rows: list[tuple]
 ) -> list[int]:
-    """Detect columns containing hex WKB geometry strings."""
+    """Detect columns containing hex WKB geometry strings.
+
+    Checks both column names and actual data values.
+    """
     geo_cols = []
     for i, col in enumerate(columns):
+        col_name = col.name.lower()
+
+        # Check by column name
+        if col_name in _GEO_COL_NAMES or col_name.endswith("_geom") or col_name.endswith("_geometry"):
+            geo_cols.append(i)
+            continue
+
         # Check first few rows for hex WKB pattern
         for row in rows[:3]:
-            if i < len(row) and isinstance(row[i], str) and len(row[i]) >= 10:
-                if _HEX_WKB_RE.match(row[i]):
+            if i < len(row) and row[i] is not None:
+                val = row[i]
+                # Handle memoryview/bytes from psycopg3
+                if isinstance(val, (bytes, memoryview)):
                     geo_cols.append(i)
                     break
+                if isinstance(val, str) and len(val) >= 10:
+                    if _HEX_WKB_RE.match(val):
+                        geo_cols.append(i)
+                        break
     return geo_cols
 
 
@@ -134,9 +212,12 @@ async def execute_query_paginated(
     start = time.perf_counter()
 
     try:
-        async with await psycopg.AsyncConnection.connect(
-            config.dsn, row_factory=tuple_row
-        ) as conn:
+        async with _connect(config.dsn) as conn:
+            # Set timeout for the session
+            if QUERY_TIMEOUT_SEC > 0:
+                async with conn.cursor() as cur:
+                    await cur.execute(f"SET statement_timeout = '{QUERY_TIMEOUT_SEC * 1000}'")
+
             # Get total count first
             count_sql = f"SELECT COUNT(*) FROM ({sql}) AS _tusk_count"
             async with conn.cursor() as cur:
@@ -206,9 +287,11 @@ async def fetch_geometries(
     start = time.perf_counter()
 
     try:
-        async with await psycopg.AsyncConnection.connect(
-            config.dsn, row_factory=tuple_row
-        ) as conn:
+        async with _connect(config.dsn) as conn:
+            if QUERY_TIMEOUT_SEC > 0:
+                async with conn.cursor() as cur:
+                    await cur.execute(f"SET statement_timeout = '{QUERY_TIMEOUT_SEC * 1000}'")
+
             # First, get count
             count_sql = f"SELECT COUNT(*) FROM ({sql}) AS _tusk_count"
             async with conn.cursor() as cur:

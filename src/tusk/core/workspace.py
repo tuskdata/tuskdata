@@ -58,7 +58,7 @@ def save_workspace(state: WorkspaceState) -> dict:
             with open(fd, "wb") as f:
                 f.write(msgspec.json.encode(state))
             Path(tmp_path).replace(path)
-        except:
+        except Exception:
             Path(tmp_path).unlink(missing_ok=True)
             raise
 

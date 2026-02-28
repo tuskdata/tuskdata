@@ -1,10 +1,29 @@
 """DuckDB engine for analytics and federated queries"""
 
+import re
 import time
 import duckdb
 from pathlib import Path
 
 from tusk.core.result import QueryResult, ColumnInfo
+
+# Valid extension/database name: alphanumeric + underscores
+_VALID_NAME_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+
+def _escape_duckdb_string(value: str) -> str:
+    """Escape a string for use in DuckDB SQL (single-quote escaping)."""
+    return value.replace("'", "''")
+
+
+def _safe_path(path: str) -> str:
+    """Validate and escape a file path for DuckDB SQL.
+
+    Resolves the path and ensures it's a real filesystem path,
+    then escapes single quotes for safe SQL interpolation.
+    """
+    resolved = str(Path(path).expanduser().resolve())
+    return _escape_duckdb_string(resolved)
 
 
 class DuckDBEngine:
@@ -56,6 +75,8 @@ class DuckDBEngine:
 
     def install_extension(self, name: str) -> dict:
         """Install and load a DuckDB extension"""
+        if not _VALID_NAME_RE.match(name):
+            return {"success": False, "error": f"Invalid extension name: {name}"}
         try:
             self.conn.execute(f"INSTALL {name};")
             self.conn.execute(f"LOAD {name};")
@@ -74,6 +95,8 @@ class DuckDBEngine:
 
     def load_extension(self, name: str) -> dict:
         """Load an already installed extension"""
+        if not _VALID_NAME_RE.match(name):
+            return {"success": False, "error": f"Invalid extension name: {name}"}
         try:
             self.conn.execute(f"LOAD {name};")
             return {"success": True, "message": f"Extension '{name}' loaded"}
@@ -134,12 +157,17 @@ class DuckDBEngine:
 
     def attach_postgres(self, name: str, conn_string: str):
         """Attach a PostgreSQL database for federated queries"""
+        if not _VALID_NAME_RE.match(name):
+            raise ValueError(f"Invalid database name: {name}")
+        safe_conn = _escape_duckdb_string(conn_string)
         self.conn.execute(f"""
-            ATTACH '{conn_string}' AS {name} (TYPE postgres, READ_ONLY)
+            ATTACH '{safe_conn}' AS {name} (TYPE postgres, READ_ONLY)
         """)
 
     def detach_database(self, name: str):
         """Detach a database"""
+        if not _VALID_NAME_RE.match(name):
+            return
         try:
             self.conn.execute(f"DETACH {name}")
         except Exception:
@@ -147,14 +175,14 @@ class DuckDBEngine:
 
     def get_parquet_info(self, path: str) -> dict:
         """Get info about a Parquet file"""
-        path = str(Path(path).expanduser())
+        safe = _safe_path(path)
         try:
             # Get row count
-            result = self.conn.execute(f"SELECT count(*) FROM read_parquet('{path}')")
+            result = self.conn.execute(f"SELECT count(*) FROM read_parquet('{safe}')")
             row_count = result.fetchone()[0]
 
             # Get schema
-            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{path}')")
+            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{safe}')")
             columns = [
                 {"name": row[0], "type": row[1]}
                 for row in schema_result.fetchall()
@@ -169,14 +197,14 @@ class DuckDBEngine:
 
     def get_csv_info(self, path: str) -> dict:
         """Get info about a CSV file"""
-        path = str(Path(path).expanduser())
+        safe = _safe_path(path)
         try:
             # Get row count
-            result = self.conn.execute(f"SELECT count(*) FROM read_csv_auto('{path}', max_line_size=20000000)")
+            result = self.conn.execute(f"SELECT count(*) FROM read_csv_auto('{safe}', max_line_size=20000000)")
             row_count = result.fetchone()[0]
 
             # Get schema
-            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{path}', max_line_size=20000000)")
+            schema_result = self.conn.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{safe}', max_line_size=20000000)")
             columns = [
                 {"name": row[0], "type": row[1]}
                 for row in schema_result.fetchall()
@@ -191,10 +219,10 @@ class DuckDBEngine:
 
     def get_sqlite_tables(self, path: str) -> list[dict]:
         """Get tables from a SQLite file"""
-        path = str(Path(path).expanduser())
+        safe = _safe_path(path)
         try:
             # Attach SQLite file
-            self.conn.execute(f"ATTACH '{path}' AS sqlite_temp (TYPE sqlite)")
+            self.conn.execute(f"ATTACH '{safe}' AS sqlite_temp (TYPE sqlite)")
 
             # Get tables
             result = self.conn.execute("""
@@ -225,28 +253,31 @@ class DuckDBEngine:
 
     def preview_file(self, path: str, file_type: str, limit: int = 100) -> QueryResult:
         """Preview a file's contents"""
-        path = str(Path(path).expanduser())
+        safe = _safe_path(path)
+        limit = int(limit)  # Ensure limit is an integer
 
         if file_type == "parquet":
-            return self.execute(f"SELECT * FROM read_parquet('{path}') LIMIT {limit}")
+            return self.execute(f"SELECT * FROM read_parquet('{safe}') LIMIT {limit}")
         elif file_type in ("csv", "tsv"):
-            return self.execute(f"SELECT * FROM read_csv_auto('{path}', max_line_size=20000000) LIMIT {limit}")
+            return self.execute(f"SELECT * FROM read_csv_auto('{safe}', max_line_size=20000000) LIMIT {limit}")
         elif file_type == "json":
-            return self.execute(f"SELECT * FROM read_json_auto('{path}', maximum_object_size=134217728) LIMIT {limit}")
+            return self.execute(f"SELECT * FROM read_json_auto('{safe}', maximum_object_size=134217728) LIMIT {limit}")
         else:
             return QueryResult.from_error(f"Unsupported file type: {file_type}")
 
     def preview_sqlite_table(self, path: str, table: str, limit: int = 100) -> QueryResult:
         """Preview a SQLite table"""
-        path = str(Path(path).expanduser())
-        return self.execute(f"SELECT * FROM sqlite_scan('{path}', '{table}') LIMIT {limit}")
+        safe = _safe_path(path)
+        safe_table = _escape_duckdb_string(table)
+        limit = int(limit)
+        return self.execute(f"SELECT * FROM sqlite_scan('{safe}', '{safe_table}') LIMIT {limit}")
 
     def export_to_parquet(self, sql: str, output_path: str) -> dict:
         """Export query results to a Parquet file"""
-        output_path = str(Path(output_path).expanduser())
+        safe_output = _safe_path(output_path)
         try:
-            self.conn.execute(f"COPY ({sql}) TO '{output_path}' (FORMAT PARQUET)")
-            return {"success": True, "path": output_path}
+            self.conn.execute(f"COPY ({sql}) TO '{safe_output}' (FORMAT PARQUET)")
+            return {"success": True, "path": str(Path(output_path).expanduser().resolve())}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -265,8 +296,8 @@ def get_duckdb_engine() -> DuckDBEngine:
 
 def execute_query(path: str, sql: str) -> QueryResult:
     """Execute a query on a DuckDB file"""
-    path = str(Path(path).expanduser())
-    engine = DuckDBEngine(path)
+    resolved = str(Path(path).expanduser().resolve())
+    engine = DuckDBEngine(resolved)
     return engine.execute(sql)
 
 
@@ -291,13 +322,13 @@ def get_schema(path: str) -> dict:
             if schema_name not in schema:
                 schema[schema_name] = {}
 
-            # Get columns for this table
-            cols_result = conn.execute(f"""
+            # Get columns for this table (parameterized)
+            cols_result = conn.execute("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = '{schema_name}' AND table_name = '{table_name}'
+                WHERE table_schema = ? AND table_name = ?
                 ORDER BY ordinal_position
-            """)
+            """, [schema_name, table_name])
 
             columns = []
             for col_name, col_type in cols_result.fetchall():

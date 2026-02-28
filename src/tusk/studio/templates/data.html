@@ -389,6 +389,18 @@
                 <div class="p-2 bg-[#3fb950]/20 rounded-lg"><i data-lucide="git-merge" class="w-4 h-4 text-[#3fb950]"></i></div>
                 <div><div class="font-medium text-sm">Join</div><div class="text-xs text-[#8b949e]">Join with another dataset</div></div>
             </button>
+            <button @click="selectTransformType('concat')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#f0883e]/20 rounded-lg"><i data-lucide="layers" class="w-4 h-4 text-[#f0883e]"></i></div>
+                <div><div class="font-medium text-sm">Concat</div><div class="text-xs text-[#8b949e]">Union/append datasets</div></div>
+            </button>
+            <button @click="selectTransformType('distinct')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#a371f7]/20 rounded-lg"><i data-lucide="fingerprint" class="w-4 h-4 text-[#a371f7]"></i></div>
+                <div><div class="font-medium text-sm">Distinct</div><div class="text-xs text-[#8b949e]">Remove duplicate rows</div></div>
+            </button>
+            <button @click="selectTransformType('window')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#79c0ff]/20 rounded-lg"><i data-lucide="bar-chart-3" class="w-4 h-4 text-[#79c0ff]"></i></div>
+                <div><div class="font-medium text-sm">Window</div><div class="text-xs text-[#8b949e]">row_number, rank, lag, lead</div></div>
+            </button>
         </div>
         <div id="transform-config" class="hidden flex-1 overflow-auto">
             <div id="config-filter" class="hidden space-y-3">
@@ -437,17 +449,11 @@
                     <div id="groupby-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-32 overflow-auto space-y-1"></div>
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Aggregation</label>
-                    <div class="flex gap-2">
-                        <select id="agg-column" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
-                        <select id="agg-function" class="w-24 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
-                            <option value="sum">Sum</option>
-                            <option value="mean">Mean</option>
-                            <option value="min">Min</option>
-                            <option value="max">Max</option>
-                            <option value="count">Count</option>
-                        </select>
-                    </div>
+                    <label class="block text-sm text-gray-400 mb-1">Aggregations</label>
+                    <div id="agg-rows" class="space-y-2"></div>
+                    <button type="button" onclick="addAggRow()" class="mt-2 text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3 h-3"></i> Add aggregation
+                    </button>
                 </div>
             </div>
             <div id="config-rename" class="hidden space-y-3">
@@ -471,13 +477,39 @@
                 <input id="limit-n" type="number" value="100" min="1" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
             </div>
             <div id="config-join" class="hidden space-y-3">
-                <div>
+                <!-- Source tabs -->
+                <div class="flex bg-[#0d1117] rounded-lg p-0.5 mb-2">
+                    <button type="button" onclick="setJoinSourceTab('file')" id="join-tab-file" class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium bg-[#21262d] text-white">File</button>
+                    <button type="button" onclick="setJoinSourceTab('database')" id="join-tab-database" class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium text-[#8b949e]">Database</button>
+                </div>
+                <!-- File source -->
+                <div id="join-source-file">
                     <label class="block text-sm text-gray-400 mb-1">Join with File</label>
                     <div class="flex gap-2">
                         <input id="join-file-path" placeholder="~/data/other.csv" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
                         <button @click="browseJoinFile()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm">
                             <i data-lucide="folder-open" class="w-4 h-4"></i>
                         </button>
+                    </div>
+                </div>
+                <!-- Database source -->
+                <div id="join-source-database" class="hidden space-y-2">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Connection</label>
+                        <select id="join-db-connection" onchange="loadJoinDbTables()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                            <option value="">Select a connection...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Table</label>
+                        <select id="join-db-table" onchange="selectJoinDbTable()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                            <option value="">Select connection first...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Custom SQL (optional)</label>
+                        <textarea id="join-db-sql" placeholder="Leave empty to use full table, or write a custom query" rows="2"
+                                  class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm resize-y"></textarea>
                     </div>
                 </div>
                 <div>
@@ -495,7 +527,110 @@
                 </div>
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Join On Column (right table)</label>
-                    <input id="join-right-on" placeholder="Column name from right file" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                    <select id="join-right-on" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="">Select source first...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="config-concat" class="hidden space-y-3">
+                <!-- Source tabs -->
+                <div class="flex bg-[#0d1117] rounded-lg p-0.5 mb-2">
+                    <button type="button" onclick="setConcatSourceTab('file')" id="concat-tab-file" class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium bg-[#21262d] text-white">File</button>
+                    <button type="button" onclick="setConcatSourceTab('database')" id="concat-tab-database" class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium text-[#8b949e]">Database</button>
+                </div>
+                <!-- File source -->
+                <div id="concat-source-file">
+                    <label class="block text-sm text-gray-400 mb-1">Concat with File</label>
+                    <div class="flex gap-2">
+                        <input id="concat-file-path" placeholder="~/data/other.csv" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
+                        <button @click="browseConcatFile()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] rounded-lg text-sm">
+                            <i data-lucide="folder-open" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Database source -->
+                <div id="concat-source-database" class="hidden space-y-2">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Connection</label>
+                        <select id="concat-db-connection" onchange="loadConcatDbTables()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                            <option value="">Select a connection...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Table</label>
+                        <select id="concat-db-table" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                            <option value="">Select connection first...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Custom SQL (optional)</label>
+                        <textarea id="concat-db-sql" placeholder="Leave empty to use full table, or write a custom query" rows="2"
+                                  class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm resize-y"></textarea>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Concat Mode</label>
+                    <select id="concat-how" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="vertical">Vertical - Stack rows (same columns)</option>
+                        <option value="diagonal">Diagonal - Stack rows (fill missing columns with null)</option>
+                        <option value="align">Align - Match columns by name</option>
+                    </select>
+                </div>
+            </div>
+            <div id="config-distinct" class="hidden space-y-3">
+                <label class="block text-sm text-gray-400 mb-1">Dedup Columns (leave empty for all)</label>
+                <div id="distinct-columns" class="bg-[#0d1117] rounded-lg p-3 max-h-48 overflow-auto space-y-1"></div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Keep</label>
+                    <select id="distinct-keep" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="first">First occurrence</option>
+                        <option value="last">Last occurrence</option>
+                        <option value="any">Any (fastest)</option>
+                        <option value="none">None (drop all duplicates)</option>
+                    </select>
+                </div>
+            </div>
+            <div id="config-window" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Function</label>
+                    <select id="window-function" onchange="toggleWindowColumnField()" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="row_number">row_number - Sequential numbering</option>
+                        <option value="rank">rank - Rank with gaps</option>
+                        <option value="dense_rank">dense_rank - Rank without gaps</option>
+                        <option value="lag">lag - Previous row value</option>
+                        <option value="lead">lead - Next row value</option>
+                        <option value="cum_sum">cum_sum - Running total</option>
+                        <option value="cum_max">cum_max - Running maximum</option>
+                        <option value="cum_min">cum_min - Running minimum</option>
+                    </select>
+                </div>
+                <div id="window-column-field" class="hidden">
+                    <label class="block text-sm text-gray-400 mb-1">Column</label>
+                    <select id="window-column" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Order By</label>
+                    <select id="window-order-by" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2"></select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Partition By (optional)</label>
+                    <select id="window-partition-by" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <option value="">No partition</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" id="window-descending" class="rounded">
+                        Descending order
+                    </label>
+                </div>
+                <div id="window-offset-field" class="hidden">
+                    <label class="block text-sm text-gray-400 mb-1">Offset</label>
+                    <input id="window-offset" type="number" value="1" min="1" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Result Column Name</label>
+                    <input id="window-alias" value="window_col" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
                 </div>
             </div>
         </div>

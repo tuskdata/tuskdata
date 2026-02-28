@@ -20,6 +20,9 @@ const DATA_NODE_TYPES = {
     drop_nulls:{ icon: 'trash-2',      color: 'red',    ports: { in: ['input'], out: ['output'] } },
     limit:     { icon: 'hash',         color: 'gray',   ports: { in: ['input'], out: ['output'] } },
     join:      { icon: 'git-merge',    color: 'green',  ports: { in: ['left', 'right'], out: ['output'] } },
+    concat:    { icon: 'layers',       color: 'orange', ports: { in: ['input', 'other'], out: ['output'] } },
+    distinct:  { icon: 'fingerprint',  color: 'purple', ports: { in: ['input'], out: ['output'] } },
+    window:    { icon: 'bar-chart-3', color: 'blue',   ports: { in: ['input'], out: ['output'] } },
 };
 
 // Pipeline canvas instance (lazy init)
@@ -996,9 +999,16 @@ function populateColumnSelects() {
     const options = currentSchema.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
     document.getElementById('filter-column').innerHTML = options;
     document.getElementById('sort-column').innerHTML = options;
-    document.getElementById('agg-column').innerHTML = options;
     document.getElementById('rename-from').innerHTML = options;
     document.getElementById('join-left-on').innerHTML = options;
+
+    // Initialize agg rows if empty
+    const aggContainer = document.getElementById('agg-rows');
+    if (aggContainer && aggContainer.children.length === 0) {
+        addAggRow();
+    }
+    // Update existing agg row selects
+    document.querySelectorAll('.agg-col').forEach(sel => sel.innerHTML = options);
 
     const checkboxes = (id, cls) => currentSchema.map(c =>
         `<label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="${c.name}" class="${cls} accent-indigo-500"><span class="text-sm">${c.name}</span></label>`
@@ -1008,6 +1018,44 @@ function populateColumnSelects() {
     ).join('');
     document.getElementById('groupby-columns').innerHTML = checkboxes('groupby-columns', 'groupby-col-check');
     document.getElementById('dropnulls-columns').innerHTML = checkboxes('dropnulls-columns', 'dropnulls-col-check');
+    document.getElementById('distinct-columns').innerHTML = checkboxes('distinct-columns', 'distinct-col-check');
+    // Window function selects
+    document.getElementById('window-column').innerHTML = options;
+    document.getElementById('window-order-by').innerHTML = options;
+    const partOptions = '<option value="">No partition</option>' + options;
+    document.getElementById('window-partition-by').innerHTML = partOptions;
+}
+
+// Multi-aggregation rows for group_by
+window.addAggRow = function(col, fn) {
+    const container = document.getElementById('agg-rows');
+    if (!container) return;
+    const options = currentSchema
+        ? currentSchema.map(c => `<option value="${c.name}" ${c.name === col ? 'selected' : ''}>${c.name}</option>`).join('')
+        : '';
+    const fnOptions = ['sum', 'mean', 'min', 'max', 'count', 'first', 'last'].map(
+        f => `<option value="${f}" ${f === fn ? 'selected' : ''}>${f.charAt(0).toUpperCase() + f.slice(1)}</option>`
+    ).join('');
+    const row = document.createElement('div');
+    row.className = 'agg-row flex gap-2 items-center';
+    row.innerHTML = `
+        <select class="agg-col flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm">${options}</select>
+        <select class="agg-fn w-24 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm">${fnOptions}</select>
+        <button type="button" onclick="this.parentElement.remove()" class="p-1.5 hover:bg-[#30363d] rounded text-[#8b949e] hover:text-red-400" title="Remove">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
+    `;
+    container.appendChild(row);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// Toggle window column/offset fields based on selected function
+window.toggleWindowColumnField = function() {
+    const fn = document.getElementById('window-function').value;
+    const needsCol = ['lag', 'lead', 'cum_sum', 'cum_max', 'cum_min'].includes(fn);
+    const needsOffset = ['lag', 'lead'].includes(fn);
+    document.getElementById('window-column-field').classList.toggle('hidden', !needsCol);
+    document.getElementById('window-offset-field').classList.toggle('hidden', !needsOffset);
 }
 
 window.addTransform = function() {
@@ -1026,7 +1074,17 @@ window.addTransform = function() {
         t.descending = [document.getElementById('sort-descending').checked];
     } else if (t.type === 'group_by') {
         t.by = Array.from(document.querySelectorAll('.groupby-col-check:checked')).map(el => el.value);
-        t.aggregations = [{ column: document.getElementById('agg-column').value, agg: document.getElementById('agg-function').value }];
+        // Collect all aggregation rows
+        t.aggregations = [];
+        document.querySelectorAll('.agg-row').forEach(row => {
+            const col = row.querySelector('.agg-col').value;
+            const fn = row.querySelector('.agg-fn').value;
+            if (col) t.aggregations.push({ column: col, agg: fn });
+        });
+        if (t.aggregations.length === 0) {
+            showToast('Add at least one aggregation', 'warning');
+            return;
+        }
     } else if (t.type === 'rename') {
         t.mapping = { [document.getElementById('rename-from').value]: document.getElementById('rename-to').value };
     } else if (t.type === 'drop_nulls') {
@@ -1035,43 +1093,149 @@ window.addTransform = function() {
     } else if (t.type === 'limit') {
         t.n = parseInt(document.getElementById('limit-n').value);
     } else if (t.type === 'join') {
-        const joinPath = document.getElementById('join-file-path').value.trim();
-        if (!joinPath) {
-            showToast('Please select a file to join with', 'warning');
-            return;
-        }
-
-        // Check if we're editing an existing join (reuse the source)
         let joinSourceId;
         const currentTransforms = getTransforms();
         const currentJoinSources = getJoinSources();
-        if (editingTransformIndex !== null && currentTransforms[editingTransformIndex]?.type === 'join') {
-            // Reuse existing join source ID
-            joinSourceId = currentTransforms[editingTransformIndex].right_source_id;
-            // Update the join source path
-            const existingSource = currentJoinSources.find(s => s.id === joinSourceId);
-            if (existingSource) {
-                existingSource.path = joinPath;
-                existingSource.name = joinPath.split('/').pop();
-                existingSource.source_type = getSourceType(joinPath);
+
+        if (joinSourceTab === 'database') {
+            const connId = document.getElementById('join-db-connection').value;
+            const tableName = document.getElementById('join-db-table').value;
+            const customSql = document.getElementById('join-db-sql').value.trim();
+            if (!connId) { showToast('Please select a database connection', 'warning'); return; }
+            if (!tableName && !customSql) { showToast('Please select a table or write a SQL query', 'warning'); return; }
+
+            const query = customSql || `SELECT * FROM ${tableName}`;
+            if (editingTransformIndex !== null && currentTransforms[editingTransformIndex]?.type === 'join') {
+                joinSourceId = currentTransforms[editingTransformIndex].right_source_id;
+                const existingSource = currentJoinSources.find(s => s.id === joinSourceId);
+                if (existingSource) {
+                    existingSource.source_type = 'database';
+                    existingSource.connection_id = parseInt(connId);
+                    existingSource.query = query;
+                    existingSource.name = tableName || 'custom_query';
+                    delete existingSource.path;
+                }
+            } else {
+                joinSourceId = 'join_' + Date.now();
+                currentJoinSources.push({
+                    id: joinSourceId,
+                    name: tableName || 'custom_query',
+                    source_type: 'database',
+                    connection_id: parseInt(connId),
+                    query: query
+                });
+                setJoinSources(currentJoinSources);
             }
         } else {
-            // Create a new source for the join
-            joinSourceId = 'join_' + Date.now();
-            const joinSourceType = getSourceType(joinPath);
-            currentJoinSources.push({
-                id: joinSourceId,
-                name: joinPath.split('/').pop(),
-                source_type: joinSourceType,
-                path: joinPath
-            });
-            setJoinSources(currentJoinSources);
+            const joinPath = document.getElementById('join-file-path').value.trim();
+            if (!joinPath) { showToast('Please select a file to join with', 'warning'); return; }
+
+            if (editingTransformIndex !== null && currentTransforms[editingTransformIndex]?.type === 'join') {
+                joinSourceId = currentTransforms[editingTransformIndex].right_source_id;
+                const existingSource = currentJoinSources.find(s => s.id === joinSourceId);
+                if (existingSource) {
+                    existingSource.path = joinPath;
+                    existingSource.name = joinPath.split('/').pop();
+                    existingSource.source_type = getSourceType(joinPath);
+                    delete existingSource.connection_id;
+                    delete existingSource.query;
+                }
+            } else {
+                joinSourceId = 'join_' + Date.now();
+                currentJoinSources.push({
+                    id: joinSourceId,
+                    name: joinPath.split('/').pop(),
+                    source_type: getSourceType(joinPath),
+                    path: joinPath
+                });
+                setJoinSources(currentJoinSources);
+            }
         }
 
         t.right_source_id = joinSourceId;
         t.left_on = [document.getElementById('join-left-on').value];
         t.right_on = [document.getElementById('join-right-on').value || document.getElementById('join-left-on').value];
         t.how = document.getElementById('join-how').value;
+    } else if (t.type === 'concat') {
+        let concatSourceId;
+        const currentTransforms = getTransforms();
+        const currentJoinSources = getJoinSources();
+
+        if (concatSourceTab === 'database') {
+            const connId = document.getElementById('concat-db-connection').value;
+            const tableName = document.getElementById('concat-db-table').value;
+            const customSql = document.getElementById('concat-db-sql').value.trim();
+            if (!connId) { showToast('Please select a database connection', 'warning'); return; }
+            if (!tableName && !customSql) { showToast('Please select a table or write a SQL query', 'warning'); return; }
+
+            const query = customSql || `SELECT * FROM ${tableName}`;
+            if (editingTransformIndex !== null && currentTransforms[editingTransformIndex]?.type === 'concat') {
+                concatSourceId = currentTransforms[editingTransformIndex].source_ids[0];
+                const existingSource = currentJoinSources.find(s => s.id === concatSourceId);
+                if (existingSource) {
+                    existingSource.source_type = 'database';
+                    existingSource.connection_id = parseInt(connId);
+                    existingSource.query = query;
+                    existingSource.name = tableName || 'custom_query';
+                    delete existingSource.path;
+                }
+            } else {
+                concatSourceId = 'concat_' + Date.now();
+                currentJoinSources.push({
+                    id: concatSourceId,
+                    name: tableName || 'custom_query',
+                    source_type: 'database',
+                    connection_id: parseInt(connId),
+                    query: query
+                });
+                setJoinSources(currentJoinSources);
+            }
+        } else {
+            const concatPath = document.getElementById('concat-file-path').value.trim();
+            if (!concatPath) { showToast('Please select a file to concat with', 'warning'); return; }
+
+            if (editingTransformIndex !== null && currentTransforms[editingTransformIndex]?.type === 'concat') {
+                concatSourceId = currentTransforms[editingTransformIndex].source_ids[0];
+                const existingSource = currentJoinSources.find(s => s.id === concatSourceId);
+                if (existingSource) {
+                    existingSource.path = concatPath;
+                    existingSource.name = concatPath.split('/').pop();
+                    existingSource.source_type = getSourceType(concatPath);
+                    delete existingSource.connection_id;
+                    delete existingSource.query;
+                }
+            } else {
+                concatSourceId = 'concat_' + Date.now();
+                currentJoinSources.push({
+                    id: concatSourceId,
+                    name: concatPath.split('/').pop(),
+                    source_type: getSourceType(concatPath),
+                    path: concatPath
+                });
+                setJoinSources(currentJoinSources);
+            }
+        }
+        t.source_ids = [concatSourceId];
+        t.how = document.getElementById('concat-how').value;
+    } else if (t.type === 'distinct') {
+        const checked = document.querySelectorAll('.distinct-col-check:checked');
+        t.subset = checked.length > 0 ? Array.from(checked).map(el => el.value) : null;
+        t.keep = document.getElementById('distinct-keep').value;
+    } else if (t.type === 'window') {
+        t.function = document.getElementById('window-function').value;
+        t.order_by = [document.getElementById('window-order-by').value];
+        const partBy = document.getElementById('window-partition-by').value;
+        t.partition_by = partBy ? [partBy] : null;
+        t.descending = document.getElementById('window-descending').checked;
+        t.alias = document.getElementById('window-alias').value || 'window_col';
+        const fn = t.function;
+        if (['lag', 'lead', 'cum_sum', 'cum_max', 'cum_min'].includes(fn)) {
+            t.column = document.getElementById('window-column').value;
+            if (!t.column) { showToast('Select a column for this function', 'warning'); return; }
+        }
+        if (['lag', 'lead'].includes(fn)) {
+            t.offset = parseInt(document.getElementById('window-offset').value) || 1;
+        }
     }
 
     // Either update existing transform or add new one
@@ -1108,7 +1272,10 @@ function renderTransforms() {
         rename: { icon: 'pencil', color: '#58a6ff' },
         drop_nulls: { icon: 'trash-2', color: '#f85149' },
         limit: { icon: 'hash', color: '#8b949e' },
-        join: { icon: 'git-merge', color: '#3fb950' }
+        join: { icon: 'git-merge', color: '#3fb950' },
+        concat: { icon: 'layers', color: '#f0883e' },
+        distinct: { icon: 'fingerprint', color: '#a371f7' },
+        window: { icon: 'bar-chart-3', color: '#79c0ff' }
     };
 
     list.innerHTML = transforms.map((t, i) => {
@@ -1130,6 +1297,12 @@ function renderTransforms() {
         else if (t.type === 'rename') desc = Object.entries(t.mapping).map(([k,v]) => `${k}→${v}`).join(', ');
         else if (t.type === 'drop_nulls') desc = t.subset ? t.subset.join(', ') : 'all';
         else if (t.type === 'limit') desc = `${t.n} rows`;
+        else if (t.type === 'concat') {
+            const concatSource = getJoinSources().find(s => t.source_ids?.includes(s.id));
+            desc = concatSource ? concatSource.name : `${t.source_ids?.length || 0} sources`;
+        }
+        else if (t.type === 'distinct') desc = t.subset ? t.subset.join(', ') : 'all columns';
+        else if (t.type === 'window') desc = `${t.function}(${t.column || ''}) → ${t.alias}`;
 
         const { icon, color } = iconMap[t.type] || { icon: 'circle', color: '#8b949e' };
 
@@ -1223,10 +1396,15 @@ function populateTransformFields(t) {
                 document.querySelectorAll('.groupby-col-check').forEach(cb => {
                     cb.checked = t.by?.includes(cb.value) || false;
                 });
-                // Set aggregation
-                if (t.aggregations?.[0]) {
-                    document.getElementById('agg-column').value = t.aggregations[0].column || '';
-                    document.getElementById('agg-function').value = t.aggregations[0].agg || 'count';
+                // Populate aggregation rows
+                const aggContainer = document.getElementById('agg-rows');
+                aggContainer.innerHTML = '';
+                if (t.aggregations?.length > 0) {
+                    t.aggregations.forEach(agg => {
+                        addAggRow(agg.column, agg.agg);
+                    });
+                } else {
+                    addAggRow();
                 }
                 break;
 
@@ -1251,10 +1429,40 @@ function populateTransformFields(t) {
             case 'join':
                 // Find the join source to get the path
                 const joinSource = getJoinSources().find(s => s.id === t.right_source_id);
-                document.getElementById('join-file-path').value = joinSource?.path || '';
+                const joinPath = joinSource?.path || '';
+                document.getElementById('join-file-path').value = joinPath;
                 document.getElementById('join-left-on').value = t.left_on?.[0] || '';
-                document.getElementById('join-right-on').value = t.right_on?.[0] || '';
                 document.getElementById('join-how').value = t.how || 'inner';
+                // Fetch right table schema, then set the selected value
+                if (joinPath) {
+                    fetchRightTableColumns(joinPath).then(() => {
+                        document.getElementById('join-right-on').value = t.right_on?.[0] || '';
+                    });
+                }
+                break;
+
+            case 'concat':
+                const concatSource = getJoinSources().find(s => t.source_ids?.includes(s.id));
+                document.getElementById('concat-file-path').value = concatSource?.path || '';
+                document.getElementById('concat-how').value = t.how || 'vertical';
+                break;
+
+            case 'distinct':
+                document.querySelectorAll('.distinct-col-check').forEach(cb => {
+                    cb.checked = t.subset ? t.subset.includes(cb.value) : false;
+                });
+                document.getElementById('distinct-keep').value = t.keep || 'first';
+                break;
+
+            case 'window':
+                document.getElementById('window-function').value = t.function || 'row_number';
+                document.getElementById('window-order-by').value = t.order_by?.[0] || '';
+                document.getElementById('window-partition-by').value = t.partition_by?.[0] || '';
+                document.getElementById('window-descending').checked = t.descending || false;
+                document.getElementById('window-alias').value = t.alias || 'window_col';
+                if (t.column) document.getElementById('window-column').value = t.column;
+                if (t.offset) document.getElementById('window-offset').value = t.offset;
+                toggleWindowColumnField();
                 break;
         }
     }, 50);
@@ -1289,8 +1497,147 @@ window.runPipeline = async function() {
 window.browseJoinFile = function() {
     fileBrowserCallback = (path) => {
         document.getElementById('join-file-path').value = path;
+        fetchRightTableColumns(path);
     };
     showFileBrowser();
+}
+
+async function fetchRightTableColumns(path) {
+    const sel = document.getElementById('join-right-on');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const res = await fetch(`/api/data/files/schema?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+        if (data.columns?.length > 0) {
+            sel.innerHTML = data.columns.map(c =>
+                `<option value="${c.name}">${c.name} <span class="text-xs">(${c.type})</span></option>`
+            ).join('');
+        } else {
+            sel.innerHTML = '<option value="">No columns found</option>';
+        }
+    } catch {
+        sel.innerHTML = '<option value="">Error loading schema</option>';
+    }
+}
+
+window.browseConcatFile = function() {
+    fileBrowserCallback = (path) => {
+        document.getElementById('concat-file-path').value = path;
+    };
+    showFileBrowser();
+}
+
+// ─── Join/Concat Database Source Support ─────────────────────
+let joinSourceTab = 'file';
+let concatSourceTab = 'file';
+
+function _populateConnectionDropdown(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = '<option value="">Select a connection...</option>' +
+        dbConnections.filter(c => c.type === 'postgres').map(c =>
+            `<option value="${c.id}">${c.name} (${c.type})</option>`
+        ).join('');
+}
+
+window.setJoinSourceTab = function(tab) {
+    joinSourceTab = tab;
+    const fileEl = document.getElementById('join-source-file');
+    const dbEl = document.getElementById('join-source-database');
+    const fileTab = document.getElementById('join-tab-file');
+    const dbTab = document.getElementById('join-tab-database');
+    if (tab === 'file') {
+        fileEl.classList.remove('hidden'); dbEl.classList.add('hidden');
+        fileTab.classList.add('bg-[#21262d]', 'text-white'); fileTab.classList.remove('text-[#8b949e]');
+        dbTab.classList.remove('bg-[#21262d]', 'text-white'); dbTab.classList.add('text-[#8b949e]');
+    } else {
+        fileEl.classList.add('hidden'); dbEl.classList.remove('hidden');
+        dbTab.classList.add('bg-[#21262d]', 'text-white'); dbTab.classList.remove('text-[#8b949e]');
+        fileTab.classList.remove('bg-[#21262d]', 'text-white'); fileTab.classList.add('text-[#8b949e]');
+        _populateConnectionDropdown('join-db-connection');
+    }
+}
+
+window.setConcatSourceTab = function(tab) {
+    concatSourceTab = tab;
+    const fileEl = document.getElementById('concat-source-file');
+    const dbEl = document.getElementById('concat-source-database');
+    const fileTab = document.getElementById('concat-tab-file');
+    const dbTab = document.getElementById('concat-tab-database');
+    if (tab === 'file') {
+        fileEl.classList.remove('hidden'); dbEl.classList.add('hidden');
+        fileTab.classList.add('bg-[#21262d]', 'text-white'); fileTab.classList.remove('text-[#8b949e]');
+        dbTab.classList.remove('bg-[#21262d]', 'text-white'); dbTab.classList.add('text-[#8b949e]');
+    } else {
+        fileEl.classList.add('hidden'); dbEl.classList.remove('hidden');
+        dbTab.classList.add('bg-[#21262d]', 'text-white'); dbTab.classList.remove('text-[#8b949e]');
+        fileTab.classList.remove('bg-[#21262d]', 'text-white'); fileTab.classList.add('text-[#8b949e]');
+        _populateConnectionDropdown('concat-db-connection');
+    }
+}
+
+window.loadJoinDbTables = async function() {
+    const connId = document.getElementById('join-db-connection').value;
+    const tableSelect = document.getElementById('join-db-table');
+    if (!connId) { tableSelect.innerHTML = '<option value="">Select connection first...</option>'; return; }
+    tableSelect.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const res = await fetch(`/api/connections/${connId}/schema`);
+        const data = await res.json();
+        const tables = data.tables || data.schema || [];
+        tableSelect.innerHTML = '<option value="">Select a table...</option>' +
+            tables.map(t => {
+                const name = typeof t === 'string' ? t : (t.table_name || t.name);
+                return `<option value="${name}">${name}</option>`;
+            }).join('');
+    } catch {
+        tableSelect.innerHTML = '<option value="">Error loading tables</option>';
+    }
+}
+
+window.selectJoinDbTable = async function() {
+    const connId = document.getElementById('join-db-connection').value;
+    const tableName = document.getElementById('join-db-table').value;
+    const rightOnSelect = document.getElementById('join-right-on');
+    if (!connId || !tableName) return;
+    rightOnSelect.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const res = await fetch(`/api/connections/${connId}/schema`);
+        const data = await res.json();
+        const tables = data.tables || data.schema || [];
+        const table = tables.find(t => (typeof t === 'string' ? t : (t.table_name || t.name)) === tableName);
+        const columns = table?.columns || [];
+        if (columns.length > 0) {
+            rightOnSelect.innerHTML = columns.map(c => {
+                const name = typeof c === 'string' ? c : (c.column_name || c.name);
+                return `<option value="${name}">${name}</option>`;
+            }).join('');
+        } else {
+            rightOnSelect.innerHTML = '<option value="">No columns found</option>';
+        }
+    } catch {
+        rightOnSelect.innerHTML = '<option value="">Error loading columns</option>';
+    }
+}
+
+window.loadConcatDbTables = async function() {
+    const connId = document.getElementById('concat-db-connection').value;
+    const tableSelect = document.getElementById('concat-db-table');
+    if (!connId) { tableSelect.innerHTML = '<option value="">Select connection first...</option>'; return; }
+    tableSelect.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const res = await fetch(`/api/connections/${connId}/schema`);
+        const data = await res.json();
+        const tables = data.tables || data.schema || [];
+        tableSelect.innerHTML = '<option value="">Select a table...</option>' +
+            tables.map(t => {
+                const name = typeof t === 'string' ? t : (t.table_name || t.name);
+                return `<option value="${name}">${name}</option>`;
+            }).join('');
+    } catch {
+        tableSelect.innerHTML = '<option value="">Error loading tables</option>';
+    }
 }
 
 // Import to DB functions
@@ -1614,8 +1961,8 @@ window.loadPipeline = function(index) {
     runPipeline();
 }
 
-window.deletePipeline = function(index) {
-    if (!confirm('Delete this pipeline?')) return;
+window.deletePipeline = async function(index) {
+    if (!await tuskConfirm('Delete this pipeline?')) return;
 
     let pipelines = [];
     try {
@@ -1885,7 +2232,9 @@ function renderResults(data) {
     statsEl.classList.remove('hidden');
 
     const geoColIndices = detectGeoColumns(data.columns, data.rows);
-    currentGeoJSON = geoColIndices.length > 0 ? rowsToGeoJSON(data.columns, data.rows, geoColIndices[0]) : null;
+    // Defer GeoJSON conversion until map is opened (avoids blocking render for large geometries)
+    currentGeoJSON = null;
+    window._pendingGeoData = geoColIndices.length > 0 ? { columns: data.columns, rows: data.rows, geoIdx: geoColIndices[0] } : null;
 
     let headerActions = '';
     if (geoColIndices.length > 0) {
@@ -1907,7 +2256,7 @@ function renderResults(data) {
                 <table id="results-table" class="w-full text-sm" style="table-layout: fixed;">
                     <thead class="bg-[#161b22] sticky top-0">
                         <tr class="text-left text-[#8b949e]">
-                            ${data.columns.map((c, idx) => `<th class="resizable-th px-4 py-2 font-medium border-b border-[#30363d]" style="min-width: 100px;">${c.name} <span class="text-xs text-[#484f58]">${c.type}</span><div class="resize-handle" data-col="${idx}"></div></th>`).join('')}
+                            ${data.columns.map((c, idx) => { const n = String(c.name).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); const t = String(c.type).replace(/</g,'&lt;').replace(/>/g,'&gt;'); return `<th class="resizable-th px-4 py-2 font-medium border-b border-[#30363d]" style="min-width: 100px;">${n} <span class="text-xs text-[#484f58]">${t}</span><div class="resize-handle" data-col="${idx}"></div></th>`; }).join('')}
                         </tr>
                     </thead>
                     <tbody class="mono text-xs">
@@ -1924,7 +2273,8 @@ function renderResults(data) {
                                         const escaped = json.replace(/</g, '&lt;').replace(/>/g, '&gt;');
                                         content = `<span class="text-[#f0883e] max-w-[300px] truncate block" title="${escaped.replace(/"/g, '&quot;')}">${escaped}</span>`;
                                     } else if (geoColIndices.includes(j)) {
-                                        content = `<span class="text-[#a371f7] max-w-[200px] truncate block">${cell}</span>`;
+                                        const geoEsc = String(cell).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                        content = `<span class="text-[#a371f7] max-w-[200px] truncate block">${geoEsc}</span>`;
                                     } else if (typeof cell === 'number') {
                                         content = `<span class="text-[#79c0ff]">${cell}</span>`;
                                     } else {
@@ -2048,6 +2398,12 @@ window.exportResults = async function(format) {
 // Map — destroy and recreate each time (same approach as studio.js)
 
 window.showMapModal = function() {
+    // Lazy-build GeoJSON on first map open
+    if (!currentGeoJSON && window._pendingGeoData) {
+        const { columns, rows, geoIdx } = window._pendingGeoData;
+        currentGeoJSON = rowsToGeoJSON(columns, rows, geoIdx);
+        window._pendingGeoData = null;
+    }
     if (!currentGeoJSON || !currentGeoJSON.features || currentGeoJSON.features.length === 0) {
         showToast('No geographic data available. Please load a dataset with geometry columns first.', 'warning');
         return;
@@ -2129,6 +2485,13 @@ function _initDataMap() {
         });
         if (!bounds.isEmpty()) mapInstance.fitBounds(bounds, { padding: 50, maxZoom: 15 });
 
+        // Escape HTML to prevent XSS in popups
+        function escHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = String(s ?? '');
+            return d.innerHTML;
+        }
+
         // Click popup for features
         let clickPopup = null;
         function showClickPopup(e) {
@@ -2141,7 +2504,7 @@ function _initDataMap() {
                     if (typeof v === 'string' && v.startsWith('{')) {
                         try { val = JSON.stringify(JSON.parse(v), null, 2); } catch(e) {}
                     }
-                    return `<div class="mb-1"><span class="text-[#8b949e]">${k}:</span> <span class="text-[#58a6ff]">${val}</span></div>`;
+                    return `<div class="mb-1"><span class="text-[#8b949e]">${escHtml(k)}:</span> <span class="text-[#58a6ff]">${escHtml(val)}</span></div>`;
                 }).join('')}
             </div>`;
             clickPopup = new maplibregl.Popup({ closeButton: true, className: 'geo-popup' })
@@ -2179,7 +2542,7 @@ function _initDataMap() {
             if (hoverPopup) hoverPopup.remove();
             hoverPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'hover-tooltip', offset: 10 })
                 .setLngLat(e.lngLat)
-                .setHTML(`<div class="bg-[#1c2128] text-white px-2 py-1 rounded text-xs font-medium shadow-lg">${label}</div>`)
+                .setHTML(`<div class="bg-[#1c2128] text-white px-2 py-1 rounded text-xs font-medium shadow-lg">${escHtml(label)}</div>`)
                 .addTo(mapInstance);
         }
         function hideHoverTooltip() { if (hoverPopup) { hoverPopup.remove(); hoverPopup = null; } }

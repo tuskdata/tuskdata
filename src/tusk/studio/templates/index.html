@@ -171,7 +171,7 @@
                 <input name="path" id="conn-path" placeholder="~/data/app.db" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
             </div>
             <div class="flex gap-3 justify-between pt-2">
-                <button type="button" onclick="testConnection()" class="px-4 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-sm">Test Connection</button>
+                <button type="button" id="test-conn-btn" onclick="testConnection()" class="px-4 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-sm">Test Connection</button>
                 <div class="flex gap-3">
                     <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
                     <button type="submit" id="conn-submit-btn" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Connect</button>

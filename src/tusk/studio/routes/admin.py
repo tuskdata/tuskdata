@@ -4,10 +4,39 @@ import msgspec
 from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
 from litestar.response import File, Template, Response
+from litestar.exceptions import NotAuthorizedException
 
 from tusk.studio.htmx import is_htmx, htmx_toast
 
 from tusk.core.connection import get_connection
+from tusk.core.config import get_config
+
+
+def _check_admin_auth(connection: Request, _: object) -> None:
+    """Guard: require admin auth when auth_mode is 'multi'.
+
+    In single-user mode (auth_mode != 'multi'), all access is allowed.
+    In multi-user mode, only authenticated admin users can access admin endpoints.
+    """
+    config = get_config()
+    if config.auth_mode != "multi":
+        return  # Single user mode — no auth required
+
+    from tusk.core.auth import get_session, get_user_by_id
+    session_id = connection.cookies.get("tusk_session")
+    if not session_id:
+        raise NotAuthorizedException("Authentication required")
+
+    session = get_session(session_id)
+    if not session:
+        raise NotAuthorizedException("Invalid or expired session")
+
+    user = get_user_by_id(session.user_id)
+    if not user or not user.is_active:
+        raise NotAuthorizedException("User not found or inactive")
+
+    if not user.is_admin:
+        raise NotAuthorizedException("Admin access required")
 from tusk.admin.stats import get_server_stats, ServerStats
 from tusk.admin.processes import get_active_queries, kill_query, ActiveQuery
 from tusk.admin.backup import (
@@ -64,6 +93,7 @@ class AdminController(Controller):
     """Admin API for PostgreSQL management"""
 
     path = "/api/admin"
+    guards = [_check_admin_auth]
 
     @get("/{conn_id:str}/stats")
     async def get_stats(self, request: Request, conn_id: str) -> dict | Template:

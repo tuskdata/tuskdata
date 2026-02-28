@@ -2,6 +2,78 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.2.1] - 2026-02-22
+
+### Security Hardening
+
+#### Authentication & Session Security
+- Password hashing upgraded to argon2id (with SHA-256 fallback)
+- Rate limiting on login endpoint (5 attempts per 60 seconds per IP)
+- CSRF protection via double-submit cookie middleware on all POST/PUT/DELETE/PATCH
+- Automatic session cleanup of expired sessions (hourly scheduler job)
+- Auth setup endpoint exempted from CSRF for initial configuration
+
+#### SQL Injection Fixes
+- Fixed f-string SQL injection in PostgreSQL role management (`admin/roles.py`)
+- Fixed f-string SQL injection in DuckDB file path queries (`duckdb_engine.py`)
+- Fixed f-string SQL injection in OSM file loading (`polars_engine.py`)
+
+#### Path Traversal & File Safety
+- Fixed directory traversal in backup delete (now uses `Path.name`)
+- Fixed PGPASSWORD exposure in environment (now uses `.pgpass` file)
+- Fixed path traversal in downloads module
+- Fixed ZIP extraction path traversal (validates member paths)
+- Fixed command injection in post_download_hook (now uses shlex)
+- Added file upload validation (10MB limit, type whitelist)
+
+#### Frontend Security
+- Fixed XSS in MapLibre popups via `escHtml()` helper in studio.js and data.js
+- Fixed XSS in data table headers and geo column rendering
+- HTMX auto-sends CSRF token on all requests via `htmx:configRequest`
+- Vanilla `fetch()` auto-injects CSRF header via global interceptor
+
+### ETL Pipeline Overhaul
+
+#### Multi-Source Pipelines
+- Chained joins: result of A JOIN B can be used as input for JOIN C
+- UNION/APPEND: ConcatTransform with vertical, diagonal, align modes
+- Right table column preview in join UI (fetchRightTableColumns)
+
+#### New Transforms
+- **Distinct**: Remove duplicate rows with subset and keep options
+- **Window Functions**: row_number, rank, dense_rank, lag, lead, cum_sum, cum_max, cum_min
+  - Partition by and order by support
+  - Configurable offset for lag/lead
+- **Multi-aggregation Group By**: Dynamic multi-row aggregation UI (addAggRow)
+
+### Notification System
+- In-app notification center with bell icon in navbar
+- Multi-channel support: in-app, email, webhook (extensible)
+- Notification preferences per user (settings page)
+- Event-driven architecture (query completion, backup, security alerts)
+- Automatic retry for failed notifications (scheduler job)
+- Old notification cleanup (scheduler job)
+- Templates for partials: bell icon, notification list, settings
+
+### Stability & Performance
+
+- **PostgreSQL connection pooling** via `psycopg_pool` (1-10 connections per DSN)
+- **Query timeout enforcement**: Configurable via `TUSK_QUERY_TIMEOUT` env (default 5 min)
+- **Temp export file cleanup**: Scheduler removes `tusk_export_*` files older than 30 min
+- **HTMX error handlers**: `htmx:sendError` and `htmx:responseError` for network errors
+- **Connection TOML fix**: `to_dict()` no longer includes None values (TOML-serializable)
+
+### Bug Fixes
+- Fixed missing `log` import in `admin/backup.py`
+- Fixed `connection.py` auto-save on add/delete/update
+- Fixed bare `except:` in `workspace.py` (now catches Exception)
+- Fixed connection `to_dict()` None values breaking TOML serialization
+
+### Dependencies
+- Added `psycopg_pool>=3.0` to postgres optional dependencies
+
+---
+
 ## [0.2.0] - 2026-02-22
 
 ### HTMX Migration & Plugin System

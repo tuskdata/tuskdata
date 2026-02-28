@@ -82,11 +82,35 @@ class JoinTransform(msgspec.Struct, tag="join"):
     how: Literal["inner", "left", "right", "outer", "cross"] = "inner"
 
 
+class ConcatTransform(msgspec.Struct, tag="concat"):
+    """Concatenate (UNION) with another dataset"""
+    source_ids: list[str]
+    how: Literal["vertical", "diagonal", "align"] = "vertical"
+
+
+class DistinctTransform(msgspec.Struct, tag="distinct"):
+    """Remove duplicate rows"""
+    subset: list[str] | None = None
+    keep: Literal["first", "last", "any", "none"] = "first"
+
+
+class WindowTransform(msgspec.Struct, tag="window"):
+    """Window function (row_number, rank, lag, lead, etc.) over partitions"""
+    function: Literal["row_number", "rank", "dense_rank", "lag", "lead", "cum_sum", "cum_max", "cum_min"]
+    order_by: list[str]
+    partition_by: list[str] | None = None
+    alias: str = "window_col"
+    descending: bool = False
+    column: str | None = None  # Required for lag/lead/cum_*
+    offset: int = 1  # For lag/lead
+
+
 # Union of all transform types
 Transform = (
     FilterTransform | SelectTransform | RenameTransform | SortTransform |
     GroupByTransform | AddColumnTransform | DropNullsTransform |
-    LimitTransform | JoinTransform
+    LimitTransform | JoinTransform | ConcatTransform | DistinctTransform |
+    WindowTransform
 )
 
 
@@ -236,6 +260,41 @@ def _transform_to_code(transform: Transform, sources: list[DataSource]) -> str:
             right_on = ", ".join(f'"{c}"' for c in (transform.right_on or []))
             return f'.join({right_var}, left_on=[{left_on}], right_on=[{right_on}], how="{transform.how}")'
 
+    elif isinstance(transform, ConcatTransform):
+        vars_list = ", ".join(_safe_var_name(sid) for sid in transform.source_ids)
+        return f'\nresult = pl.concat([result, {vars_list}], how="{transform.how}")\nresult = result'
+
+    elif isinstance(transform, DistinctTransform):
+        if transform.subset:
+            cols = ", ".join(f'"{c}"' for c in transform.subset)
+            return f'.unique(subset=[{cols}], keep="{transform.keep}")'
+        return f'.unique(keep="{transform.keep}")'
+
+    elif isinstance(transform, WindowTransform):
+        fn = transform.function
+        order_cols = ", ".join(f'"{c}"' for c in transform.order_by)
+        desc = "True" if transform.descending else "False"
+        partition = ""
+        if transform.partition_by:
+            part_cols = ", ".join(f'"{c}"' for c in transform.partition_by)
+            partition = f".over([{part_cols}])"
+
+        if fn == "row_number":
+            expr = f"pl.int_range(1, pl.len() + 1){partition}"
+        elif fn == "rank":
+            expr = f'pl.col("{transform.order_by[0]}").rank(method="min", descending={desc}){partition}'
+        elif fn == "dense_rank":
+            expr = f'pl.col("{transform.order_by[0]}").rank(method="dense", descending={desc}){partition}'
+        elif fn in ("lag", "lead"):
+            shift = transform.offset if fn == "lag" else -transform.offset
+            expr = f'pl.col("{transform.column}").shift({shift}){partition}'
+        elif fn in ("cum_sum", "cum_max", "cum_min"):
+            expr = f'pl.col("{transform.column}").{fn}(){partition}'
+        else:
+            return ""
+
+        return f'.sort([{order_cols}], descending={desc}).with_columns({expr}.alias("{transform.alias}"))'
+
     return ""
 
 
@@ -293,7 +352,10 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
     # Layer/kind filter for OSM data
     # ST_ReadOSM returns: kind (node/way/relation), id, tags, refs, lat, lon, ref_roles
     layer = layer or "all"
-    limit_clause = f"LIMIT {limit}" if limit else ""
+    limit_clause = f"LIMIT {int(limit)}" if limit else ""
+
+    # Escape path for DuckDB string literal (prevent SQL injection)
+    safe_p = str(p).replace("'", "''")
 
     try:
         # Use ST_ReadOSM for .osm.pbf files - it's much faster and works directly
@@ -307,7 +369,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     lat,
                     lon,
                     ST_AsGeoJSON(ST_Point(lon, lat)) as geometry
-                FROM st_readosm('{p}')
+                FROM st_readosm('{safe_p}')
                 WHERE kind = 'node' AND lat IS NOT NULL
                 {limit_clause}
             """
@@ -320,7 +382,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     tags,
                     refs,
                     len(refs) as ref_count
-                FROM st_readosm('{p}')
+                FROM st_readosm('{safe_p}')
                 WHERE kind = 'way'
                 {limit_clause}
             """
@@ -334,7 +396,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     refs,
                     ref_roles,
                     len(refs) as ref_count
-                FROM st_readosm('{p}')
+                FROM st_readosm('{safe_p}')
                 WHERE kind = 'relation'
                 {limit_clause}
             """
@@ -347,7 +409,7 @@ def load_osm(path: str, layer: str | None = None, limit: int | None = None) -> p
                     tags,
                     CASE WHEN lat IS NOT NULL THEN ST_AsGeoJSON(ST_Point(lon, lat)) END as geometry,
                     CASE WHEN refs IS NOT NULL THEN len(refs) END as ref_count
-                FROM st_readosm('{p}')
+                FROM st_readosm('{safe_p}')
                 {limit_clause}
             """
 
@@ -666,29 +728,69 @@ def apply_transform(df: pl.DataFrame, transform: Transform, sources_map: dict[st
                 how=transform.how
             )
 
+    elif isinstance(transform, ConcatTransform):
+        frames = [df]
+        for source_id in transform.source_ids:
+            other = sources_map.get(source_id)
+            if other is None:
+                raise ValueError(f"Source not found for concat: {source_id}")
+            frames.append(other)
+        return pl.concat(frames, how=transform.how)
+
+    elif isinstance(transform, DistinctTransform):
+        return df.unique(subset=transform.subset, keep=transform.keep)
+
+    elif isinstance(transform, WindowTransform):
+        order_expr = [pl.col(c).sort(descending=transform.descending) for c in transform.order_by]
+        partition = transform.partition_by or []
+
+        fn = transform.function
+        if fn == "row_number":
+            expr = pl.int_range(1, pl.len() + 1)
+        elif fn == "rank":
+            # Rank based on order_by column
+            col = transform.order_by[0]
+            expr = pl.col(col).rank(method="min", descending=transform.descending)
+        elif fn == "dense_rank":
+            col = transform.order_by[0]
+            expr = pl.col(col).rank(method="dense", descending=transform.descending)
+        elif fn == "lag":
+            if not transform.column:
+                raise ValueError("lag requires a column")
+            expr = pl.col(transform.column).shift(transform.offset)
+        elif fn == "lead":
+            if not transform.column:
+                raise ValueError("lead requires a column")
+            expr = pl.col(transform.column).shift(-transform.offset)
+        elif fn == "cum_sum":
+            if not transform.column:
+                raise ValueError("cum_sum requires a column")
+            expr = pl.col(transform.column).cum_sum()
+        elif fn == "cum_max":
+            if not transform.column:
+                raise ValueError("cum_max requires a column")
+            expr = pl.col(transform.column).cum_max()
+        elif fn == "cum_min":
+            if not transform.column:
+                raise ValueError("cum_min requires a column")
+            expr = pl.col(transform.column).cum_min()
+        else:
+            raise ValueError(f"Unknown window function: {fn}")
+
+        if partition:
+            expr = expr.over(partition)
+
+        return df.sort(transform.order_by, descending=transform.descending).with_columns(
+            expr.alias(transform.alias)
+        )
+
     return df
 
 
 def execute_pipeline(pipeline: Pipeline, limit: int | None = 100) -> dict:
     """Execute a pipeline and return results"""
     try:
-        # Load all sources
-        sources_map = {}
-        for source in pipeline.sources:
-            sources_map[source.id] = load_source(source)
-
-        # Get the output source
-        result = sources_map.get(pipeline.output_source_id)
-        if result is None:
-            return {"error": f"Output source not found: {pipeline.output_source_id}"}
-
-        # Apply transforms
-        for transform in pipeline.transforms:
-            result = apply_transform(result, transform, sources_map)
-
-        # Limit for preview
-        if limit:
-            result = result.limit(limit)
+        result = _run_pipeline(pipeline, limit)
 
         # Convert to dict for JSON serialization
         columns = [{"name": name, "type": str(dtype)} for name, dtype in zip(result.columns, result.dtypes)]
@@ -805,20 +907,34 @@ def get_osm_layers(path: str) -> dict:
 # Export Functions
 # ============================================================================
 
+def _run_pipeline(pipeline: Pipeline, limit: int | None = None) -> pl.DataFrame:
+    """Load sources, apply transforms, return result DataFrame.
+
+    Shared helper used by execute_pipeline, export, and import functions.
+    Raises ValueError on errors.
+    """
+    sources_map = {}
+    for source in pipeline.sources:
+        sources_map[source.id] = load_source(source)
+
+    result = sources_map.get(pipeline.output_source_id)
+    if result is None:
+        raise ValueError(f"Output source not found: {pipeline.output_source_id}")
+
+    for transform in pipeline.transforms:
+        result = apply_transform(result, transform, sources_map)
+        if isinstance(transform, (JoinTransform, ConcatTransform)):
+            sources_map[pipeline.output_source_id] = result
+
+    if limit:
+        result = result.limit(limit)
+    return result
+
+
 def export_to_csv(pipeline: Pipeline, output_path: str, limit: int | None = None) -> dict:
     """Export pipeline results to CSV file"""
     try:
-        # Load and transform data
-        sources_map = {}
-        for source in pipeline.sources:
-            sources_map[source.id] = load_source(source)
-
-        result = sources_map.get(pipeline.output_source_id)
-        if result is None:
-            return {"error": f"Output source not found: {pipeline.output_source_id}"}
-
-        for transform in pipeline.transforms:
-            result = apply_transform(result, transform, sources_map)
+        result = _run_pipeline(pipeline, limit)
 
         if limit:
             result = result.limit(limit)
@@ -838,20 +954,7 @@ def export_to_csv(pipeline: Pipeline, output_path: str, limit: int | None = None
 def export_to_parquet(pipeline: Pipeline, output_path: str, limit: int | None = None) -> dict:
     """Export pipeline results to Parquet file"""
     try:
-        # Load and transform data
-        sources_map = {}
-        for source in pipeline.sources:
-            sources_map[source.id] = load_source(source)
-
-        result = sources_map.get(pipeline.output_source_id)
-        if result is None:
-            return {"error": f"Output source not found: {pipeline.output_source_id}"}
-
-        for transform in pipeline.transforms:
-            result = apply_transform(result, transform, sources_map)
-
-        if limit:
-            result = result.limit(limit)
+        result = _run_pipeline(pipeline, limit)
 
         # Export to Parquet
         p = Path(output_path).expanduser()
@@ -872,20 +975,7 @@ def export_to_parquet(pipeline: Pipeline, output_path: str, limit: int | None = 
 def import_to_duckdb(pipeline: Pipeline, table_name: str, db_path: str | None = None, limit: int | None = None) -> dict:
     """Import pipeline results to DuckDB table"""
     try:
-        # Load and transform data
-        sources_map = {}
-        for source in pipeline.sources:
-            sources_map[source.id] = load_source(source)
-
-        result = sources_map.get(pipeline.output_source_id)
-        if result is None:
-            return {"error": f"Output source not found: {pipeline.output_source_id}"}
-
-        for transform in pipeline.transforms:
-            result = apply_transform(result, transform, sources_map)
-
-        if limit:
-            result = result.limit(limit)
+        result = _run_pipeline(pipeline, limit)
 
         # Connect to DuckDB (in-memory or file)
         conn = duckdb.connect(db_path or ":memory:")
@@ -946,21 +1036,7 @@ async def import_to_postgres(
 
         await report_progress(0, 100, "Loading data...")
 
-        # Load and transform data
-        sources_map = {}
-        for source in pipeline.sources:
-            sources_map[source.id] = load_source(source)
-
-        result = sources_map.get(pipeline.output_source_id)
-        if result is None:
-            return {"error": f"Output source not found: {pipeline.output_source_id}"}
-
-        for transform in pipeline.transforms:
-            result = apply_transform(result, transform, sources_map)
-
-        if limit:
-            result = result.limit(limit)
-
+        result = _run_pipeline(pipeline, limit)
         total_rows = result.height
         await report_progress(10, 100, f"Loaded {total_rows:,} rows, connecting to PostgreSQL...")
 

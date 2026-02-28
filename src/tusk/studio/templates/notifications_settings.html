@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% from "components/feedback.html" import badge, modal, empty_state, alert %}
+{% from "components/card.html" import stat_card %}
+{% from "components/forms.html" import text_input, select_input, button, icon_button %}
+
+{% block title %}Notifications - Tusk{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6" x-data="notificationSettings()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="bell" class="w-5 h-5"></i>
+                Notification Settings
+            </h1>
+            <p class="text-sm text-[#8b949e] mt-1">Configure channels, events, and subscriptions</p>
+        </div>
+        <a href="/" class="text-sm text-[#8b949e] hover:text-[#c9d1d9] flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            Back
+        </a>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-[#30363d] mb-6">
+        <button @click="tab = 'channels'" :class="tab === 'channels' ? 'border-blue-500 text-white' : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2">
+            <i data-lucide="radio" class="w-4 h-4"></i>
+            Channels
+        </button>
+        <button @click="tab = 'subscriptions'" :class="tab === 'subscriptions' ? 'border-blue-500 text-white' : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2">
+            <i data-lucide="mail" class="w-4 h-4"></i>
+            Subscriptions
+        </button>
+        <button @click="tab = 'history'" :class="tab === 'history' ? 'border-blue-500 text-white' : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4"></i>
+            History
+        </button>
+    </div>
+
+    <!-- Channels Tab -->
+    <div x-show="tab === 'channels'" x-cloak>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Notification Channels</h2>
+            <button @click="showAddChannel = true" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                Add Channel
+            </button>
+        </div>
+
+        {% if channels %}
+        <div class="space-y-3">
+            {% for ch in channels %}
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center
+                            {% if ch.channel_type == 'slack' %}bg-purple-500/20 text-purple-400
+                            {% elif ch.channel_type == 'discord' %}bg-indigo-500/20 text-indigo-400
+                            {% elif ch.channel_type == 'telegram' %}bg-blue-500/20 text-blue-400
+                            {% elif ch.channel_type == 'email' %}bg-green-500/20 text-green-400
+                            {% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                            {% if ch.channel_type == 'slack' %}<i data-lucide="hash" class="w-4 h-4"></i>
+                            {% elif ch.channel_type == 'discord' %}<i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                            {% elif ch.channel_type == 'telegram' %}<i data-lucide="send" class="w-4 h-4"></i>
+                            {% elif ch.channel_type == 'email' %}<i data-lucide="mail" class="w-4 h-4"></i>
+                            {% else %}<i data-lucide="webhook" class="w-4 h-4"></i>{% endif %}
+                        </div>
+                        <div>
+                            <div class="font-medium">{{ ch.name }}</div>
+                            <div class="text-xs text-[#8b949e]">{{ ch.channel_type | title }}</div>
+                        </div>
+                        {% if ch.enabled %}
+                        {{ badge("Active", "success") }}
+                        {% else %}
+                        {{ badge("Disabled", "low") }}
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button hx-post="/api/notifications/channels/{{ ch.id }}/test"
+                                hx-swap="none"
+                                class="px-2 py-1 text-xs rounded border border-[#30363d] hover:bg-[#21262d]">
+                            Test
+                        </button>
+                        <button hx-put="/api/notifications/channels/{{ ch.id }}"
+                                hx-vals='{"enabled": {{ "false" if ch.enabled else "true" }}}'
+                                hx-swap="none"
+                                hx-confirm="{% if ch.enabled %}Disable{% else %}Enable{% endif %} this channel?"
+                                class="px-2 py-1 text-xs rounded border border-[#30363d] hover:bg-[#21262d]">
+                            {% if ch.enabled %}Disable{% else %}Enable{% endif %}
+                        </button>
+                        <button hx-delete="/api/notifications/channels/{{ ch.id }}"
+                                hx-swap="none"
+                                hx-confirm="Delete channel '{{ ch.name }}'?"
+                                class="px-2 py-1 text-xs rounded border border-red-800 hover:bg-red-900/30 text-red-400">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        {{ empty_state("No notification channels configured", icon="radio", action_text="Add Channel", action_onclick="document.querySelector('[x-data]').__x.$data.showAddChannel = true") }}
+        {% endif %}
+    </div>
+
+    <!-- Subscriptions Tab -->
+    <div x-show="tab === 'subscriptions'" x-cloak>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Event Subscriptions</h2>
+            <button @click="saveSubscriptions()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                Save
+            </button>
+        </div>
+
+        {% if events and channels %}
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-[#30363d]">
+                            <th class="text-left px-4 py-3 font-medium">Event</th>
+                            <th class="text-left px-4 py-3 font-medium text-[#8b949e]">Plugin</th>
+                            {% for ch in channels %}
+                            <th class="text-center px-3 py-3 font-medium">
+                                <div class="text-xs">{{ ch.name }}</div>
+                                <div class="text-[10px] text-[#8b949e]">{{ ch.channel_type }}</div>
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ev in events %}
+                        <tr class="border-b border-[#30363d]/50 hover:bg-[#161b22]">
+                            <td class="px-4 py-2">
+                                <div class="font-medium">{{ ev.label }}</div>
+                                <div class="text-xs text-[#8b949e]">{{ ev.event_key }}</div>
+                            </td>
+                            <td class="px-4 py-2">
+                                {{ badge(ev.plugin_id, "info") }}
+                            </td>
+                            {% for ch in channels %}
+                            <td class="text-center px-3 py-2">
+                                <input type="checkbox"
+                                       x-model="subs['{{ ev.event_key }}__{{ ch.id }}']"
+                                       class="rounded bg-[#21262d] border-[#30363d] text-blue-500 focus:ring-blue-500/50">
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif not channels %}
+        {{ empty_state("Add a notification channel first", icon="radio", action_text="Go to Channels", action_onclick="document.querySelector('[x-data]').__x.$data.tab = 'channels'") }}
+        {% else %}
+        {{ empty_state("No notification events registered. Install plugins or wait for events to be registered.", icon="bell-off") }}
+        {% endif %}
+    </div>
+
+    <!-- History Tab -->
+    <div x-show="tab === 'history'" x-cloak>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Notification History</h2>
+            <button hx-post="/api/notifications/history/clear"
+                    hx-swap="none"
+                    hx-confirm="Clear history entries older than 30 days?"
+                    class="px-3 py-1.5 border border-[#30363d] hover:bg-[#21262d] rounded-lg text-sm font-medium flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                Clear Old
+            </button>
+        </div>
+
+        {% if history %}
+        <div class="card overflow-hidden">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-[#30363d]">
+                        <th class="text-left px-4 py-3 font-medium">Event</th>
+                        <th class="text-left px-4 py-3 font-medium">Channel</th>
+                        <th class="text-left px-4 py-3 font-medium">Status</th>
+                        <th class="text-left px-4 py-3 font-medium">Message</th>
+                        <th class="text-left px-4 py-3 font-medium">Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in history %}
+                    <tr class="border-b border-[#30363d]/50 hover:bg-[#161b22]">
+                        <td class="px-4 py-2 text-xs font-mono">{{ h.event_key }}</td>
+                        <td class="px-4 py-2">{{ h.channel_name }}</td>
+                        <td class="px-4 py-2">
+                            {% if h.status == "sent" %}
+                            {{ badge("Sent", "success") }}
+                            {% elif h.status == "failed" %}
+                            {{ badge("Failed", "error") }}
+                            {% else %}
+                            {{ badge("Pending", "info") }}
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 max-w-xs truncate text-[#8b949e]" title="{{ h.message }}">{{ h.message }}</td>
+                        <td class="px-4 py-2 text-xs text-[#8b949e] whitespace-nowrap" x-text="timeAgo({{ h.created_at }})"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        {{ empty_state("No notification history yet", icon="history") }}
+        {% endif %}
+    </div>
+
+    <!-- Add Channel Modal -->
+    <div x-show="showAddChannel" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/50" @click="showAddChannel = false"></div>
+        <div class="relative card p-6 max-w-lg w-full mx-4 shadow-xl" @click.stop>
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                Add Notification Channel
+            </h3>
+
+            <form @submit.prevent="addChannel()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Name</label>
+                        <input type="text" x-model="newChannel.name" required
+                               class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="e.g., Team Slack">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Type</label>
+                        <select x-model="newChannel.channel_type"
+                                class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="slack">Slack</option>
+                            <option value="discord">Discord</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="email">Email (SMTP)</option>
+                            <option value="webhook">Custom Webhook</option>
+                        </select>
+                    </div>
+
+                    <!-- Slack / Discord config -->
+                    <template x-if="newChannel.channel_type === 'slack' || newChannel.channel_type === 'discord'">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Webhook URL</label>
+                            <input type="url" x-model="newChannel.config.webhook_url" required
+                                   class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="https://hooks.slack.com/services/...">
+                        </div>
+                    </template>
+
+                    <!-- Telegram config -->
+                    <template x-if="newChannel.channel_type === 'telegram'">
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Bot Token</label>
+                                <input type="text" x-model="newChannel.config.bot_token" required
+                                       class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                       placeholder="123456:ABC-DEF...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Chat ID</label>
+                                <input type="text" x-model="newChannel.config.chat_id" required
+                                       class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                       placeholder="-1001234567890">
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Email config -->
+                    <template x-if="newChannel.channel_type === 'email'">
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">SMTP Host</label>
+                                    <input type="text" x-model="newChannel.config.host"
+                                           class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                           placeholder="smtp.gmail.com">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Port</label>
+                                    <input type="number" x-model="newChannel.config.port"
+                                           class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                           placeholder="587">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Username</label>
+                                <input type="text" x-model="newChannel.config.username"
+                                       class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Password</label>
+                                <input type="password" x-model="newChannel.config.password"
+                                       class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">From Address</label>
+                                    <input type="email" x-model="newChannel.config.from_addr"
+                                           class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">To Address</label>
+                                    <input type="email" x-model="newChannel.config.to_addr"
+                                           class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Webhook config -->
+                    <template x-if="newChannel.channel_type === 'webhook'">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Webhook URL</label>
+                            <input type="url" x-model="newChannel.config.url" required
+                                   class="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="https://example.com/webhook">
+                        </div>
+                    </template>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="showAddChannel = false" class="px-4 py-2 border border-[#30363d] rounded-lg text-sm hover:bg-[#21262d]">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium">Create Channel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function notificationSettings() {
+    return {
+        tab: 'channels',
+        showAddChannel: false,
+        newChannel: {
+            name: '',
+            channel_type: 'slack',
+            config: {}
+        },
+        subs: {
+            {% for ev in events %}
+            {% for ch in channels %}
+            '{{ ev.event_key }}__{{ ch.id }}': {{ "true" if subscriptions.get(ev.event_key, {}).get(ch.id, false) else "false" }},
+            {% endfor %}
+            {% endfor %}
+        },
+
+        async addChannel() {
+            try {
+                const res = await fetch('/api/notifications/channels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newChannel)
+                });
+                if (res.ok) {
+                    this.showAddChannel = false;
+                    this.newChannel = { name: '', channel_type: 'slack', config: {} };
+                    window.location.reload();
+                } else {
+                    const data = await res.json();
+                    tuskToast(data.error || 'Failed to create channel', 'error');
+                }
+            } catch (e) {
+                tuskToast('Failed to create channel', 'error');
+            }
+        },
+
+        async saveSubscriptions() {
+            const subscriptions = [];
+            for (const [key, enabled] of Object.entries(this.subs)) {
+                const [event_key, channel_id] = key.split('__');
+                subscriptions.push({ event_key, channel_id, enabled });
+            }
+            try {
+                const res = await fetch('/api/notifications/subscriptions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscriptions })
+                });
+                if (res.ok) {
+                    tuskToast('Subscriptions saved', 'success');
+                }
+            } catch (e) {
+                tuskToast('Failed to save subscriptions', 'error');
+            }
+        },
+
+        timeAgo(ts) {
+            const diff = Math.floor(Date.now() / 1000 - ts);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+    };
+}
+</script>
+{% endblock %}

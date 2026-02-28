@@ -201,7 +201,8 @@ function formatCell(value, type = '') {
     if (value === true) return '<span class="text-green-400">✓</span>';
     if (value === false) return '<span class="text-red-400">✗</span>';
     if (typeof value === 'object') {
-        return `<span class="text-purple-400 font-mono text-xs">${JSON.stringify(value)}</span>`;
+        const json = JSON.stringify(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<span class="text-purple-400 font-mono text-xs">${json}</span>`;
     }
     // Escape HTML
     const escaped = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -896,7 +897,7 @@ window.insertColumn = function(column) {
 }
 
 window.deleteConnection = async function(id) {
-    if (!confirm('Delete this connection?')) return;
+    if (!await tuskConfirm('Delete this connection?')) return;
     await fetch(`/api/connections/${id}`, { method: 'DELETE' });
     if (currentConnection?.id === id) {
         currentConnection = null;
@@ -1399,7 +1400,7 @@ window.useHistoryQuery = async function(id) {
 }
 
 window.clearHistory = async function() {
-    if (!confirm('Clear all query history?')) return;
+    if (!await tuskConfirm('Clear all query history?')) return;
 
     await fetch('/api/history', { method: 'DELETE' });
     loadHistory();
@@ -1603,7 +1604,7 @@ window.editSavedQuery = async function(id) {
 }
 
 window.deleteSavedQuery = async function(id) {
-    if (!confirm('Delete this saved query?')) return;
+    if (!await tuskConfirm('Delete this saved query?')) return;
 
     await fetch(`/api/saved-queries/${id}`, { method: 'DELETE' });
     loadSavedQueries();
@@ -1835,7 +1836,7 @@ window.hideFolderModal = function() {
 }
 
 window.removeFolder = async function(path) {
-    if (!confirm('Remove this folder from the list?')) return;
+    if (!await tuskConfirm('Remove this folder from the list?')) return;
 
     await fetch('/api/files/folders', {
         method: 'DELETE',
@@ -2693,6 +2694,13 @@ function initMap() {
             map.fitBounds(bounds, { padding: 50, maxZoom: 15 });
         }
 
+        // Escape HTML to prevent XSS in popups
+        function escHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = String(s ?? '');
+            return d.innerHTML;
+        }
+
         // Add popup on click
         let clickPopup = null;
 
@@ -2708,8 +2716,8 @@ function initMap() {
             let html = '<div class="text-xs max-w-xs max-h-48 overflow-auto">';
             html += '<table class="w-full">';
             for (const [key, value] of Object.entries(props)) {
-                const displayVal = value === null ? '<span class="text-gray-400">NULL</span>' : String(value).slice(0, 100);
-                html += `<tr><td class="font-bold pr-2 text-gray-300">${key}</td><td class="text-gray-400">${displayVal}</td></tr>`;
+                const displayVal = value === null ? '<span class="text-gray-400">NULL</span>' : escHtml(String(value).slice(0, 100));
+                html += `<tr><td class="font-bold pr-2 text-gray-300">${escHtml(key)}</td><td class="text-gray-400">${displayVal}</td></tr>`;
             }
             html += '</table></div>';
 
@@ -2770,7 +2778,7 @@ function initMap() {
                 offset: 10
             })
                 .setLngLat(e.lngLat)
-                .setHTML(`<div class="bg-[#1c2128] text-white px-2 py-1 rounded text-xs font-medium shadow-lg border border-[#30363d]">${label}</div>`)
+                .setHTML(`<div class="bg-[#1c2128] text-white px-2 py-1 rounded text-xs font-medium shadow-lg border border-[#30363d]">${escHtml(label)}</div>`)
                 .addTo(map);
         }
 

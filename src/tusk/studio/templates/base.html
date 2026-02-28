@@ -66,6 +66,13 @@
         <div class="flex items-center gap-3">
             {% block header_actions %}{% endblock %}
 
+            <!-- Notification Bell (polled every 30s) -->
+            <div id="notification-bell"
+                 hx-get="/api/notifications/badge"
+                 hx-trigger="load, every 30s, refreshNotifications from:body"
+                 hx-swap="innerHTML">
+            </div>
+
             <!-- Theme Toggle -->
             <button id="theme-toggle" onclick="toggleTheme()" class="p-2 rounded-lg hover:bg-[#21262d]" title="Toggle theme">
                 <i data-lucide="sun" id="theme-icon-light" class="w-4 h-4 hidden"></i>
@@ -218,7 +225,37 @@
             return coords;
         }
 
+        // ─── CSRF protection ─────────────────────────────────────
+        function getCsrfToken() {
+            const m = document.cookie.match(/(?:^|;\s*)tusk_csrf=([^;]*)/);
+            return m ? m[1] : null;
+        }
+
+        // Auto-inject CSRF header on state-changing fetch requests
+        const _origFetch = window.fetch;
+        window.fetch = function(url, opts) {
+            opts = opts || {};
+            const method = (opts.method || 'GET').toUpperCase();
+            if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                const token = getCsrfToken();
+                if (token) {
+                    if (opts.headers instanceof Headers) {
+                        if (!opts.headers.has('x-csrf-token')) opts.headers.set('x-csrf-token', token);
+                    } else {
+                        opts.headers = Object.assign({ 'x-csrf-token': token }, opts.headers || {});
+                    }
+                }
+            }
+            return _origFetch.call(window, url, opts);
+        };
+
         // ─── HTMX global config ───────────────────────────────────
+        // Inject CSRF header on every HTMX request
+        document.addEventListener('htmx:configRequest', (e) => {
+            const token = getCsrfToken();
+            if (token) e.detail.headers['x-csrf-token'] = token;
+        });
+
         // Re-init Lucide icons after every HTMX swap
         document.addEventListener('htmx:afterSwap', () => {
             lucide.createIcons();
@@ -232,7 +269,7 @@
             }
         });
 
-        // Global HTMX error handler
+        // Global HTMX error handlers
         document.addEventListener('htmx:responseError', (e) => {
             const xhr = e.detail.xhr;
             let msg = 'Request failed';
@@ -245,6 +282,11 @@
                 } catch (_) {}
             }
             showToast(msg, 'error');
+        });
+
+        // Network error (server unreachable, timeout, etc.)
+        document.addEventListener('htmx:sendError', () => {
+            showToast('Network error — server may be unreachable', 'error');
         });
 
         // ─── Init ─────────────────────────────────────────────────
@@ -353,6 +395,66 @@
         }
 
         window.tuskToast = showToast;
+
+        // ─── Confirmation / Prompt dialogs ───────────────────────
+        // Promise-based replacements for native confirm() / prompt()
+        // No Alpine dependency — works everywhere via DOM injection.
+
+        function _tuskDialog(html) {
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
+            overlay.innerHTML = `<div class="absolute inset-0 bg-black/60" data-backdrop></div>
+                <div class="relative bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl p-6 max-w-md w-full mx-4">${html}</div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('[data-backdrop]').addEventListener('click', () => {
+                overlay.querySelector('[data-cancel]')?.click();
+            });
+            return overlay;
+        }
+
+        window.tuskConfirm = function(message, title) {
+            return new Promise(resolve => {
+                const t = title ? `<h3 class="text-white font-semibold mb-2">${title}</h3>` : '';
+                const overlay = _tuskDialog(`${t}<p class="text-gray-300 text-sm mb-6">${message}</p>
+                    <div class="flex justify-end gap-2">
+                        <button data-cancel class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-sm rounded-lg">Cancel</button>
+                        <button data-ok class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg">Confirm</button>
+                    </div>`);
+                const close = (val) => { overlay.remove(); resolve(val); };
+                overlay.querySelector('[data-cancel]').addEventListener('click', () => close(false));
+                overlay.querySelector('[data-ok]').addEventListener('click', () => close(true));
+                overlay.querySelector('[data-ok]').focus();
+                const onKey = (e) => {
+                    if (e.key === 'Escape') { close(false); document.removeEventListener('keydown', onKey); }
+                    if (e.key === 'Enter') { close(true); document.removeEventListener('keydown', onKey); }
+                };
+                document.addEventListener('keydown', onKey);
+            });
+        };
+
+        window.tuskPrompt = function(message, defaultValue, title) {
+            return new Promise(resolve => {
+                const t = title ? `<h3 class="text-white font-semibold mb-2">${title}</h3>` : '';
+                const overlay = _tuskDialog(`${t}<p class="text-gray-300 text-sm mb-3">${message}</p>
+                    <input data-input type="text" value="${defaultValue || ''}"
+                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm text-gray-200 mb-4 focus:border-blue-500 outline-none">
+                    <div class="flex justify-end gap-2">
+                        <button data-cancel class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-sm rounded-lg">Cancel</button>
+                        <button data-ok class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg">OK</button>
+                    </div>`);
+                const input = overlay.querySelector('[data-input]');
+                const close = (val) => { overlay.remove(); resolve(val); };
+                overlay.querySelector('[data-cancel]').addEventListener('click', () => close(null));
+                overlay.querySelector('[data-ok]').addEventListener('click', () => close(input.value));
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); close(input.value); } });
+                input.focus();
+                input.select();
+                const onKey = (e) => {
+                    if (e.key === 'Escape') { close(null); document.removeEventListener('keydown', onKey); }
+                };
+                document.addEventListener('keydown', onKey);
+            });
+        };
 
         // ─── Resizable sidebar (Alpine component) ────────────────
         // Register immediately if Alpine is loaded (hx-boost navigation),

@@ -1,0 +1,84 @@
+{# Notification bell dropdown -- HTMX partial #}
+{# Polled every 30s from base.html, swaps into #notification-bell #}
+
+<div x-data="{ open: false }" class="relative">
+    <button @click="open = !open" class="relative p-2 rounded-lg hover:bg-[#21262d]" title="Notifications">
+        <i data-lucide="bell" class="w-4 h-4"></i>
+        {% if unread_count > 0 %}
+        <span class="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            {% if unread_count > 9 %}9+{% else %}{{ unread_count }}{% endif %}
+        </span>
+        {% endif %}
+    </button>
+
+    <div x-show="open"
+         x-cloak
+         @click.outside="open = false"
+         @keydown.escape.window="open = false"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
+         class="absolute right-0 top-full mt-2 w-80 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl z-50 overflow-hidden">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-3 py-2 border-b border-[#30363d]">
+            <span class="text-sm font-medium">Notifications</span>
+            <div class="flex items-center gap-2">
+                {% if unread_count > 0 %}
+                <button hx-post="/api/notifications/read-all"
+                        hx-swap="none"
+                        class="text-xs text-blue-400 hover:text-blue-300">
+                    Mark all read
+                </button>
+                {% endif %}
+                <a href="/notifications/settings" class="text-[#8b949e] hover:text-[#c9d1d9]" title="Settings">
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Notification list -->
+        <div class="max-h-80 overflow-y-auto">
+            {% if notifications %}
+            {% for n in notifications %}
+            <div class="flex items-start gap-2 px-3 py-2 hover:bg-[#21262d] border-b border-[#30363d]/50 {% if not n.read %}bg-[#161b22]{% endif %}">
+                <div class="mt-0.5 flex-shrink-0">
+                    {% if n.variant == "error" %}
+                    <i data-lucide="alert-circle" class="w-4 h-4 text-red-400"></i>
+                    {% elif n.variant == "warning" %}
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-yellow-400"></i>
+                    {% elif n.variant == "success" %}
+                    <i data-lucide="check-circle" class="w-4 h-4 text-green-400"></i>
+                    {% else %}
+                    <i data-lucide="{{ n.icon }}" class="w-4 h-4 text-blue-400"></i>
+                    {% endif %}
+                </div>
+                <div class="flex-1 min-w-0">
+                    {% if n.link %}
+                    <a href="{{ n.link }}" class="text-sm font-medium hover:text-blue-400 block truncate">{{ n.title }}</a>
+                    {% else %}
+                    <div class="text-sm font-medium truncate">{{ n.title }}</div>
+                    {% endif %}
+                    <div class="text-xs text-[#8b949e] truncate">{{ n.message }}</div>
+                </div>
+                {% if not n.read %}
+                <button hx-post="/api/notifications/{{ n.id }}/read"
+                        hx-swap="none"
+                        class="flex-shrink-0 mt-0.5 w-2 h-2 rounded-full bg-blue-500 hover:bg-blue-400"
+                        title="Mark as read">
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="px-3 py-8 text-center text-sm text-[#8b949e]">
+                <i data-lucide="bell-off" class="w-6 h-6 mx-auto mb-2 opacity-50"></i>
+                <div>No notifications</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

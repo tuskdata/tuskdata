@@ -58,7 +58,7 @@
     </template>
 
     <template x-if="connId">
-        <div>
+        <div :key="connId">
             <!-- Server Info Header -->
             <div class="mb-6 flex items-center justify-between">
                 <div>
@@ -622,7 +622,17 @@
 (function() {
     function _initAdminStore() {
         if (!Alpine.store('admin')) {
-            Alpine.store('admin', { connId: '', connName: '' });
+            var savedId = localStorage.getItem('tusk_admin_connId') || '';
+            var savedName = localStorage.getItem('tusk_admin_connName') || '';
+            Alpine.store('admin', { connId: savedId, connName: savedName });
+            // If we have a saved connection, trigger HTMX after Alpine is ready
+            if (savedId) {
+                setTimeout(function() {
+                    htmx.process(document.body);
+                    htmx.trigger(document.body, 'adminRefresh');
+                    lucide.createIcons();
+                }, 150);
+            }
         }
     }
     if (window.Alpine && Alpine.store) {
@@ -632,8 +642,13 @@
     }
 })();
 
-// Accessor for convenience
-var adminState = { get connId() { return Alpine.store('admin')?.connId || ''; }, set connId(v) { Alpine.store('admin').connId = v; }, get connName() { return Alpine.store('admin')?.connName || ''; }, set connName(v) { Alpine.store('admin').connName = v; } };
+// Accessor for convenience — persists to localStorage on write
+var adminState = {
+    get connId() { return Alpine.store('admin')?.connId || ''; },
+    set connId(v) { Alpine.store('admin').connId = v; localStorage.setItem('tusk_admin_connId', v); },
+    get connName() { return Alpine.store('admin')?.connName || ''; },
+    set connName(v) { Alpine.store('admin').connName = v; localStorage.setItem('tusk_admin_connName', v); }
+};
 
 function adminSidebar() {
     return {
@@ -641,14 +656,15 @@ function adminSidebar() {
         selectServer(id, name) {
             adminState.connId = id;
             adminState.connName = name;
-            // Wait for Alpine to render the template, then trigger HTMX loads
+            // The :key="connId" on the main content div forces Alpine to destroy
+            // and recreate all HTMX elements, so they get fresh URL bindings.
+            // Wait for Alpine to finish the DOM swap, then process HTMX.
             this.$nextTick(() => {
-                htmx.process(document.body);
-                // Fire adminRefresh so all sections load/reload with the new connId
                 setTimeout(() => {
+                    htmx.process(document.body);
                     htmx.trigger(document.body, 'adminRefresh');
                     lucide.createIcons();
-                }, 30);
+                }, 100);
             });
         },
         async createBackup() {
@@ -710,7 +726,7 @@ function adminPage() {
         },
         async resetSlowQueries() {
             if (!adminState.connId) return;
-            if (!confirm('Reset pg_stat_statements statistics? This clears all query history.')) return;
+            if (!await tuskConfirm('Reset pg_stat_statements statistics? This clears all query history.')) return;
             try {
                 const res = await fetch('/api/admin/' + adminState.connId + '/slow-queries/reset', { method: 'POST' });
                 const data = await res.json();
@@ -720,7 +736,8 @@ function adminPage() {
         },
         async createBaseBackup() {
             if (!adminState.connId) return;
-            const label = prompt('Backup label (optional):');
+            const label = await tuskPrompt('Backup label (optional):');
+            if (label === null) return;
             showToast('Starting base backup...', 'info');
             try {
                 const res = await fetch('/api/admin/' + adminState.connId + '/pitr/base-backup', {
@@ -904,7 +921,7 @@ window.resumeJob = async function(jobId) {
 };
 
 window.deleteJob = async function(jobId) {
-    if (!confirm('Delete this scheduled task?')) return;
+    if (!await tuskConfirm('Delete this scheduled task?')) return;
     try {
         const res = await fetch('/api/scheduler/jobs/' + jobId, { method: 'DELETE' });
         const data = await res.json();

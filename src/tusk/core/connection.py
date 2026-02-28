@@ -19,7 +19,7 @@ class ConnectionConfig(msgspec.Struct):
 
     name: str
     type: ConnectionType
-    id: str = msgspec.field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = msgspec.field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     # PostgreSQL fields
     host: str | None = None
@@ -36,7 +36,11 @@ class ConnectionConfig(msgspec.Struct):
         """PostgreSQL connection string"""
         if self.type != "postgres":
             raise ValueError("DSN only for PostgreSQL")
-        return f"postgresql://{quote(self.user, safe='')}:{quote(self.password, safe='')}@{self.host}:{self.port}/{self.database}"
+        user = quote(self.user or "", safe="")
+        password = quote(self.password or "", safe="")
+        host = self.host or "localhost"
+        database = self.database or "postgres"
+        return f"postgresql://{user}:{password}@{host}:{self.port}/{database}"
 
     def to_dict(self, include_password: bool = False) -> dict:
         """Convert to dictionary for serialization"""
@@ -46,16 +50,18 @@ class ConnectionConfig(msgspec.Struct):
             "type": self.type,
         }
         if self.type == "postgres":
-            data.update({
-                "host": self.host,
-                "port": self.port,
-                "database": self.database,
-                "user": self.user,
-            })
-            if include_password:
+            if self.host is not None:
+                data["host"] = self.host
+            data["port"] = self.port
+            if self.database is not None:
+                data["database"] = self.database
+            if self.user is not None:
+                data["user"] = self.user
+            if include_password and self.password is not None:
                 data["password"] = self.password
         elif self.type in ("sqlite", "duckdb"):
-            data["path"] = self.path
+            if self.path is not None:
+                data["path"] = self.path
         return data
 
 
@@ -63,9 +69,11 @@ class ConnectionConfig(msgspec.Struct):
 _connections: dict[str, ConnectionConfig] = {}
 
 
-def add_connection(config: ConnectionConfig) -> str:
-    """Add a connection to the registry"""
+def add_connection(config: ConnectionConfig, persist: bool = True) -> str:
+    """Add a connection to the registry and save to disk"""
     _connections[config.id] = config
+    if persist:
+        save_connections_to_file()
     return config.id
 
 
@@ -80,9 +88,10 @@ def list_connections() -> list[ConnectionConfig]:
 
 
 def delete_connection(conn_id: str) -> bool:
-    """Delete a connection"""
+    """Delete a connection and save to disk"""
     if conn_id in _connections:
         del _connections[conn_id]
+        save_connections_to_file()
         return True
     return False
 
@@ -108,6 +117,7 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
     )
 
     _connections[conn_id] = new_config
+    save_connections_to_file()
     return new_config
 
 
@@ -136,7 +146,7 @@ def load_connections_from_file() -> None:
 
     for conn_data in data.get("connections", []):
         config = ConnectionConfig(
-            id=conn_data.get("id", str(uuid.uuid4())[:8]),
+            id=conn_data.get("id", uuid.uuid4().hex[:12]),
             name=conn_data["name"],
             type=conn_data["type"],
             host=conn_data.get("host"),
@@ -146,4 +156,4 @@ def load_connections_from_file() -> None:
             password=conn_data.get("password"),
             path=conn_data.get("path"),
         )
-        _connections[config.id] = config
+        add_connection(config, persist=False)

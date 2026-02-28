@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.2.0"
+version = "0.2.1"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -30,12 +30,14 @@ dependencies = [
     "structlog>=24.0",     # Structured logging
     "tomli-w>=1.0",        # Config file writing
     "httpx>=0.27",         # HTTP client (for future ETL workflows)
+    "argon2-cffi>=23.1",   # Secure password hashing (argon2id)
 ]
 
 [project.optional-dependencies]
 # PostgreSQL connectivity
 postgres = [
     "psycopg[binary]>=3.0",
+    "psycopg_pool>=3.0",
 ]
 
 # Web UI + Data engines (Studio, Data page)
