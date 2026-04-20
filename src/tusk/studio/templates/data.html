@@ -156,8 +156,13 @@
                     <option value="auto">Auto</option>
                     <option value="duckdb">DuckDB</option>
                     <option value="polars">Polars</option>
+                    <option value="ibis+duckdb">Ibis · DuckDB</option>
+                    <option value="ibis+polars">Ibis · Polars</option>
                 </select>
             </label>
+            <button onclick="runProfile()" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5" title="Profile columns (Ibis)">
+                <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Profile
+            </button>
             <div class="w-px h-4 bg-[#30363d]"></div>
             <label class="flex items-center gap-2 text-sm text-[#8b949e]">
                 <span>Rows:</span>

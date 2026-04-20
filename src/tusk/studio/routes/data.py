@@ -388,7 +388,14 @@ class DataController(Controller):
 
     @post("/execute")
     async def execute_inline(self, data: dict = Body()) -> dict:
-        """Execute a pipeline inline without saving"""
+        """Execute a pipeline inline without saving.
+
+        The `engine` field picks the executor:
+        - "polars" (default) — legacy Polars engine, no new transforms
+        - "ibis" / "ibis+duckdb" — Ibis on DuckDB backend, supports case_when,
+          unpivot, date_arithmetic
+        - "ibis+polars" — Ibis on Polars backend
+        """
         # Parse sources
         sources = []
         for s in data.get("sources", []):
@@ -402,7 +409,6 @@ class DataController(Controller):
                 osm_layer=s.get("osm_layer")
             ))
 
-        # Parse transforms
         transforms = []
         for t in data.get("transforms", []):
             transform = _parse_transform(t)
@@ -421,7 +427,69 @@ class DataController(Controller):
         )
 
         limit = data.get("limit", 100)
-        return execute_pipeline(pipeline, limit)
+        engine = (data.get("engine") or "polars").lower()
+
+        if engine.startswith("ibis"):
+            try:
+                from tusk.engines.ibis_engine import execute_pipeline as ibis_execute, HAS_IBIS
+                if not HAS_IBIS:
+                    return {"error": "ibis-framework is not installed"}
+                backend = "polars" if engine.endswith("polars") else "duckdb"
+                df = ibis_execute(pipeline, backend=backend, limit=limit)
+                return _polars_df_to_dict(df, engine_used=f"ibis+{backend}")
+            except Exception as e:
+                log.error("ibis_execute_failed", error=str(e))
+                return {"error": f"Ibis execution failed: {e}"}
+
+        result = execute_pipeline(pipeline, limit)
+        if isinstance(result, dict):
+            result.setdefault("engine_used", "polars")
+        return result
+
+    @post("/profile")
+    async def profile_pipeline(self, data: dict = Body()) -> dict:
+        """Return per-column stats (null count, distinct, min/max/mean).
+
+        Uses the Ibis engine on DuckDB. Falls back with an error if ibis is
+        not installed.
+        """
+        from tusk.engines.ibis_engine import profile as ibis_profile, HAS_IBIS
+        if not HAS_IBIS:
+            return {"error": "ibis-framework is not installed"}
+
+        sources = []
+        for s in data.get("sources", []):
+            sources.append(DataSource(
+                id=s.get("id", str(uuid.uuid4())[:8]),
+                name=s.get("name", "Unnamed"),
+                source_type=s.get("source_type", "csv"),
+                path=s.get("path"),
+                connection_id=s.get("connection_id"),
+                query=s.get("query"),
+                osm_layer=s.get("osm_layer")
+            ))
+
+        transforms = []
+        for t in data.get("transforms", []):
+            transform = _parse_transform(t)
+            if transform:
+                transforms.append(transform)
+
+        if not sources:
+            return {"error": "No sources provided"}
+
+        pipeline = Pipeline(
+            id="temp",
+            name="Profile",
+            sources=sources,
+            transforms=transforms,
+            output_source_id=data.get("output_source_id", sources[0].id),
+        )
+        try:
+            return ibis_profile(pipeline, sample_limit=data.get("sample_limit", 10_000))
+        except Exception as e:
+            log.error("ibis_profile_failed", error=str(e))
+            return {"error": str(e)}
 
     @post("/code")
     async def generate_inline_code(self, data: dict = Body()) -> dict:
@@ -1029,7 +1097,56 @@ def _parse_transform(t: dict) -> Transform | None:
                 column=t.get("column"),
                 offset=t.get("offset", 1),
             )
+        elif transform_type == "case_when":
+            from tusk.engines.ibis_engine import CaseWhenTransform, CaseWhenBranch
+            branches = [
+                CaseWhenBranch(
+                    column=b["column"],
+                    operator=b["operator"],
+                    value=b.get("value"),
+                    result=b.get("result"),
+                )
+                for b in t.get("branches", [])
+            ]
+            return CaseWhenTransform(
+                alias=t["alias"],
+                branches=branches,
+                default=t.get("default"),
+            )
+        elif transform_type == "unpivot":
+            from tusk.engines.ibis_engine import UnpivotTransform
+            return UnpivotTransform(
+                id_cols=t["id_cols"],
+                value_cols=t["value_cols"],
+                variable_name=t.get("variable_name", "variable"),
+                value_name=t.get("value_name", "value"),
+            )
+        elif transform_type == "date_arithmetic":
+            from tusk.engines.ibis_engine import DateArithmeticTransform
+            return DateArithmeticTransform(
+                operation=t["operation"],
+                column=t["column"],
+                alias=t["alias"],
+                unit=t.get("unit", "day"),
+                amount=t.get("amount", 0),
+                other_column=t.get("other_column"),
+            )
     except (KeyError, TypeError) as e:
         pass
 
     return None
+
+
+def _polars_df_to_dict(df, engine_used: str = "polars") -> dict:
+    """Shape a Polars DataFrame into the dict the frontend expects."""
+    try:
+        columns = [{"name": c, "type": str(df.schema[c])} for c in df.columns]
+        rows = df.rows()
+        return {
+            "columns": columns,
+            "rows": [list(r) for r in rows],
+            "row_count": len(rows),
+            "engine_used": engine_used,
+        }
+    except Exception as e:
+        return {"error": f"Failed to serialize result: {e}"}

@@ -886,13 +886,77 @@ function updateEngineBadge(engineUsed, elapsedMs, fallback) {
     const colors = {
         duckdb: 'text-[#f0c000] bg-[#f0c000]/10',
         polars: 'text-[#58a6ff] bg-[#58a6ff]/10',
+        'ibis+duckdb': 'text-[#d29922] bg-[#d29922]/10',
+        'ibis+polars': 'text-[#a371f7] bg-[#a371f7]/10',
     };
-    const label = engineUsed === 'duckdb' ? 'DuckDB' : 'Polars';
+    const labels = {
+        duckdb: 'DuckDB',
+        polars: 'Polars',
+        'ibis+duckdb': 'Ibis · DuckDB',
+        'ibis+polars': 'Ibis · Polars',
+    };
+    const label = labels[engineUsed] || (engineUsed || 'Polars');
     const fallbackNote = fallback ? ' (fallback)' : '';
     const timeNote = elapsedMs != null ? ` · ${elapsedMs}ms` : '';
     badge.className = `text-xs px-2 py-0.5 rounded-full ${colors[engineUsed] || colors.polars}`;
     badge.textContent = `${label}${fallbackNote}${timeNote}`;
     badge.classList.remove('hidden');
+}
+
+window.runProfile = async function() {
+    const currentSource = getActiveDataset();
+    if (!currentSource) { showToast('Please select a dataset first', 'warning'); return; }
+    const allSources = [currentSource, ...getJoinSources()];
+    document.getElementById('results-container').innerHTML =
+        '<div class="text-[#8b949e] text-center py-12"><i data-lucide="loader-2" class="w-8 h-8 mx-auto mb-3 animate-spin"></i>Profiling columns...</div>';
+    lucide.createIcons();
+    const res = await fetch('/api/data/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sources: allSources, transforms: getTransforms(), output_source_id: currentSource.id }),
+    });
+    const data = await res.json();
+    if (data.error) {
+        document.getElementById('results-container').innerHTML =
+            `<div class="card rounded-lg p-4 text-red-400"><pre class="whitespace-pre-wrap font-mono text-sm">${data.error}</pre></div>`;
+        return;
+    }
+    renderProfile(data);
+}
+
+function renderProfile(data) {
+    const cols = data.columns || [];
+    const fmt = (v) => v === null || v === undefined ? '—' : String(v);
+    const rows = cols.map(c => `
+        <tr class="border-t border-[#30363d]">
+            <td class="px-3 py-1.5 font-mono text-xs">${c.name}</td>
+            <td class="px-3 py-1.5 text-xs text-[#8b949e]">${c.type}</td>
+            <td class="px-3 py-1.5 text-right">${fmt(c.rows)}</td>
+            <td class="px-3 py-1.5 text-right">${fmt(c.null_count)}</td>
+            <td class="px-3 py-1.5 text-right">${fmt(c.distinct)}</td>
+            <td class="px-3 py-1.5 text-right font-mono text-xs">${fmt(c.min)}</td>
+            <td class="px-3 py-1.5 text-right font-mono text-xs">${fmt(c.max)}</td>
+            <td class="px-3 py-1.5 text-right font-mono text-xs">${fmt(c.mean)}</td>
+        </tr>`).join('');
+    document.getElementById('results-container').innerHTML = `
+        <div class="card rounded-lg overflow-auto">
+            <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-[#161b22]">
+                    <tr class="text-left text-[#8b949e] text-xs uppercase">
+                        <th class="px-3 py-2">Column</th>
+                        <th class="px-3 py-2">Type</th>
+                        <th class="px-3 py-2 text-right">Rows</th>
+                        <th class="px-3 py-2 text-right">Nulls</th>
+                        <th class="px-3 py-2 text-right">Distinct</th>
+                        <th class="px-3 py-2 text-right">Min</th>
+                        <th class="px-3 py-2 text-right">Max</th>
+                        <th class="px-3 py-2 text-right">Mean</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+    updateEngineBadge(`ibis+${data.backend || 'duckdb'}`);
 }
 
 // Restore engine selector on page load
