@@ -482,9 +482,41 @@
 
 ---
 
-## v0.3.0: Ibis Unified DataFrame API — PLANNED 📋
+## v0.3.0: Security Hardening II + Ibis Preview — DONE ✅
 
-> **Goal**: Replace direct Polars dependency with Ibis as universal DataFrame API
+> **Goal**: Close exposure vectors surfaced during the v0.2.x audit, land
+> Ibis as an opt-in pipeline engine with new ETL transforms.
+> **Shipped**: 2026-04-20
+
+### Ibis Engine (opt-in)
+- [x] `engines/ibis_engine.py` executes pipelines on Ibis (DuckDB or Polars backend)
+- [x] New transforms: `case_when`, `unpivot`, `date_arithmetic`
+- [x] Column profiling endpoint (`POST /api/data/profile`)
+- [x] Engine selector in data tab: Ibis · DuckDB, Ibis · Polars
+
+### Security
+- [x] Encrypt connection passwords at rest (Fernet, `~/.tusk/.key` 0600)
+- [x] Server-side query cancellation (`pg_cancel_backend`, tracker, endpoint)
+- [x] Admin auth fail-closed: single-user requires loopback, multi-user requires admin
+- [x] SQL injection in `pg_available_extensions` and `pg_settings` category → parameterized
+- [x] Password minimum 8 chars + letter + digit
+- [x] UTC-aware timestamps everywhere
+
+### Stability
+- [x] Pagination for DuckDB and SQLite (prevents OOM on big results)
+- [x] HTMX error helper (`htmx_error`, `htmx_noswap`) with `HX-Reswap: none`
+- [x] Rate limiting on upload and export endpoints
+- [x] Audit trail for data exports (GDPR/compliance)
+- [x] Temp file cleanup extended to uploads
+- [x] Shared fetch wrapper with timeout (`tusk-fetch.js`)
+- [x] Column-resize listener leak fixed
+
+---
+
+## v0.4.0: Ibis as Default Engine — PLANNED 📋
+
+> **Goal**: Promote Ibis from opt-in to default, migrate saved pipelines, add
+> more Ibis-only transforms (cross-filter, drill-down, advanced windows).
 > **Why**: Single pipeline definition that compiles to Polars, Pandas, DuckDB, DataFusion, or PostgreSQL
 
 ### Core

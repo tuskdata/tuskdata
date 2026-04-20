@@ -2,6 +2,84 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.0] - 2026-04-20
+
+### Ibis Unified DataFrame API (Opt-in)
+
+- **New engine `engines/ibis_engine.py`** — pipelines now run through Ibis on
+  a DuckDB or Polars backend when `engine: "ibis+duckdb"` / `"ibis+polars"` is
+  passed to `/api/data/execute`. Polars engine stays the default. Pipeline
+  models (`DataSource`, `Pipeline`, transforms) are reused verbatim so saved
+  pipelines work on either engine.
+- **New transforms**: `case_when` (conditional column with branches + default),
+  `unpivot` (wide → long MELT), `date_arithmetic` (add/sub/diff/extract/truncate
+  with year/month/day/hour/minute/second/week units).
+- **Column profiling endpoint** — `POST /api/data/profile` returns per-column
+  null count, distinct count, min/max/mean via Ibis on DuckDB. UI button
+  "Profile" in the data tab renders a summary table.
+- **Engine selector in UI** — data tab dropdown now includes `Ibis · DuckDB`
+  and `Ibis · Polars` alongside `Auto / DuckDB / Polars`.
+
+### Security Hardening
+
+- **Connection passwords encrypted at rest** — `~/.tusk/connections.toml` now stores
+  passwords with Fernet symmetric encryption. Key lives at `~/.tusk/.key` with
+  `0600` perms. Plain-text legacy passwords are decrypted passthrough and
+  re-saved encrypted on next write. New module: `core/crypto.py`.
+- **Server-side query cancellation** — `Escape` now actually stops the backend
+  query, not just the client fetch. PostgreSQL uses `pg_cancel_backend(pid)`.
+  New endpoint `POST /api/query/cancel`. New module: `core/query_tracker.py`.
+- **Admin auth fail-closed in single-user mode** — admin endpoints now refuse
+  non-loopback requests unless multi-user auth is enabled. Closes exposure
+  vector where a default deploy on `0.0.0.0` exposed admin to the network.
+- **SQL injection hardening** — parameterized `pg_available_extensions` lookup
+  (`admin/extensions.py`) and `pg_settings` category filter (`admin/settings.py`).
+- **Password policy** — minimum raised from 6 to 8 chars, plus required letter
+  and digit. Shared validator in `studio/routes/auth.py`.
+- **UTC-aware timestamps** — all session, audit, workspace, history, download,
+  and cluster timestamps now store `datetime.now(timezone.utc).isoformat()`.
+  Fixes ambiguous session expiry and audit logs across time zones.
+
+### Stability & Reliability
+
+- **Pagination for DuckDB and SQLite** — `/api/query` now paginates every engine,
+  not just PostgreSQL. Prevents OOM on 10M-row results.
+- **HTMX error responses** — new `htmx_error()` helper sets `HX-Reswap: none` so
+  failed actions no longer wipe the target element. Retrofitted across admin,
+  auth, downloads, and notifications routes.
+- **Rate limiting beyond login** — new `core/rate_limit.py` module. Uploads
+  capped at 10/min/IP, exports at 20/min/IP.
+- **Data export audit trail** — CSV and Parquet exports write entries to the
+  audit log with user_id, format, filename, and row count (GDPR/compliance).
+- **Temp file cleanup extended** — scheduler now also prunes `tusk_uploads/`
+  older than 2 hours alongside `tusk_export_*`.
+
+### Frontend
+
+- **Shared fetch wrapper with timeout** — `static/tusk-fetch.js` exposes
+  `tuskFetch()` and `tuskFetchJSON()` with a default 2-minute AbortController
+  timeout so slow servers no longer hang the UI indefinitely.
+- **Column-resize listener leak fixed** — `initColumnResize()` no longer stacks
+  document-level `mousemove`/`mouseup` handlers on every re-render.
+- **Query cancellation wired** — Studio sends a `request_id` on every query and
+  posts to `/api/query/cancel` on Escape / Cancel.
+
+### Dependencies
+
+- Added `cryptography>=42.0` to core dependencies (Fernet symmetric encryption).
+- Added `ibis-framework[duckdb,polars]>=10.0` to `studio` optional dependencies.
+
+### Breaking Changes
+
+- Password minimum raised to 8 characters with letter+digit requirement. Users
+  with shorter passwords can still log in but will be required to update on
+  next change.
+- Connection file format now writes encrypted passwords. First load under
+  v0.3.0 migrates existing plain-text passwords automatically — downgrading
+  to v0.2.x will not be able to read them.
+
+---
+
 ## [0.2.1] - 2026-02-22
 
 ### Security Hardening
