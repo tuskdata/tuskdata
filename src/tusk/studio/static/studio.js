@@ -1,11 +1,15 @@
 // Tusk Studio - Main JavaScript Module
 // CodeMirror 6 imports
 import {EditorState} from "https://esm.sh/@codemirror/state@6"
-import {EditorView, keymap} from "https://esm.sh/@codemirror/view@6"
-import {defaultKeymap, indentWithTab} from "https://esm.sh/@codemirror/commands@6"
+import {EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection} from "https://esm.sh/@codemirror/view@6"
+import {defaultKeymap, indentWithTab, historyKeymap, history} from "https://esm.sh/@codemirror/commands@6"
 import {sql, PostgreSQL, SQLite} from "https://esm.sh/@codemirror/lang-sql@6"
 import {autocompletion, completeFromList} from "https://esm.sh/@codemirror/autocomplete@6"
 import {oneDark} from "https://esm.sh/@codemirror/theme-one-dark@6"
+import {bracketMatching, defaultHighlightStyle, syntaxHighlighting} from "https://esm.sh/@codemirror/language@6"
+import {searchKeymap, highlightSelectionMatches} from "https://esm.sh/@codemirror/search@6"
+import {closeBrackets, closeBracketsKeymap, completionKeymap} from "https://esm.sh/@codemirror/autocomplete@6"
+import {toggleLineComment} from "https://esm.sh/@codemirror/commands@6"
 
 let currentConnection = null;
 let currentSchema = {};
@@ -94,6 +98,8 @@ window.createTab = function(name = null, sqlText = "SELECT * FROM ") {
         id,
         name: name || `Query ${tabCounter}`,
         sql: sqlText,
+        savedSql: sqlText,
+        dirty: false,
         connectionId: currentConnection?.id || null,
         results: null
     };
@@ -101,6 +107,28 @@ window.createTab = function(name = null, sqlText = "SELECT * FROM ") {
     switchTab(id);
     saveTabsToLocalStorage();
     return id;
+}
+
+window.markActiveTabDirty = function() {
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (!tab || !editor) return;
+    const current = editor.state.doc.toString();
+    const dirty = current !== (tab.savedSql ?? "");
+    if (tab.dirty !== dirty) {
+        tab.dirty = dirty;
+        renderTabs();
+    }
+}
+
+window.renameTab = function(tabId) {
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    const next = window.prompt("Rename tab:", tab.name);
+    if (next && next.trim()) {
+        tab.name = next.trim();
+        renderTabs();
+        saveTabsToLocalStorage();
+    }
 }
 
 // Switch to a tab
@@ -145,6 +173,13 @@ window.closeTab = function(tabId, event) {
     const tabIndex = tabs.findIndex(t => t.id === tabId);
     if (tabIndex === -1) return;
 
+    const tab = tabs[tabIndex];
+    if (tab && tab.dirty) {
+        if (!window.confirm(`"${tab.name}" has unsaved changes. Close anyway?`)) {
+            return;
+        }
+    }
+
     // Don't close the last tab
     if (tabs.length === 1) {
         // Reset it instead
@@ -179,11 +214,13 @@ function renderTabs() {
     const container = document.getElementById('query-tabs');
     container.innerHTML = tabs.map(tab => `
         <div class="query-tab ${tab.id === activeTabId ? 'active' : ''}"
-             onclick="switchTab('${tab.id}')">
+             onclick="switchTab('${tab.id}')"
+             ondblclick="renameTab('${tab.id}')"
+             title="Double-click to rename">
             <svg class="query-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
             </svg>
-            <span>${tab.name}</span>
+            <span>${tab.name}${tab.dirty ? ' <span class="text-amber-400" title="Unsaved changes">*</span>' : ''}</span>
             <button class="close-btn" onclick="closeTab('${tab.id}', event)" title="Close tab">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -549,16 +586,30 @@ function initEditor(schema = {}, connType = 'postgres') {
     const state = EditorState.create({
         doc: initialDoc,
         extensions: [
+            lineNumbers(),
+            highlightActiveLine(),
+            drawSelection({cursorBlinkRate: 1000}),
+            history(),
+            bracketMatching(),
+            closeBrackets(),
+            highlightSelectionMatches(),
+            syntaxHighlighting(defaultHighlightStyle),
             keymap.of([
+                ...closeBracketsKeymap,
                 ...defaultKeymap,
+                ...historyKeymap,
+                ...searchKeymap,
+                ...completionKeymap,
                 indentWithTab,
                 { key: "Ctrl-Enter", run: () => { runQuery(); return true; } },
-                { key: "Cmd-Enter", run: () => { runQuery(); return true; } }
+                { key: "Cmd-Enter", run: () => { runQuery(); return true; } },
+                { key: "Ctrl-/", run: toggleLineComment },
+                { key: "Cmd-/", run: toggleLineComment },
             ]),
             sql({
                 dialect: sqlDialect,
                 schema: schemaForAutocomplete,
-                upperCaseKeywords: true
+                upperCaseKeywords: true,
             }),
             autocompletion({
                 override: [schemaCompleter]
@@ -567,7 +618,10 @@ function initEditor(schema = {}, connType = 'postgres') {
             EditorView.theme({
                 "&": { height: "180px" },
                 ".cm-scroller": { overflow: "auto" }
-            })
+            }),
+            EditorView.updateListener.of(u => {
+                if (u.docChanged) markActiveTabDirty();
+            }),
         ]
     });
 
