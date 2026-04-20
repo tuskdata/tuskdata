@@ -494,6 +494,23 @@
 - [x] Column profiling endpoint (`POST /api/data/profile`)
 - [x] Engine selector in data tab: Ibis · DuckDB, Ibis · Polars
 
+### Admin Panel
+- [x] Bulk query killers (kill-by-user, kill-by-database)
+- [x] EXPLAIN plan viewer endpoint
+- [x] Session SET settings endpoint
+- [x] Parameterized pg_terminate_backend
+
+### Studio Editor Polish
+- [x] Bracket matching + auto-close brackets
+- [x] Ctrl+/ to toggle line comments
+- [x] Rename tab (double-click)
+- [x] Unsaved-change marker (`*`) and confirm-before-close
+
+### Observability
+- [x] `/api/health` with dependency status (scheduler, plugins, ibis)
+- [x] `/api/metrics` JSON counters
+- [x] Configurable logging via TUSK_LOG_LEVEL + TUSK_LOG_FORMAT
+
 ### Security
 - [x] Encrypt connection passwords at rest (Fernet, `~/.tusk/.key` 0600)
 - [x] Server-side query cancellation (`pg_cancel_backend`, tracker, endpoint)

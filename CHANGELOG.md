@@ -20,6 +20,38 @@ All notable changes to Tusk will be documented in this file.
 - **Engine selector in UI** — data tab dropdown now includes `Ibis · DuckDB`
   and `Ibis · Polars` alongside `Auto / DuckDB / Polars`.
 
+### Admin Panel Expansion
+
+- **Bulk query killers** — `POST /api/admin/{conn}/kill-by-user` and
+  `/kill-by-database` terminate every matching active query in one call.
+- **EXPLAIN plan viewer** — `POST /api/admin/{conn}/explain` returns the
+  query plan as JSON; set `analyze: true` for EXPLAIN (ANALYZE, BUFFERS).
+- **Session SET settings** — `POST /api/admin/{conn}/set-setting` applies
+  a runtime SET for the current session (identifier regex-validated,
+  value bound as parameter).
+- `kill_query()` now parameterizes `pg_terminate_backend(pid)` instead of
+  f-string interpolation.
+
+### Studio Editor Polish (Phase 1)
+
+- CodeMirror editor adds bracket matching, auto-close brackets, selection
+  match highlighting, history + search + completion keymaps.
+- `Ctrl+/` / `Cmd+/` toggles line comments.
+- Tabs now support rename (double-click), dirty marker (`*` while the buffer
+  differs from the saved content), and confirm-before-close on dirty tabs.
+
+### Observability
+
+- **Health endpoint with dependency status** — `/api/health` reports per
+  component (`scheduler`, `plugins`, `ibis`) and returns `"ok"` or
+  `"degraded"` so load balancers can route around broken instances.
+- **Metrics endpoint** — `/api/metrics` returns lightweight JSON counters
+  (connections registered, queries in flight, rate-limit buckets).
+  Prometheus format planned for v0.4.0.
+- **Configurable logging via env** — `TUSK_LOG_LEVEL`
+  (`debug|info|warning|error|critical`) and `TUSK_LOG_FORMAT`
+  (`console` default, `json` for structured pipelines).
+
 ### Security Hardening
 
 - **Connection passwords encrypted at rest** — `~/.tusk/connections.toml` now stores
