@@ -33,6 +33,7 @@ from tusk.studio.routes import (
     NotificationPageController,
     NotificationAPIController,
     health_check,
+    metrics,
 )
 from tusk.core.connection import load_connections_from_file
 from tusk.core.logging import setup_logging, get_logger
@@ -130,6 +131,7 @@ def get_route_handlers() -> list:
         NotificationPageController,
         NotificationAPIController,
         health_check,
+        metrics,
     ]
 
     # Add plugin handlers

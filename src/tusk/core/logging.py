@@ -1,22 +1,46 @@
-"""Logging configuration for Tusk"""
+"""Logging configuration for Tusk.
+
+Env vars (read at setup_logging time):
+    TUSK_DEBUG — if truthy, default level becomes DEBUG
+    TUSK_LOG_LEVEL — override: debug, info, warning, error, critical
+    TUSK_LOG_FORMAT — "console" (default, colored) or "json"
+"""
 
 import logging
+import os
 import structlog
+
+_LEVELS = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
 
 
 def setup_logging(debug: bool = False) -> None:
-    """Configure structlog for the application"""
+    """Configure structlog for the application."""
 
-    # Determine log level
-    log_level = logging.DEBUG if debug else logging.INFO
+    level_override = os.environ.get("TUSK_LOG_LEVEL", "").strip().lower()
+    if level_override in _LEVELS:
+        log_level = _LEVELS[level_override]
+    else:
+        log_level = logging.DEBUG if debug else logging.INFO
 
-    # Configure structlog
+    fmt = os.environ.get("TUSK_LOG_FORMAT", "console").strip().lower()
+    if fmt == "json":
+        renderer = structlog.processors.JSONRenderer()
+    else:
+        renderer = structlog.dev.ConsoleRenderer(colors=True)
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer(colors=True)
+            renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,

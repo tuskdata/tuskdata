@@ -2,7 +2,7 @@
 
 from tusk.studio.routes.base import TuskController, get_base_context
 from tusk.studio.routes.pages import PageController
-from tusk.studio.routes.api import APIController, health_check
+from tusk.studio.routes.api import APIController, health_check, metrics
 from tusk.studio.routes.admin import AdminController
 from tusk.studio.routes.settings import SettingsController
 from tusk.studio.routes.files import FilesController, DuckDBController
@@ -20,6 +20,7 @@ __all__ = [
     "PageController",
     "APIController",
     "health_check",
+    "metrics",
     "AdminController",
     "SettingsController",
     "FilesController",

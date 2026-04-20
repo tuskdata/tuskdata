@@ -580,6 +580,54 @@ class APIController(Controller):
 
 @get("/api/health")
 async def health_check() -> dict:
-    """Health check endpoint"""
+    """Health check endpoint with dependency status.
+
+    Reports each sub-component (scheduler, plugins, ibis) so a load balancer
+    or orchestrator can distinguish "up" from "degraded".
+    """
     import tusk
-    return {"status": "ok", "version": tusk.__version__}
+
+    deps: dict[str, str] = {}
+
+    try:
+        from tusk.core.scheduler import get_scheduler
+        sched = get_scheduler()
+        if sched and sched.scheduler.running:
+            deps["scheduler"] = "up"
+        elif sched:
+            deps["scheduler"] = "idle"
+        else:
+            deps["scheduler"] = "unavailable"
+    except Exception:
+        deps["scheduler"] = "unavailable"
+
+    try:
+        from tusk.plugins.registry import get_all_plugins
+        plugins = get_all_plugins()
+        deps["plugins"] = f"loaded:{len(plugins)}"
+    except Exception:
+        deps["plugins"] = "unavailable"
+
+    try:
+        from tusk.engines.ibis_engine import HAS_IBIS
+        deps["ibis"] = "up" if HAS_IBIS else "unavailable"
+    except Exception:
+        deps["ibis"] = "unavailable"
+
+    degraded = [k for k, v in deps.items() if v == "down"]
+    status = "ok" if not degraded else "degraded"
+
+    return {"status": status, "version": tusk.__version__, "deps": deps}
+
+
+@get("/api/metrics")
+async def metrics() -> dict:
+    """Lightweight JSON metrics. Prometheus-format planned for v0.4.0."""
+    from tusk.core import query_tracker, rate_limit
+    from tusk.core.connection import list_connections
+
+    return {
+        "connections_registered": len(list_connections()),
+        "queries_in_flight": len(query_tracker.list_active()),
+        "rate_limit_buckets": len(rate_limit._buckets),
+    }
