@@ -56,7 +56,11 @@ def _check_admin_auth(connection: Request, _: object) -> None:
     if not user.is_admin:
         raise NotAuthorizedException("Admin access required")
 from tusk.admin.stats import get_server_stats, ServerStats
-from tusk.admin.processes import get_active_queries, kill_query, ActiveQuery
+from tusk.admin.processes import (
+    get_active_queries, kill_query, ActiveQuery,
+    kill_queries_by_user, kill_queries_by_database,
+    explain_query, set_setting,
+)
 from tusk.admin.backup import (
     create_backup, list_backups, get_backup_path, restore_backup,
     create_database, create_database_from_backup
@@ -209,6 +213,55 @@ class AdminController(Controller):
             return Template("partials/admin/processes.html", context={"processes": processes, "conn_id": conn_id})
 
         return {"success": success, "message": message}
+
+    @post("/{conn_id:str}/kill-by-user")
+    async def kill_by_user(self, conn_id: str, data: dict = Body()) -> dict:
+        """Terminate all active queries for a given user."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"success": False, "error": "PostgreSQL connection required"}
+        username = (data.get("username") or "").strip()
+        if not username:
+            return {"success": False, "error": "username required"}
+        killed, errors = await kill_queries_by_user(config, username)
+        return {"success": True, "killed": killed, "errors": errors}
+
+    @post("/{conn_id:str}/kill-by-database")
+    async def kill_by_database(self, conn_id: str, data: dict = Body()) -> dict:
+        """Terminate all active queries on a given database."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"success": False, "error": "PostgreSQL connection required"}
+        database = (data.get("database") or "").strip()
+        if not database:
+            return {"success": False, "error": "database required"}
+        killed, errors = await kill_queries_by_database(config, database)
+        return {"success": True, "killed": killed, "errors": errors}
+
+    @post("/{conn_id:str}/explain")
+    async def explain(self, conn_id: str, data: dict = Body()) -> dict:
+        """Return the EXPLAIN plan for a SQL statement."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"error": "PostgreSQL connection required"}
+        sql = (data.get("sql") or "").strip()
+        if not sql:
+            return {"error": "sql required"}
+        analyze = bool(data.get("analyze", False))
+        return await explain_query(config, sql, analyze=analyze)
+
+    @post("/{conn_id:str}/set-setting")
+    async def apply_setting(self, conn_id: str, data: dict = Body()) -> dict:
+        """Apply a session-level SET for a PostgreSQL setting."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"success": False, "error": "PostgreSQL connection required"}
+        name = (data.get("name") or "").strip()
+        value = str(data.get("value", "")).strip()
+        if not name:
+            return {"success": False, "error": "name required"}
+        ok, msg = await set_setting(config, name, value)
+        return {"success": ok, "message": msg}
 
     @post("/{conn_id:str}/backup")
     async def create_db_backup(self, request: Request, conn_id: str) -> dict | Response:
