@@ -21,7 +21,7 @@ from tusk.core.downloads import (
     download_file,
     test_ssh_backend,
 )
-from tusk.studio.htmx import is_htmx, htmx_toast
+from tusk.studio.htmx import is_htmx, htmx_toast, htmx_error
 
 log = get_logger("downloads_api")
 
@@ -68,7 +68,7 @@ class DownloadsController(Controller):
             if is_htmx(request):
                 return Response(
                     content="",
-                    headers=htmx_toast("Name and URL are required", "error"),
+                    headers=htmx_error("Name and URL are required"),
                     status_code=422,
                 )
             return {"error": "Name and URL are required"}
@@ -92,7 +92,7 @@ class DownloadsController(Controller):
         if not updated:
             if is_htmx(request):
                 return Response(
-                    content="", headers=htmx_toast("Source not found", "error"), status_code=404,
+                    content="", headers=htmx_error("Source not found"), status_code=404,
                 )
             return {"error": "Source not found"}
 
@@ -122,7 +122,7 @@ class DownloadsController(Controller):
             return {"deleted": True}
 
         if is_htmx(request):
-            return Response(content="", headers=htmx_toast("Source not found", "error"), status_code=404)
+            return Response(content="", headers=htmx_error("Source not found"), status_code=404)
         return {"error": "Source not found"}
 
     # ===== Trigger Download =====
@@ -133,7 +133,7 @@ class DownloadsController(Controller):
         source = get_source(source_id)
         if not source:
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast("Source not found", "error"), status_code=404)
+                return Response(content="", headers=htmx_error("Source not found"), status_code=404)
             return {"error": "Source not found"}
 
         try:
@@ -167,7 +167,7 @@ class DownloadsController(Controller):
         except Exception as e:
             log.error("Download trigger failed", source=source.name, error=str(e))
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast(str(e), "error"), status_code=500)
+                return Response(content="", headers=htmx_error(str(e)), status_code=500)
             return {"error": str(e)}
 
     # ===== Download History =====

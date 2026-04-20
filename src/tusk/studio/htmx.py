@@ -65,6 +65,27 @@ def htmx_toast(message: str, variant: str = "success") -> dict[str, str]:
     return htmx_trigger("tuskToast", {"message": message, "variant": variant})
 
 
+def htmx_error(message: str) -> dict[str, str]:
+    """Feedback for a failed HTMX action: toast + suppress swap.
+
+    The empty/error response body should not replace the target, so we set
+    HX-Reswap to 'none'. A toast carries the message to the user.
+    """
+    headers = htmx_toast(message, "error")
+    headers["HX-Reswap"] = "none"
+    return headers
+
+
+def htmx_noswap(message: str | None = None, variant: str = "info") -> dict[str, str]:
+    """Like htmx_error but with a configurable variant; just suppresses the swap."""
+    if message:
+        headers = htmx_toast(message, variant)
+    else:
+        headers = {}
+    headers["HX-Reswap"] = "none"
+    return headers
+
+
 def htmx_redirect(url: str) -> dict[str, str]:
     """HX-Redirect header — tells HTMX to do a client-side redirect.
 

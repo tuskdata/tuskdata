@@ -294,10 +294,47 @@ def get_duckdb_engine() -> DuckDBEngine:
     return _engine
 
 
-def execute_query(path: str, sql: str) -> QueryResult:
-    """Execute a query on a DuckDB file"""
+def execute_query(
+    path: str,
+    sql: str,
+    *,
+    page: int | None = None,
+    page_size: int = 100,
+) -> QueryResult:
+    """Execute a query on a DuckDB file.
+
+    If `page` is provided, runs COUNT + LIMIT/OFFSET around the user SQL to
+    keep the result bounded.
+    """
     resolved = str(Path(path).expanduser().resolve())
     engine = DuckDBEngine(resolved)
+
+    if page is not None and page > 0:
+        start = time.perf_counter()
+        try:
+            count_result = engine.conn.execute(f"SELECT COUNT(*) FROM ({sql})").fetchone()
+            total_count = count_result[0] if count_result else 0
+            offset = (page - 1) * page_size
+            paginated_sql = f"SELECT * FROM ({sql}) LIMIT {page_size} OFFSET {offset}"
+            result = engine.conn.execute(paginated_sql)
+            columns = [
+                ColumnInfo(name=desc[0], type=str(desc[1]))
+                for desc in (result.description or [])
+            ]
+            rows = [tuple(row) for row in result.fetchall()]
+            elapsed = (time.perf_counter() - start) * 1000
+            return QueryResult(
+                columns=columns,
+                rows=rows,
+                row_count=len(rows),
+                execution_time_ms=round(elapsed, 2),
+                total_count=total_count,
+                page=page,
+                page_size=page_size,
+            )
+        except Exception as e:
+            return QueryResult.from_error(str(e))
+
     return engine.execute(sql)
 
 

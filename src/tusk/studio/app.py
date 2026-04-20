@@ -197,10 +197,10 @@ def on_startup() -> None:
     except Exception as e:
         log.warning("Failed to register session cleanup", error=str(e))
 
-    # Schedule temp export file cleanup every 30 min
+    # Schedule temp export + upload cleanup every 30 min
     import tempfile
-    def cleanup_temp_exports():
-        """Remove tusk_export_* files older than 30 minutes."""
+    def cleanup_temp_files():
+        """Remove tusk_export_* files and stale tusk_uploads/* contents."""
         import time
         tmp_dir = Path(tempfile.gettempdir())
         cutoff = time.time() - 1800  # 30 min ago
@@ -212,13 +212,25 @@ def on_startup() -> None:
                     cleaned += 1
             except OSError:
                 pass
+
+        uploads_dir = tmp_dir / "tusk_uploads"
+        upload_cutoff = time.time() - 7200  # 2 hours for uploads
+        if uploads_dir.exists():
+            for f in uploads_dir.iterdir():
+                try:
+                    if f.is_file() and f.stat().st_mtime < upload_cutoff:
+                        f.unlink()
+                        cleaned += 1
+                except OSError:
+                    pass
+
         if cleaned:
-            log.info("Cleaned temp export files", count=cleaned)
+            log.info("Cleaned temp files", count=cleaned)
 
     scheduler.add_interval_job(
-        cleanup_temp_exports,
-        job_id="temp_export_cleanup",
-        name="Cleanup temp export files",
+        cleanup_temp_files,
+        job_id="temp_file_cleanup",
+        name="Cleanup temp export and upload files",
         minutes=30,
     )
 

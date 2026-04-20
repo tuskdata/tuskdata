@@ -6,7 +6,7 @@ import tempfile
 import os
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from litestar import Controller, Request, get, post, put, delete
 from litestar.params import Body
@@ -29,6 +29,27 @@ from tusk.core.connection import list_connections
 from tusk.studio.htmx import is_htmx
 
 log = structlog.get_logger()
+
+
+def _audit_export(request, fmt: str, filename: str, result: dict) -> None:
+    """Record a data export to the audit log, best-effort."""
+    try:
+        from tusk.core.auth import log_audit, get_session, get_user_by_id
+        ip = request.client.host if request.client else None
+        session_id = request.cookies.get("tusk_session")
+        user_id = None
+        if session_id:
+            session = get_session(session_id)
+            if session:
+                user_id = session.user_id
+        details = msgspec.json.encode({
+            "format": fmt,
+            "filename": filename,
+            "rows": result.get("row_count") or result.get("total_count"),
+        }).decode()
+        log_audit("data.export", user_id=user_id, resource=filename, details=details, ip_address=ip)
+    except Exception as e:
+        log.warning("audit_log_failed", error=str(e))
 
 # ─── Parquet cache for CSV/JSON files ────────────────────────────
 CACHE_DIR = Path.home() / ".tusk" / "cache"
@@ -258,7 +279,7 @@ class DataController(Controller):
     async def create_pipeline(self, data: dict = Body()) -> dict:
         """Create a new pipeline"""
         pipeline_id = str(uuid.uuid4())[:8]
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         # Parse sources
         sources = []
@@ -301,7 +322,7 @@ class DataController(Controller):
         if not pipeline:
             return {"error": "Pipeline not found"}
 
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         # Parse sources
         sources = []
@@ -440,8 +461,12 @@ class DataController(Controller):
         return {"code": code}
 
     @post("/export/csv")
-    async def export_csv(self, data: dict = Body()) -> File | dict:
+    async def export_csv(self, request: Request, data: dict = Body()) -> File | dict:
         """Export pipeline results to CSV and return as download"""
+        from tusk.core import rate_limit
+        client_ip = request.client.host if request.client else "unknown"
+        if not rate_limit.check_and_record("export", client_ip, max_attempts=20, window_seconds=60):
+            return {"error": "Too many exports. Please wait a minute."}
         # Parse sources
         sources = []
         for s in data.get("sources", []):
@@ -484,6 +509,8 @@ class DataController(Controller):
         if "error" in result:
             return result
 
+        _audit_export(request, "csv", filename, result)
+
         return File(
             path=temp_path,
             filename=filename,
@@ -491,8 +518,12 @@ class DataController(Controller):
         )
 
     @post("/export/parquet")
-    async def export_parquet(self, data: dict = Body()) -> File | dict:
+    async def export_parquet(self, request: Request, data: dict = Body()) -> File | dict:
         """Export pipeline results to Parquet and return as download"""
+        from tusk.core import rate_limit
+        client_ip = request.client.host if request.client else "unknown"
+        if not rate_limit.check_and_record("export", client_ip, max_attempts=20, window_seconds=60):
+            return {"error": "Too many exports. Please wait a minute."}
         # Parse sources
         sources = []
         for s in data.get("sources", []):
@@ -534,6 +565,8 @@ class DataController(Controller):
 
         if "error" in result:
             return result
+
+        _audit_export(request, "parquet", filename, result)
 
         return File(
             path=temp_path,
@@ -731,15 +764,19 @@ class DataController(Controller):
         }
 
     @post("/upload")
-    async def upload_file(self, data: UploadFile) -> dict:
+    async def upload_file(self, request: Request, data: UploadFile) -> dict:
         """Upload a data file for processing"""
-        # Allowed file extensions for data files
+        from tusk.core import rate_limit
+
         ALLOWED_EXTENSIONS = {".csv", ".tsv", ".json", ".parquet", ".xlsx", ".xls",
                               ".geojson", ".gpkg", ".pbf", ".shp", ".zip", ".gz", ".tar"}
         MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
 
+        client_ip = request.client.host if request.client else "unknown"
+        if not rate_limit.check_and_record("upload", client_ip, max_attempts=10, window_seconds=60):
+            return {"error": "Too many uploads. Please wait a minute."}
+
         try:
-            # Get uploads directory (create if needed)
             uploads_dir = Path(tempfile.gettempdir()) / "tusk_uploads"
             uploads_dir.mkdir(exist_ok=True)
 

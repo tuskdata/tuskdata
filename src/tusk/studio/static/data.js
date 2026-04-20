@@ -2294,41 +2294,49 @@ function renderResults(data) {
 }
 
 // Column resize functionality
+// Document-level listeners live for the whole page; we install them once and
+// key behavior off `_resizeState` so repeat calls don't stack handlers.
+let _resizeState = null;
+let _resizeListenersInstalled = false;
+
 function initColumnResize() {
     const table = document.getElementById('results-table');
     if (!table) return;
 
     const handles = table.querySelectorAll('.resize-handle');
-    let resizing = null;
-    let startX = 0;
-    let startWidth = 0;
 
     handles.forEach(handle => {
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            resizing = handle.parentElement;
-            startX = e.pageX;
-            startWidth = resizing.offsetWidth;
+            _resizeState = {
+                el: handle.parentElement,
+                startX: e.pageX,
+                startWidth: handle.parentElement.offsetWidth,
+                handle,
+            };
             handle.classList.add('resizing');
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
         });
     });
 
+    if (_resizeListenersInstalled) return;
+    _resizeListenersInstalled = true;
+
     document.addEventListener('mousemove', (e) => {
-        if (!resizing) return;
-        const diff = e.pageX - startX;
-        const newWidth = Math.max(80, startWidth + diff);
-        resizing.style.width = newWidth + 'px';
+        const state = _resizeState;
+        if (!state) return;
+        const diff = e.pageX - state.startX;
+        state.el.style.width = Math.max(80, state.startWidth + diff) + 'px';
     });
 
     document.addEventListener('mouseup', () => {
-        if (resizing) {
-            resizing.querySelector('.resize-handle')?.classList.remove('resizing');
-            resizing = null;
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        }
+        const state = _resizeState;
+        if (!state) return;
+        state.handle.classList.remove('resizing');
+        _resizeState = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
     });
 }
 

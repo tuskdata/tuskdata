@@ -5,7 +5,7 @@ from litestar.params import Body
 from litestar.response import Template
 
 from tusk.core.notifications import get_notification_service
-from tusk.studio.htmx import is_htmx, htmx_toast, htmx_trigger
+from tusk.studio.htmx import is_htmx, htmx_toast, htmx_trigger, htmx_error
 from tusk.studio.routes.base import TuskController, get_base_context
 
 
@@ -155,7 +155,7 @@ class NotificationAPIController(Controller):
         success, msg = svc.test_channel(channel_id)
         if success:
             return Response(content={"message": msg}, status_code=200, headers=htmx_toast(msg, "success"))
-        return Response(content={"error": msg}, status_code=400, headers=htmx_toast(msg, "error"))
+        return Response(content={"error": msg}, status_code=400, headers=htmx_error(msg))
 
     # ── Events & Subscriptions ────────────────────────────────
 

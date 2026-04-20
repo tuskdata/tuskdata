@@ -8,8 +8,18 @@ from tusk.core.connection import ConnectionConfig
 from tusk.core.result import QueryResult, ColumnInfo
 
 
-def execute_query(config: ConnectionConfig, sql: str) -> QueryResult:
-    """Execute SQL query and return results (sync - sqlite3 doesn't need async)"""
+def execute_query(
+    config: ConnectionConfig,
+    sql: str,
+    *,
+    page: int | None = None,
+    page_size: int = 100,
+) -> QueryResult:
+    """Execute SQL query and return results (sync - sqlite3 doesn't need async).
+
+    When `page` is provided, wraps the query in a COUNT + LIMIT/OFFSET so
+    the result set stays bounded regardless of how big the query is.
+    """
     start = time.perf_counter()
 
     try:
@@ -18,17 +28,23 @@ def execute_query(config: ConnectionConfig, sql: str) -> QueryResult:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute(sql)
+        total_count: int | None = None
+        effective_sql = sql
+        if page is not None and page > 0:
+            cursor.execute(f"SELECT COUNT(*) FROM ({sql})")
+            total_count = cursor.fetchone()[0]
+            offset = (page - 1) * page_size
+            effective_sql = f"SELECT * FROM ({sql}) LIMIT {page_size} OFFSET {offset}"
 
-        # Get column info
+        cursor.execute(effective_sql)
+
         columns = []
         if cursor.description:
             columns = [
-                ColumnInfo(name=desc[0], type="TEXT")  # SQLite is dynamically typed
+                ColumnInfo(name=desc[0], type="TEXT")
                 for desc in cursor.description
             ]
 
-        # Fetch rows
         rows = [tuple(row) for row in cursor.fetchall()]
 
         elapsed = (time.perf_counter() - start) * 1000
@@ -40,6 +56,9 @@ def execute_query(config: ConnectionConfig, sql: str) -> QueryResult:
             rows=rows,
             row_count=len(rows),
             execution_time_ms=round(elapsed, 2),
+            total_count=total_count,
+            page=page,
+            page_size=page_size if page is not None else None,
         )
 
     except Exception as e:
