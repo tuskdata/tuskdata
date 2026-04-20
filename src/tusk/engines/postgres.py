@@ -10,6 +10,7 @@ from psycopg.rows import tuple_row
 from tusk.core.connection import ConnectionConfig
 from tusk.core.result import QueryResult, ColumnInfo
 from tusk.core.logging import get_logger
+from tusk.core import query_tracker
 
 log = get_logger("postgres")
 
@@ -71,18 +72,28 @@ async def _connect(dsn: str):
             yield conn
 
 
-async def execute_query(config: ConnectionConfig, sql: str, *, params: tuple | None = None) -> QueryResult:
+async def execute_query(
+    config: ConnectionConfig,
+    sql: str,
+    *,
+    params: tuple | None = None,
+    request_id: str | None = None,
+) -> QueryResult:
     """Execute SQL query and return results.
 
     Args:
         config: Connection configuration
         sql: SQL query (use %s placeholders for params)
         params: Optional query parameters for safe interpolation
+        request_id: Optional id for server-side cancellation via pg_cancel_backend
     """
     start = time.perf_counter()
 
     try:
         async with _connect(config.dsn) as conn:
+            if request_id:
+                backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
+                query_tracker.update(request_id, pid=backend_pid)
             async with conn.cursor() as cur:
                 if QUERY_TIMEOUT_SEC > 0:
                     await cur.execute(f"SET statement_timeout = '{QUERY_TIMEOUT_SEC * 1000}'")
@@ -203,6 +214,7 @@ async def execute_query_paginated(
     page: int = 1,
     page_size: int = 100,
     params: tuple | None = None,
+    request_id: str | None = None,
 ) -> QueryResult:
     """Execute SQL query with server-side pagination.
 
@@ -213,6 +225,9 @@ async def execute_query_paginated(
 
     try:
         async with _connect(config.dsn) as conn:
+            if request_id:
+                backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
+                query_tracker.update(request_id, pid=backend_pid)
             # Set timeout for the session
             if QUERY_TIMEOUT_SEC > 0:
                 async with conn.cursor() as cur:
@@ -467,6 +482,19 @@ async def get_schema(config: ConnectionConfig) -> dict:
         schema[schema_name][table_name].append(col_info)
 
     return schema
+
+
+async def cancel_query(config: ConnectionConfig, pid: int) -> bool:
+    """Send pg_cancel_backend(pid) on a fresh connection. Returns True on success."""
+    try:
+        async with await psycopg.AsyncConnection.connect(config.dsn) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT pg_cancel_backend(%s)", (pid,))
+                result = await cur.fetchone()
+                return bool(result and result[0])
+    except Exception as e:
+        log.warning("pg_cancel_backend failed", pid=pid, error=str(e))
+        return False
 
 
 async def test_connection(config: ConnectionConfig) -> tuple[bool, str]:

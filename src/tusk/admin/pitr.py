@@ -21,7 +21,7 @@ import os
 import subprocess
 import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import tomllib
 import tomli_w
 import msgspec
@@ -156,7 +156,7 @@ def create_base_backup(
     base_dir = _get_base_dir(conn_id)
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
     backup_name = f"{timestamp}"
     if label:
         backup_name = f"{timestamp}_{label}"
@@ -223,7 +223,7 @@ def create_base_backup(
         backup_info = BaseBackupInfo(
             name=backup_name,
             path=str(backup_path),
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
             size_bytes=total_size,
             size_human=size_human,
             label=label,
@@ -421,7 +421,7 @@ def prepare_recovery(
         return False, f"Backup not found: {backup_name}", None
 
     # Create recovery directory
-    recovery_dir = PITR_DIR / conn_id / "recovery" / datetime.now().strftime("%Y%m%d_%H%M%S")
+    recovery_dir = PITR_DIR / conn_id / "recovery" / datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     recovery_dir.mkdir(parents=True, exist_ok=True)
 
     try:

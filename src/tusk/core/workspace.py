@@ -4,7 +4,7 @@ Saves and loads workspace state (datasets, transforms, join sources) to ~/.tusk/
 """
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import tempfile
 import msgspec
 import structlog
@@ -48,7 +48,7 @@ def save_workspace(state: WorkspaceState) -> dict:
     """Save workspace state to file"""
     try:
         WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
-        state.updated_at = datetime.now().isoformat()
+        state.updated_at = datetime.now(timezone.utc).isoformat()
 
         path = _workspace_path(state.name)
 

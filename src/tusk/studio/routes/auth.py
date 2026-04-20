@@ -37,11 +37,24 @@ from tusk.core.auth import (
 )
 from tusk.core.config import get_config
 from tusk.core.logging import get_logger
-from tusk.studio.htmx import is_htmx, htmx_toast
+from tusk.studio.htmx import is_htmx, htmx_toast, htmx_error
 
 log = get_logger("auth")
 
 SESSION_COOKIE = "tusk_session"
+
+PASSWORD_MIN_LENGTH = 8
+
+
+def _validate_password(password: str) -> str | None:
+    """Return an error message if the password fails policy, else None."""
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters"
+    has_letter = any(c.isalpha() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    if not (has_letter and has_digit):
+        return "Password must contain at least one letter and one digit"
+    return None
 
 
 class AuthController(Controller):
@@ -222,7 +235,7 @@ class ProfileController(Controller):
         user = await self._get_current_user(request)
         if not user:
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast("Not authenticated", "error"))
+                return Response(content="", status_code=200, headers=htmx_error("Not authenticated"))
             return {"error": "Not authenticated"}
 
         updates = {}
@@ -245,7 +258,7 @@ class ProfileController(Controller):
         user = await self._get_current_user(request)
         if not user:
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast("Not authenticated", "error"))
+                return Response(content="", status_code=200, headers=htmx_error("Not authenticated"))
             return {"error": "Not authenticated"}
 
         current_password = data.get("current_password", "")
@@ -254,17 +267,18 @@ class ProfileController(Controller):
         # Verify current password
         if not authenticate(user.username, current_password):
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast("Current password is incorrect", "error"))
+                return Response(content="", status_code=200, headers=htmx_error("Current password is incorrect"))
             return {"error": "Current password is incorrect"}
 
         if not new_password:
             if is_htmx(request):
                 return Response(content="", status_code=200, headers=htmx_toast("New password required", "warning"))
             return {"error": "New password required"}
-        if len(new_password) < 6:
+        err = _validate_password(new_password)
+        if err:
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast("Password must be at least 6 characters", "warning"))
-            return {"error": "Password must be at least 6 characters"}
+                return Response(content="", status_code=200, headers=htmx_toast(err, "warning"))
+            return {"error": err}
 
         update_password(user.id, new_password)
         log.info("Password changed", user_id=user.id)
@@ -328,7 +342,7 @@ class UsersController(Controller):
         """Create a new user"""
         if not await self._check_admin(request):
             if is_htmx(request):
-                return Response(content="", status_code=403, headers=htmx_toast("Unauthorized", "error"))
+                return Response(content="", status_code=403, headers=htmx_error("Unauthorized"))
             return {"error": "Unauthorized"}
 
         username = data.get("username", "").strip()
@@ -345,10 +359,11 @@ class UsersController(Controller):
             if is_htmx(request):
                 return Response(content="", status_code=200, headers=htmx_toast("Password required", "warning"))
             return {"error": "Password required"}
-        if len(password) < 6:
+        err = _validate_password(password)
+        if err:
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast("Password must be at least 6 characters", "warning"))
-            return {"error": "Password must be at least 6 characters"}
+                return Response(content="", status_code=200, headers=htmx_toast(err, "warning"))
+            return {"error": err}
 
         try:
             user = create_user(
@@ -375,7 +390,7 @@ class UsersController(Controller):
         except Exception as e:
             log.error("Failed to create user", username=username, error=str(e))
             if is_htmx(request):
-                return Response(content="", status_code=200, headers=htmx_toast(str(e), "error"))
+                return Response(content="", status_code=200, headers=htmx_error(str(e)))
             return {"error": str(e)}
 
     @get("/{user_id:str}")
@@ -435,8 +450,9 @@ class UsersController(Controller):
         password = data.get("password", "")
         if not password:
             return {"error": "Password required"}
-        if len(password) < 6:
-            return {"error": "Password must be at least 6 characters"}
+        err = _validate_password(password)
+        if err:
+            return {"error": err}
 
         update_password(user_id, password)
         log.info("Password reset", user_id=user_id)
@@ -447,7 +463,7 @@ class UsersController(Controller):
         """Delete user"""
         if not await self._check_admin(request):
             if is_htmx(request):
-                return Response(content="", status_code=403, headers=htmx_toast("Unauthorized", "error"))
+                return Response(content="", status_code=403, headers=htmx_error("Unauthorized"))
             return {"error": "Unauthorized"}
 
         delete_user(user_id)

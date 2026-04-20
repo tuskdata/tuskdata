@@ -6,21 +6,39 @@ from litestar.params import Body
 from litestar.response import File, Template, Response
 from litestar.exceptions import NotAuthorizedException
 
-from tusk.studio.htmx import is_htmx, htmx_toast
+from tusk.studio.htmx import is_htmx, htmx_toast, htmx_error
 
 from tusk.core.connection import get_connection
 from tusk.core.config import get_config
 
 
-def _check_admin_auth(connection: Request, _: object) -> None:
-    """Guard: require admin auth when auth_mode is 'multi'.
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
-    In single-user mode (auth_mode != 'multi'), all access is allowed.
-    In multi-user mode, only authenticated admin users can access admin endpoints.
+
+def _is_loopback(connection: Request) -> bool:
+    """True if the request originates from the local machine."""
+    client = getattr(connection, "client", None)
+    host = getattr(client, "host", None) if client else None
+    if not host:
+        return False
+    return host in _LOOPBACK_HOSTS or host.startswith("127.")
+
+
+def _check_admin_auth(connection: Request, _: object) -> None:
+    """Guard admin endpoints.
+
+    - Multi-user mode: require authenticated admin user.
+    - Single-user mode: require loopback origin. Remote access in single-user
+      mode is refused so the admin panel is never exposed without auth.
     """
     config = get_config()
+
     if config.auth_mode != "multi":
-        return  # Single user mode — no auth required
+        if _is_loopback(connection):
+            return
+        raise NotAuthorizedException(
+            "Admin endpoints require multi-user auth for non-loopback access"
+        )
 
     from tusk.core.auth import get_session, get_user_by_id
     session_id = connection.cookies.get("tusk_session")
@@ -173,7 +191,7 @@ class AdminController(Controller):
 
         if is_htmx(request):
             if not success:
-                return Response(content="", headers=htmx_toast(message, "error"))
+                return Response(content="", headers=htmx_error(message))
             queries = await get_active_queries(config)
             processes = [
                 {
@@ -269,7 +287,7 @@ class AdminController(Controller):
         filename = data.get("filename")
         if not filename:
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast("No filename provided", "error"))
+                return Response(content="", headers=htmx_error("No filename provided"))
             return {"success": False, "error": "No filename provided"}
 
         success, message = restore_backup(config, filename)
@@ -292,7 +310,7 @@ class AdminController(Controller):
         db_name = data.get("name")
         if not db_name:
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast("Database name is required", "error"))
+                return Response(content="", headers=htmx_error("Database name is required"))
             return {"success": False, "error": "Database name is required"}
 
         owner = data.get("owner")
@@ -318,11 +336,11 @@ class AdminController(Controller):
 
         if not db_name:
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast("Database name is required", "error"))
+                return Response(content="", headers=htmx_error("Database name is required"))
             return {"success": False, "error": "Database name is required"}
         if not filename:
             if is_htmx(request):
-                return Response(content="", headers=htmx_toast("Backup filename is required", "error"))
+                return Response(content="", headers=htmx_error("Backup filename is required"))
             return {"success": False, "error": "Backup filename is required"}
 
         owner = data.get("owner")
@@ -399,7 +417,7 @@ class AdminController(Controller):
             if is_htmx(request):
                 return Response(
                     content=f'<div class="text-red-400 text-sm p-2"><i data-lucide="alert-circle" class="w-4 h-4 inline"></i> {e}</div>',
-                    headers=htmx_toast(str(e), "error"),
+                    headers=htmx_error(str(e)),
                 )
             return {"success": False, "error": str(e)}
 
@@ -437,7 +455,7 @@ class AdminController(Controller):
             if is_htmx(request):
                 return Response(
                     content=f'<div class="text-red-400 text-sm p-2"><i data-lucide="alert-circle" class="w-4 h-4 inline"></i> {e}</div>',
-                    headers=htmx_toast(str(e), "error"),
+                    headers=htmx_error(str(e)),
                 )
             return {"success": False, "error": str(e)}
 
@@ -1025,7 +1043,7 @@ class AdminController(Controller):
 
         if is_htmx(request):
             if not success:
-                return Response(content="", headers=htmx_toast(message, "error"))
+                return Response(content="", headers=htmx_error(message))
             status = get_pitr_status(conn_id)
             backups = list_base_backups(conn_id)
             return Template("partials/admin/pitr.html", context={
@@ -1076,7 +1094,7 @@ class AdminController(Controller):
 
         if is_htmx(request):
             if not success:
-                return Response(content="", headers=htmx_toast(message, "error"))
+                return Response(content="", headers=htmx_error(message))
             status = get_pitr_status(conn_id)
             backups = list_base_backups(conn_id)
             return Template("partials/admin/pitr.html", context={

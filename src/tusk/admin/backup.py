@@ -5,7 +5,7 @@ import os
 import tempfile
 import stat
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import structlog
 from tusk.core.connection import ConnectionConfig, TUSK_DIR
@@ -141,7 +141,7 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
     """
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
     filename = f"{config.database}_{timestamp}.sql.gz"
     filepath = BACKUP_DIR / filename
 

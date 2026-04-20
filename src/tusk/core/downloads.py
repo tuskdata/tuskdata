@@ -18,7 +18,7 @@ import gzip
 import shutil
 import zipfile
 import tarfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -239,7 +239,7 @@ def _save_run(run: DownloadRun):
 
 def _now_iso() -> str:
     """Return current timestamp as ISO string."""
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _generate_id() -> str:

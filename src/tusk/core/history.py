@@ -2,7 +2,7 @@
 
 import sqlite3
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 import msgspec
 
@@ -95,7 +95,7 @@ class QueryHistory:
     ) -> int:
         """Add a query to history, returns the entry ID"""
         status = "error" if error else "success"
-        executed_at = datetime.now().isoformat()
+        executed_at = datetime.now(timezone.utc).isoformat()
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
@@ -165,7 +165,7 @@ class QueryHistory:
         folder: str | None = None
     ) -> int:
         """Save a query, returns the entry ID"""
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
@@ -231,7 +231,7 @@ class QueryHistory:
                 return False
 
             updates.append("updated_at = ?")
-            params.append(datetime.now().isoformat())
+            params.append(datetime.now(timezone.utc).isoformat())
             params.append(query_id)
 
             conn.execute(f"""

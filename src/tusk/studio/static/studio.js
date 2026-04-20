@@ -908,6 +908,12 @@ window.deleteConnection = async function(id) {
 
 // Query execution state
 let isRunning = false;
+let currentRequestId = null;
+
+function newRequestId() {
+    if (crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 window.runQuery = async function(options = {}) {
     if (!currentConnection) {
@@ -923,6 +929,7 @@ window.runQuery = async function(options = {}) {
 
     isRunning = true;
     queryAbortController = new AbortController();
+    currentRequestId = newRequestId();
 
     // Update Run button to show Cancel
     const runBtn = document.getElementById('run-btn');
@@ -951,20 +958,14 @@ window.runQuery = async function(options = {}) {
     }
 
     try {
-        // Determine if we should use server-side pagination
-        // Use pagination for PostgreSQL connections
-        const useServerPagination = currentConnection.type === 'postgres';
-
+        // Server-side pagination works for every engine now (postgres, duckdb, sqlite)
         const body = {
             connection_id: currentConnection.id,
             sql: sqlText,
+            request_id: currentRequestId,
+            page: page,
+            page_size: PAGE_SIZE,
         };
-
-        // For PostgreSQL, use server-side pagination
-        if (useServerPagination) {
-            body.page = page;
-            body.page_size = PAGE_SIZE;
-        }
 
         const res = await fetch('/api/query', {
             method: 'POST',
@@ -1007,6 +1008,7 @@ window.runQuery = async function(options = {}) {
     } finally {
         isRunning = false;
         queryAbortController = null;
+        currentRequestId = null;
         resetRunButton();
 
         // Refresh history after query execution (but not for page fetches)
@@ -1017,8 +1019,16 @@ window.runQuery = async function(options = {}) {
 }
 
 window.cancelQuery = function() {
+    const reqId = currentRequestId;
     if (queryAbortController) {
         queryAbortController.abort();
+    }
+    if (reqId) {
+        fetch('/api/query/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_id: reqId }),
+        }).catch(() => {});
     }
 }
 

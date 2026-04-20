@@ -2,7 +2,7 @@
 
 import asyncio
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
 from litestar.response import Template
@@ -147,7 +147,7 @@ class ClusterController(Controller):
             "cpu_percent": 0,
             "memory_mb": 0,
             "memory_percent": 0,
-            "last_heartbeat": datetime.now().isoformat(),
+            "last_heartbeat": datetime.now(timezone.utc).isoformat(),
             "jobs_completed": 0,
             "bytes_processed": 0,
         }
@@ -165,7 +165,7 @@ class ClusterController(Controller):
         worker["cpu_percent"] = data.get("cpu", 0)
         worker["memory_mb"] = data.get("memory", 0)
         worker["memory_percent"] = data.get("memory_percent", 0)
-        worker["last_heartbeat"] = datetime.now().isoformat()
+        worker["last_heartbeat"] = datetime.now(timezone.utc).isoformat()
         worker["status"] = data.get("status", "idle")
 
         return {"ok": True}
@@ -240,7 +240,7 @@ class ClusterController(Controller):
             "progress": 0,
             "stages_total": 1,
             "stages_completed": 0,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "started_at": None,
             "completed_at": None,
             "worker_id": None,
@@ -266,7 +266,7 @@ class ClusterController(Controller):
 
         if job["status"] in ("pending", "running"):
             job["status"] = "cancelled"
-            job["completed_at"] = datetime.now().isoformat()
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
             job["error"] = "Cancelled by user"
             log.info("Job cancelled", job_id=job_id)
             return {"cancelled": True}
@@ -279,7 +279,7 @@ class ClusterController(Controller):
         _cluster_state["scheduler"] = {
             "address": data.get("address", "localhost"),
             "port": data.get("port", 8814),
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
         }
         log.info("Scheduler registered via API")
         return {"registered": True}
@@ -326,7 +326,7 @@ class ClusterController(Controller):
                 _cluster_state["scheduler"] = {
                     "address": f"{host}:{port}",
                     "port": port,
-                    "started_at": datetime.now().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                 }
 
                 log.info("Connected to scheduler", host=host, port=port)
@@ -431,7 +431,7 @@ class ClusterController(Controller):
             _cluster_state["scheduler"] = {
                 "address": "localhost:8814",
                 "port": 8814,
-                "started_at": datetime.now().isoformat(),
+                "started_at": datetime.now(timezone.utc).isoformat(),
             }
 
             log.info("Local cluster started", pid=process.pid, workers=num_workers)
@@ -504,7 +504,7 @@ async def _simulate_job(job_id: str) -> None:
 
     # Start job
     job["status"] = "running"
-    job["started_at"] = datetime.now().isoformat()
+    job["started_at"] = datetime.now(timezone.utc).isoformat()
 
     # Simulate progress
     for i in range(10):
@@ -519,6 +519,6 @@ async def _simulate_job(job_id: str) -> None:
 
     # Complete job
     job["status"] = "completed"
-    job["completed_at"] = datetime.now().isoformat()
+    job["completed_at"] = datetime.now(timezone.utc).isoformat()
     job["progress"] = 1.0
     job["stages_completed"] = 1

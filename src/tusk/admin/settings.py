@@ -35,21 +35,22 @@ async def get_settings(config: ConnectionConfig, category: str | None = None) ->
     FROM pg_settings
     """
 
+    params: tuple | None = None
     if category:
-        # Validate category to prevent SQL injection
-        safe_categories = [
+        safe_categories = {
             'File Locations', 'Resource Usage', 'Write Ahead Log',
             'Replication', 'Query Tuning', 'Reporting and Logging',
             'Autovacuum', 'Client Connection Defaults', 'Lock Management',
             'Version and Platform Compatibility', 'Error Handling',
             'Preset Options', 'Developer Options', 'Connections and Authentication'
-        ]
+        }
         if category in safe_categories:
-            sql += f" WHERE category LIKE '{category}%'"
+            sql += " WHERE category LIKE %s"
+            params = (f"{category}%",)
 
     sql += " ORDER BY category, name"
 
-    result = await execute_query(config, sql)
+    result = await execute_query(config, sql, params=params)
 
     settings = []
     for row in result.rows:

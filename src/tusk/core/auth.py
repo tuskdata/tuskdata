@@ -4,7 +4,7 @@ import hashlib
 import secrets
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 import sqlite3
@@ -325,7 +325,7 @@ def create_user(
     init_auth_db()
 
     user_id = str(uuid4())
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     password_hash = hash_password(password)
 
     conn = sqlite3.connect(AUTH_DB)
@@ -504,7 +504,7 @@ def create_session(user_id: str, ip_address: str | None = None, user_agent: str 
     init_auth_db()
 
     session_id = generate_session_token()
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     expires = now + timedelta(hours=24)  # 24 hour session
 
     conn = sqlite3.connect(AUTH_DB)
@@ -556,8 +556,11 @@ def get_session(session_id: str) -> Session | None:
             user_agent=row[5],
         )
 
-        # Check if expired
-        if datetime.fromisoformat(session.expires_at) < datetime.now():
+        # Check if expired (tz-aware compare; legacy naive timestamps treated as UTC)
+        expires = datetime.fromisoformat(session.expires_at)
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < datetime.now(timezone.utc):
             delete_session(session_id)
             return None
 
@@ -604,7 +607,7 @@ def cleanup_expired_sessions() -> int:
     cursor = conn.cursor()
 
     try:
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         cursor.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
         conn.commit()
         return cursor.rowcount
@@ -637,7 +640,7 @@ def create_group(name: str, description: str | None = None, permissions: list[st
     init_auth_db()
 
     group_id = str(uuid4())
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     permissions = permissions or []
 
     conn = sqlite3.connect(AUTH_DB)
@@ -737,7 +740,7 @@ def add_user_to_group(user_id: str, group_id: str, added_by: str | None = None) 
         cursor.execute("""
             INSERT OR IGNORE INTO user_groups (user_id, group_id, added_at, added_by)
             VALUES (?, ?, ?, ?)
-        """, (user_id, group_id, datetime.now().isoformat(), added_by))
+        """, (user_id, group_id, datetime.now(timezone.utc).isoformat(), added_by))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -853,7 +856,7 @@ def log_audit(
         cursor.execute("""
             INSERT INTO audit_log (user_id, action, resource, details, ip_address, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, action, resource, details, ip_address, datetime.now().isoformat()))
+        """, (user_id, action, resource, details, ip_address, datetime.now(timezone.utc).isoformat()))
         conn.commit()
     finally:
         conn.close()

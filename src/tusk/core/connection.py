@@ -1,5 +1,7 @@
 """Connection management for Tusk"""
 
+import os
+import stat
 from typing import Literal
 from pathlib import Path
 from urllib.parse import quote
@@ -7,6 +9,8 @@ import uuid
 import tomllib
 import tomli_w
 import msgspec
+
+from tusk.core.crypto import encrypt, decrypt, is_encrypted
 
 ConnectionType = Literal["postgres", "sqlite", "duckdb"]
 
@@ -122,29 +126,51 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
 
 
 def save_connections_to_file() -> None:
-    """Save all connections to TOML file"""
+    """Save all connections to TOML file.
+
+    Passwords are encrypted with Fernet before writing to disk.
+    File permissions are set to 0600.
+    """
     TUSK_DIR.mkdir(parents=True, exist_ok=True)
 
-    data = {
-        "connections": [
-            conn.to_dict(include_password=True)
-            for conn in _connections.values()
-        ]
-    }
+    connections_data = []
+    for conn in _connections.values():
+        d = conn.to_dict(include_password=True)
+        pw = d.get("password")
+        if pw:
+            d["password"] = encrypt(pw) if not is_encrypted(pw) else pw
+        connections_data.append(d)
+
+    data = {"connections": connections_data}
 
     with open(CONN_FILE, "wb") as f:
         tomli_w.dump(data, f)
 
+    try:
+        os.chmod(CONN_FILE, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
 
 def load_connections_from_file() -> None:
-    """Load connections from TOML file into registry"""
+    """Load connections from TOML file into registry.
+
+    Decrypts passwords that are prefixed as encrypted. Plain-text passwords
+    (legacy) are accepted as-is and will be re-saved encrypted on next write.
+    """
     if not CONN_FILE.exists():
         return
 
     with open(CONN_FILE, "rb") as f:
         data = tomllib.load(f)
 
+    needs_migration = False
     for conn_data in data.get("connections", []):
+        raw_pw = conn_data.get("password")
+        if raw_pw and not is_encrypted(raw_pw):
+            needs_migration = True
+        password = decrypt(raw_pw) if raw_pw else None
+
         config = ConnectionConfig(
             id=conn_data.get("id", uuid.uuid4().hex[:12]),
             name=conn_data["name"],
@@ -153,7 +179,10 @@ def load_connections_from_file() -> None:
             port=conn_data.get("port", 5432),
             database=conn_data.get("database"),
             user=conn_data.get("user"),
-            password=conn_data.get("password"),
+            password=password,
             path=conn_data.get("path"),
         )
         add_connection(config, persist=False)
+
+    if needs_migration:
+        save_connections_to_file()

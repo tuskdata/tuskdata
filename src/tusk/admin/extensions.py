@@ -117,7 +117,7 @@ async def get_extension_details(config: ConnectionConfig, name: str) -> dict:
     if not name.replace("_", "").replace("-", "").isalnum():
         raise ValueError(f"Invalid extension name: {name}")
 
-    sql = f"""
+    sql = """
     SELECT
         a.name,
         a.default_version,
@@ -128,10 +128,10 @@ async def get_extension_details(config: ConnectionConfig, name: str) -> dict:
     FROM pg_available_extensions a
     LEFT JOIN pg_extension e ON a.name = e.extname
     LEFT JOIN pg_namespace n ON e.extnamespace = n.oid
-    WHERE a.name = '{name}'
+    WHERE a.name = %s
     """
 
-    result = await execute_query(config, sql)
+    result = await execute_query(config, sql, params=(name,))
 
     if not result.rows:
         return {"error": f"Extension '{name}' not found"}

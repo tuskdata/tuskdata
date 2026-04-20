@@ -1,6 +1,7 @@
 """API routes for Tusk Studio"""
 
 import time
+import uuid
 import msgspec
 from litestar import Controller, get, post, put, delete
 from litestar.params import Body
@@ -16,6 +17,7 @@ from tusk.core.connection import (
 )
 from tusk.core.history import get_history
 from tusk.core.geo import detect_geometry_columns, rows_to_geojson, to_dict as geo_to_dict
+from tusk.core import query_tracker
 from tusk.engines import postgres, sqlite
 from tusk.engines import duckdb_engine
 
@@ -268,12 +270,16 @@ class APIController(Controller):
             page: Page number (1-indexed)
             page_size: Rows per page (default 100)
 
+        Optional cancellation:
+            request_id: Client-supplied id used by POST /query/cancel
+
         If page is provided, returns paginated results with total_count.
         """
         conn_id = data.get("connection_id")
         sql = data.get("sql", "").strip()
         page = data.get("page")  # Optional: for server-side pagination
         page_size = data.get("page_size", 100)
+        request_id = data.get("request_id") or uuid.uuid4().hex
 
         if not sql:
             return {"error": "No SQL provided"}
@@ -283,25 +289,35 @@ class APIController(Controller):
             return {"error": "Connection not found"}
 
         start_time = time.time()
+        query_tracker.register(query_tracker.TrackedQuery(
+            request_id=request_id,
+            connection_id=conn_id or "",
+            engine=config.type,
+        ))
 
         try:
             if config.type == "postgres":
-                # Use paginated query if page is specified
                 if page is not None and page > 0:
                     result = await postgres.execute_query_paginated(
-                        config, sql, page=page, page_size=page_size
+                        config, sql, page=page, page_size=page_size, request_id=request_id
                     )
                 else:
-                    result = await postgres.execute_query(config, sql)
+                    result = await postgres.execute_query(config, sql, request_id=request_id)
             elif config.type == "duckdb":
-                result = duckdb_engine.execute_query(config.path, sql)
+                if page is not None and page > 0:
+                    result = duckdb_engine.execute_query(config.path, sql, page=page, page_size=page_size)
+                else:
+                    result = duckdb_engine.execute_query(config.path, sql)
             else:
-                result = sqlite.execute_query(config, sql)
+                if page is not None and page > 0:
+                    result = sqlite.execute_query(config, sql, page=page, page_size=page_size)
+                else:
+                    result = sqlite.execute_query(config, sql)
 
             execution_time_ms = (time.time() - start_time) * 1000
             result_dict = result.to_dict()
+            result_dict["request_id"] = request_id
 
-            # Save to history
             history = get_history()
             history.add(
                 connection_id=conn_id,
@@ -315,7 +331,6 @@ class APIController(Controller):
             return result_dict
 
         except Exception as e:
-            # Save error to history too
             execution_time_ms = (time.time() - start_time) * 1000
             history = get_history()
             history.add(
@@ -325,7 +340,30 @@ class APIController(Controller):
                 execution_time_ms=execution_time_ms,
                 error=str(e)
             )
-            return {"error": str(e)}
+            return {"error": str(e), "request_id": request_id}
+
+        finally:
+            query_tracker.unregister(request_id)
+
+    @post("/query/cancel")
+    async def cancel_query(self, data: dict = Body()) -> dict:
+        """Cancel an in-flight query by request_id."""
+        request_id = data.get("request_id")
+        if not request_id:
+            return {"error": "request_id required"}
+
+        tracked = query_tracker.get(request_id)
+        if not tracked:
+            return {"cancelled": False, "reason": "not_found"}
+
+        if tracked.engine == "postgres" and tracked.pid:
+            config = get_connection(tracked.connection_id)
+            if not config:
+                return {"cancelled": False, "reason": "connection_gone"}
+            ok = await postgres.cancel_query(config, tracked.pid)
+            return {"cancelled": ok, "pid": tracked.pid}
+
+        return {"cancelled": False, "reason": "engine_unsupported"}
 
     @post("/query/map-data")
     async def get_map_data(self, data: dict = Body()) -> dict:
