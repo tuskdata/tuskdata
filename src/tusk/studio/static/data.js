@@ -5,7 +5,9 @@ let datasets = [];  // Array of datasets {id, name, source_type, path, transform
 let activeDatasetId = null;  // Currently selected dataset
 let currentSchema = null;
 let selectedTransformType = null;
-let selectedEngine = localStorage.getItem('tusk_data_engine') || 'auto'; // Engine preference
+// Default engine is Ibis on DuckDB (v0.3.0); "auto" from older installs migrates forward.
+let selectedEngine = localStorage.getItem('tusk_data_engine') || 'ibis+duckdb';
+if (selectedEngine === 'auto') selectedEngine = 'ibis+duckdb';
 let pipelineCanvasVisible = localStorage.getItem('tusk_pipeline_canvas') === 'true';
 let _syncingFromCanvas = false; // Guard against circular sync
 

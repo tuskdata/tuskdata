@@ -427,20 +427,33 @@ class DataController(Controller):
         )
 
         limit = data.get("limit", 100)
-        engine = (data.get("engine") or "polars").lower()
+        # v0.3.0: Ibis is the default; Polars is reachable via engine="polars".
+        engine = (data.get("engine") or "ibis+duckdb").lower()
+        if engine in ("auto", "duckdb", "ibis"):
+            engine = "ibis+duckdb"
 
         if engine.startswith("ibis"):
+            from tusk.engines.ibis_engine import execute_pipeline as ibis_execute, HAS_IBIS
+            if not HAS_IBIS:
+                log.warning("ibis_unavailable_fallback_to_polars")
+                result = execute_pipeline(pipeline, limit)
+                if isinstance(result, dict):
+                    result.setdefault("engine_used", "polars")
+                    result["fallback"] = "ibis_missing"
+                return result
+            backend = "polars" if engine.endswith("polars") else "duckdb"
             try:
-                from tusk.engines.ibis_engine import execute_pipeline as ibis_execute, HAS_IBIS
-                if not HAS_IBIS:
-                    return {"error": "ibis-framework is not installed"}
-                backend = "polars" if engine.endswith("polars") else "duckdb"
                 df = ibis_execute(pipeline, backend=backend, limit=limit)
                 return _polars_df_to_dict(df, engine_used=f"ibis+{backend}")
             except Exception as e:
-                log.error("ibis_execute_failed", error=str(e))
-                return {"error": f"Ibis execution failed: {e}"}
+                log.error("ibis_execute_failed", error=str(e), falling_back="polars")
+                result = execute_pipeline(pipeline, limit)
+                if isinstance(result, dict):
+                    result.setdefault("engine_used", "polars")
+                    result["fallback"] = f"ibis_error: {e}"
+                return result
 
+        # Explicit polars or unknown engine → legacy Polars executor
         result = execute_pipeline(pipeline, limit)
         if isinstance(result, dict):
             result.setdefault("engine_used", "polars")

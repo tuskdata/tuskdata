@@ -153,11 +153,10 @@
             <label class="flex items-center gap-2 text-sm text-[#8b949e]">
                 <span>Engine:</span>
                 <select id="engine-select" onchange="changeEngine()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
-                    <option value="auto">Auto</option>
-                    <option value="duckdb">DuckDB</option>
-                    <option value="polars">Polars</option>
-                    <option value="ibis+duckdb">Ibis · DuckDB</option>
+                    <option value="ibis+duckdb">Ibis · DuckDB (default)</option>
                     <option value="ibis+polars">Ibis · Polars</option>
+                    <option value="duckdb">DuckDB (legacy)</option>
+                    <option value="polars">Polars (legacy)</option>
                 </select>
             </label>
             <button onclick="runProfile()" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5" title="Profile columns (Ibis)">
