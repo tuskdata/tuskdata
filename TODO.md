@@ -488,28 +488,41 @@
 > Ibis as an opt-in pipeline engine with new ETL transforms.
 > **Shipped**: 2026-04-20
 
-### Ibis Engine (opt-in)
+### Ibis Engine (default)
 - [x] `engines/ibis_engine.py` executes pipelines on Ibis (DuckDB or Polars backend)
+- [x] Ibis on DuckDB is the default; Polars via `engine: "polars"`
+- [x] Automatic Polars fallback when ibis fails
 - [x] New transforms: `case_when`, `unpivot`, `date_arithmetic`
 - [x] Column profiling endpoint (`POST /api/data/profile`)
-- [x] Engine selector in data tab: Ibis · DuckDB, Ibis · Polars
 
 ### Admin Panel
 - [x] Bulk query killers (kill-by-user, kill-by-database)
 - [x] EXPLAIN plan viewer endpoint
 - [x] Session SET settings endpoint
 - [x] Parameterized pg_terminate_backend
+- [x] Backup sidecar metadata JSON (timestamp, size, sha256, source)
+- [x] Stats history + /stats/history endpoint for sparklines
 
 ### Studio Editor Polish
 - [x] Bracket matching + auto-close brackets
 - [x] Ctrl+/ to toggle line comments
 - [x] Rename tab (double-click)
 - [x] Unsaved-change marker (`*`) and confirm-before-close
+- [x] Per-column filter inputs
+- [x] Row checkboxes + select-all
+- [x] Copy as INSERT
+- [x] Date / number formatting
 
 ### Observability
 - [x] `/api/health` with dependency status (scheduler, plugins, ibis)
-- [x] `/api/metrics` JSON counters
+- [x] `/api/metrics` in Prometheus text-exposition format
 - [x] Configurable logging via TUSK_LOG_LEVEL + TUSK_LOG_FORMAT
+
+### Plugins shipped at v0.2.0
+- [x] tusk-cluster: user-or-worker guard, thread lock, TLS support
+- [x] tusk-security: AdGuardClient context manager, migration v4 indexes
+- [x] tusk-bi: SQL injection fix, query cache, widget/query export, cache-clear
+- [x] tusk-ci: webhook info, cron validator + describer
 
 ### Security
 - [x] Encrypt connection passwords at rest (Fernet, `~/.tusk/.key` 0600)

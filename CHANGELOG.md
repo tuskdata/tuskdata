@@ -4,11 +4,12 @@ All notable changes to Tusk will be documented in this file.
 
 ## [0.3.0] - 2026-04-20
 
-### Ibis Unified DataFrame API (Opt-in)
+### Ibis Unified DataFrame API (now default)
 
 - **New engine `engines/ibis_engine.py`** — pipelines now run through Ibis on
-  a DuckDB or Polars backend when `engine: "ibis+duckdb"` / `"ibis+polars"` is
-  passed to `/api/data/execute`. Polars engine stays the default. Pipeline
+  a DuckDB or Polars backend. **Ibis on DuckDB is now the default** for
+  `/api/data/execute`; legacy `engine: "polars"` is still accepted and the
+  executor falls back to Polars automatically if Ibis raises. Pipeline
   models (`DataSource`, `Pipeline`, transforms) are reused verbatim so saved
   pipelines work on either engine.
 - **New transforms**: `case_when` (conditional column with branches + default),
@@ -29,6 +30,13 @@ All notable changes to Tusk will be documented in this file.
 - **Session SET settings** — `POST /api/admin/{conn}/set-setting` applies
   a runtime SET for the current session (identifier regex-validated,
   value bound as parameter).
+- **Backup sidecar metadata** — every `pg_dump` now writes
+  `<backup>.sql.gz.meta.json` with real timestamp, size, sha256, source,
+  and Tusk version. `list_backups()` prefers the sidecar over `st_mtime`.
+- **Stats history for sparklines** — every `/admin/{conn}/stats` call
+  records a point into `~/.tusk/stats_history.db` (pruned to 288 points,
+  ~24h @ 5 min). New `GET /admin/{conn}/stats/history` feeds the
+  sparkline renderers without extra scheduler work.
 - `kill_query()` now parameterizes `pg_terminate_backend(pid)` instead of
   f-string interpolation.
 
@@ -39,18 +47,46 @@ All notable changes to Tusk will be documented in this file.
 - `Ctrl+/` / `Cmd+/` toggles line comments.
 - Tabs now support rename (double-click), dirty marker (`*` while the buffer
   differs from the saved content), and confirm-before-close on dirty tabs.
+- Per-column filter inputs stack with the global filter and reset pagination
+  on every keystroke.
+- Row checkboxes with a page-scoped "select all" in the header; selection
+  survives sort/filter changes via a stable row key.
+- **Copy as INSERT** button generates parameterized SQL `INSERT` statements
+  from selected rows (or the current page when nothing is checked) and
+  writes them to the clipboard.
+- Cell formatting: numbers get locale-aware thousands separators, ISO
+  dates/datetimes render in short form, raw values remain in the `title`
+  tooltip so copy-paste still yields the original text.
 
 ### Observability
 
 - **Health endpoint with dependency status** — `/api/health` reports per
   component (`scheduler`, `plugins`, `ibis`) and returns `"ok"` or
   `"degraded"` so load balancers can route around broken instances.
-- **Metrics endpoint** — `/api/metrics` returns lightweight JSON counters
-  (connections registered, queries in flight, rate-limit buckets).
-  Prometheus format planned for v0.4.0.
+- **Prometheus metrics endpoint** — `/api/metrics` is now text-format
+  Prometheus exposition (`text/plain; version=0.0.4`). Exposes
+  `tusk_build_info`, `tusk_connections_registered`, `tusk_queries_in_flight`,
+  `tusk_rate_limit_buckets`, `tusk_scheduler_up`, `tusk_plugins_loaded`,
+  `tusk_ibis_available`. Histograms left for v0.4.x.
 - **Configurable logging via env** — `TUSK_LOG_LEVEL`
   (`debug|info|warning|error|critical`) and `TUSK_LOG_FORMAT`
   (`console` default, `json` for structured pipelines).
+
+### Plugin updates shipped alongside (all at v0.2.0)
+
+- **tusk-cluster**: user-or-worker guard, thread-lock on `_cluster_state`,
+  worker registration validation, `TUSK_CLUSTER_SECRET` shared secret for
+  worker endpoints, `TUSK_CLUSTER_TLS=1` toggles Flight to `grpc+tls://`.
+- **tusk-security**: `AdGuardClient` is a context manager, migration v4 adds
+  `scan_history(project_id)`, `scan_history(status)`,
+  `dependency_vulns(severity)`, `code_issues(test_name)` indexes.
+- **tusk-bi**: SQL injection closed in `apply_variables()` (now emits
+  `:__tusk_var_N` bind params), module-level TTL query cache,
+  `GET /api/bi/widgets/{id}/export?format=csv|json`,
+  `GET /api/bi/queries/{id}/export-json`, `POST /api/bi/cache/clear`.
+- **tusk-ci**: `GET /api/ci/webhook/info` with GitHub/curl examples,
+  `POST /api/ci/cron/validate` with APScheduler validation, plain-English
+  description, and next-run timestamp.
 
 ### Security Hardening
 
