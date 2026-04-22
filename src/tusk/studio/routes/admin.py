@@ -132,6 +132,13 @@ class AdminController(Controller):
         if isinstance(stats, dict):
             return stats  # Error case
 
+        # Record a history point for the sparkline feed.
+        try:
+            from tusk.admin.stats_history import record_stats
+            record_stats(conn_id, stats)
+        except Exception:
+            pass
+
         data = {
             "connections": stats.connections,
             "max_connections": stats.max_connections,
@@ -147,6 +154,17 @@ class AdminController(Controller):
         if is_htmx(request):
             return Template("partials/admin/stats.html", context=data)
         return data
+
+    @get("/{conn_id:str}/stats/history")
+    async def get_stats_history(self, conn_id: str, limit: int = 288) -> dict:
+        """Return the rolling history of stats for sparkline rendering."""
+        from tusk.admin.stats_history import get_history
+        points = get_history(conn_id, limit=limit)
+        return {
+            "connection_id": conn_id,
+            "points": points,
+            "count": len(points),
+        }
 
     @get("/{conn_id:str}/processes")
     async def get_processes(self, request: Request, conn_id: str) -> dict | Template:

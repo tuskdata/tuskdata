@@ -185,6 +185,11 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
 
         size = filepath.stat().st_size
         size_human = f"{size / 1024 / 1024:.2f} MB" if size > 1024 * 1024 else f"{size / 1024:.1f} KB"
+
+        # Write sidecar metadata JSON — real timestamp, size, sha256, source.
+        # Sits next to the backup so delete_backup also cleans it up.
+        _write_backup_metadata(filepath, config, size)
+
         return True, f"Backup created: {filename} ({size_human})", filepath
 
     except FileNotFoundError:
@@ -197,20 +202,74 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
             pgpass_path.unlink(missing_ok=True)
 
 
+def _write_backup_metadata(filepath: Path, config: ConnectionConfig, size: int) -> None:
+    """Write a <backup>.meta.json alongside the backup file."""
+    import hashlib
+    import json
+
+    sha = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            sha.update(chunk)
+
+    meta = {
+        "filename": filepath.name,
+        "size_bytes": size,
+        "sha256": sha.hexdigest(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "database": config.database,
+        "host": config.host,
+        "port": config.port,
+        "tusk_version": _tusk_version(),
+    }
+
+    meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
+    try:
+        meta_path.write_text(json.dumps(meta, indent=2))
+    except OSError:
+        pass  # metadata is best-effort
+
+
+def _tusk_version() -> str:
+    try:
+        import tusk
+        return tusk.__version__
+    except Exception:
+        return "unknown"
+
+
+def _read_backup_metadata(filepath: Path) -> dict | None:
+    import json
+    meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
+    if not meta_path.exists():
+        return None
+    try:
+        return json.loads(meta_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def list_backups() -> list[dict]:
-    """List all available backups"""
+    """List all available backups. Prefers sidecar metadata when present."""
     if not BACKUP_DIR.exists():
         return []
 
     backups = []
     for f in sorted(BACKUP_DIR.glob("*.sql.gz"), reverse=True):
         stat = f.stat()
-        backups.append({
+        meta = _read_backup_metadata(f)
+        entry = {
             "filename": f.name,
             "size_bytes": stat.st_size,
             "size_human": f"{stat.st_size / 1024 / 1024:.2f} MB" if stat.st_size > 1024 * 1024 else f"{stat.st_size / 1024:.1f} KB",
-            "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-        })
+            "created": (meta or {}).get("created_at") or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "sha256": (meta or {}).get("sha256"),
+            "database": (meta or {}).get("database"),
+            "host": (meta or {}).get("host"),
+            "tusk_version": (meta or {}).get("tusk_version"),
+            "metadata_present": meta is not None,
+        }
+        backups.append(entry)
 
     return backups
 
@@ -255,6 +314,10 @@ def delete_backup(filename: str) -> tuple[bool, str]:
 
     if not filepath.suffix == ".gz" or not filepath.name.endswith(".sql.gz"):
         return False, "Not a valid backup file"
+
+    # Clean up sidecar metadata alongside the backup.
+    meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
+    meta_path.unlink(missing_ok=True)
 
     try:
         filepath.unlink()
