@@ -231,24 +231,55 @@ function renderTabs() {
 }
 
 // Format cell value for display
+const _ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+function _formatNumber(n) {
+    if (!Number.isFinite(n)) return String(n);
+    if (Number.isInteger(n)) return n.toLocaleString();
+    // Keep up to 6 fractional digits, trim trailing zeroes.
+    return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function _formatMaybeDate(s) {
+    if (!_ISO_DATE_RE.test(s)) return null;
+    const d = new Date(s.includes('T') || s.includes(' ') ? s : s + 'T00:00:00Z');
+    if (Number.isNaN(d.getTime())) return null;
+    // Compact: YYYY-MM-DD HH:MM:SS if it has time, else just date.
+    const pad = (n) => String(n).padStart(2, '0');
+    const base = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    if (!s.includes('T') && !s.includes(' ')) return base;
+    return `${base} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
 function formatCell(value, type = '') {
     if (value === null) {
         return '<span class="null-badge">NULL</span>';
     }
     if (value === true) return '<span class="text-green-400">✓</span>';
     if (value === false) return '<span class="text-red-400">✗</span>';
+    if (typeof value === 'number') {
+        return `<span class="text-amber-300">${_formatNumber(value)}</span>`;
+    }
     if (typeof value === 'object') {
         const json = JSON.stringify(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         return `<span class="text-purple-400 font-mono text-xs">${json}</span>`;
     }
-    // Escape HTML
-    const escaped = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // Truncate long values
+    const raw = String(value);
+    const asDate = _formatMaybeDate(raw);
+    if (asDate) {
+        return `<span class="text-sky-300" title="${raw.replace(/"/g, '&quot;')}">${asDate}</span>`;
+    }
+    const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     if (escaped.length > 100) {
         return `<span title="${escaped.replace(/"/g, '&quot;')}">${escaped.slice(0, 100)}...</span>`;
     }
     return escaped;
 }
+
+// Per-column filter state (column index → substring filter)
+let columnFilters = {};
+// Selected row indices (client-side rows, after filter/sort)
+let selectedRows = new Set();
 
 // Get filtered and sorted data
 function getProcessedRows() {
@@ -256,13 +287,25 @@ function getProcessedRows() {
 
     let rows = [...currentResults.rows];
 
-    // Apply filter
+    // Apply global filter
     if (filterText) {
         const lowerFilter = filterText.toLowerCase();
         rows = rows.filter(row =>
             row.some(cell =>
                 cell !== null && String(cell).toLowerCase().includes(lowerFilter)
             )
+        );
+    }
+
+    // Apply per-column filters
+    const colFilterEntries = Object.entries(columnFilters).filter(([, v]) => v);
+    if (colFilterEntries.length) {
+        rows = rows.filter(row =>
+            colFilterEntries.every(([i, needle]) => {
+                const cell = row[Number(i)];
+                if (cell === null || cell === undefined) return false;
+                return String(cell).toLowerCase().includes(needle.toLowerCase());
+            })
         );
     }
 
@@ -372,6 +415,7 @@ function renderResults() {
                            class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-40 focus:outline-none focus:border-indigo-500">
                 ` : ''}
                 ${hasGeoColumn() ? '<button onclick="showMapModal()" class="text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1"><span>🗺️</span> Map</button>' : ''}
+                <button onclick="copyAsInsert()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white" title="Copy selected rows (or all) as SQL INSERT statements">INSERT</button>
                 <button onclick="exportCSV()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">CSV</button>
                 <button onclick="exportJSON()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">JSON</button>
                 ${currentEngine === 'duckdb' ? '<button onclick="showParquetModal()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Parquet</button>' : ''}
@@ -379,30 +423,59 @@ function renderResults() {
         </div>
     `;
 
-    // Table
+    // Table with header filter inputs, checkbox column, and data rows
+    const colFilterRow = isServerPaginated ? '' : `
+        <tr class="bg-[#0d1117]/60">
+            <th class="px-2 py-1 border-b border-[#30363d]"></th>
+            ${currentResults.columns.map((c, i) => `
+                <th class="px-2 py-1 border-b border-[#30363d]">
+                    <input type="text"
+                           value="${(columnFilters[i] || '').replace(/"/g, '&quot;')}"
+                           oninput="setColumnFilter(${i}, this.value)"
+                           placeholder="filter…"
+                           class="w-full bg-transparent text-xs text-gray-300 border border-[#30363d] rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500">
+                </th>
+            `).join('')}
+        </tr>`;
+
     tableEl.innerHTML = `
         <div class="card rounded-lg overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead class="bg-[#21262d] sticky top-0">
-                        <tr>${currentResults.columns.map((c, i) => `
-                            <th class="px-4 py-2 text-left text-gray-400 font-medium border-b border-[#30363d] cursor-pointer hover:bg-[#30363d] select-none"
-                                onclick="sortByColumn(${i})">
-                                <div class="flex items-center gap-1">
-                                    ${c.name}
-                                    ${sortColumn === i ? (sortDirection === 'asc' ? '↑' : '↓') : '<span class="text-gray-600">↕</span>'}
-                                </div>
+                        <tr>
+                            <th class="px-2 py-2 text-left border-b border-[#30363d] w-8">
+                                <input type="checkbox"
+                                       ${_allRowsSelected(pageRows) ? 'checked' : ''}
+                                       onchange="toggleAllRows(this.checked)"
+                                       title="Select all rows on this page">
                             </th>
-                        `).join('')}</tr>
+                            ${currentResults.columns.map((c, i) => `
+                                <th class="px-4 py-2 text-left text-gray-400 font-medium border-b border-[#30363d] cursor-pointer hover:bg-[#30363d] select-none"
+                                    onclick="sortByColumn(${i})">
+                                    <div class="flex items-center gap-1">
+                                        ${c.name}
+                                        ${sortColumn === i ? (sortDirection === 'asc' ? '↑' : '↓') : '<span class="text-gray-600">↕</span>'}
+                                    </div>
+                                </th>
+                            `).join('')}
+                        </tr>
+                        ${colFilterRow}
                     </thead>
                     <tbody class="font-mono text-xs">
-                        ${pageRows.map((row, i) => `
-                            <tr class="${i % 2 === 0 ? '' : 'bg-[#0d1117]/50'} hover:bg-[#21262d]">
+                        ${pageRows.map((row, i) => {
+                            const rowKey = _rowKey(row);
+                            const checked = selectedRows.has(rowKey);
+                            return `
+                            <tr class="${i % 2 === 0 ? '' : 'bg-[#0d1117]/50'} hover:bg-[#21262d] ${checked ? 'bg-indigo-900/20' : ''}">
+                                <td class="px-2 py-2 border-b border-[#30363d]/50">
+                                    <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
+                                </td>
                                 ${row.map(cell => `
                                     <td class="px-4 py-2 border-b border-[#30363d]/50">${formatCell(cell)}</td>
                                 `).join('')}
                             </tr>
-                        `).join('')}
+                        `;}).join('')}
                     </tbody>
                 </table>
             </div>
@@ -426,6 +499,71 @@ function renderResults() {
             ` : ''}
         </div>
     `;
+}
+
+function _rowKey(row) {
+    return row.map(c => c === null ? '\x00' : typeof c === 'object' ? JSON.stringify(c) : String(c)).join('\x1f');
+}
+
+function _allRowsSelected(rows) {
+    return rows.length > 0 && rows.every(r => selectedRows.has(_rowKey(r)));
+}
+
+window.setColumnFilter = function(colIndex, value) {
+    if (value) columnFilters[colIndex] = value;
+    else delete columnFilters[colIndex];
+    currentPage = 1;
+    renderResults();
+}
+
+window.toggleRow = function(rowKey, ev) {
+    if (ev) ev.stopPropagation();
+    if (selectedRows.has(rowKey)) selectedRows.delete(rowKey);
+    else selectedRows.add(rowKey);
+    renderResults();
+}
+
+window.toggleAllRows = function(checked) {
+    const rows = getProcessedRows().slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    for (const r of rows) {
+        const key = _rowKey(r);
+        if (checked) selectedRows.add(key); else selectedRows.delete(key);
+    }
+    renderResults();
+}
+
+function _sqlLiteral(v) {
+    if (v === null || v === undefined) return 'NULL';
+    if (v === true) return 'TRUE';
+    if (v === false) return 'FALSE';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'object') return "'" + JSON.stringify(v).replace(/'/g, "''") + "'";
+    return "'" + String(v).replace(/'/g, "''") + "'";
+}
+
+window.copyAsInsert = async function() {
+    if (!currentResults || !currentResults.columns) return;
+    const all = getProcessedRows();
+    let rows;
+    if (selectedRows.size > 0) {
+        rows = all.filter(r => selectedRows.has(_rowKey(r)));
+    } else {
+        rows = all.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    }
+    if (!rows.length) {
+        tuskToast('No rows to copy', 'warning');
+        return;
+    }
+    const table = 'target_table';  // user edits after paste
+    const cols = currentResults.columns.map(c => `"${c.name}"`).join(', ');
+    const stmts = rows.map(r => `INSERT INTO ${table} (${cols}) VALUES (${r.map(_sqlLiteral).join(', ')});`);
+    const text = stmts.join('\n');
+    try {
+        await navigator.clipboard.writeText(text);
+        tuskToast(`Copied ${stmts.length} INSERT statement${stmts.length === 1 ? '' : 's'} to clipboard`, 'success');
+    } catch (err) {
+        tuskToast('Could not access clipboard', 'error');
+    }
 }
 
 // Sort by column
