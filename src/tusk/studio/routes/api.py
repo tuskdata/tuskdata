@@ -5,6 +5,7 @@ import uuid
 import msgspec
 from litestar import Controller, get, post, put, delete
 from litestar.params import Body
+from litestar.response import Response
 
 from tusk.core.connection import (
     ConnectionConfig,
@@ -621,13 +622,66 @@ async def health_check() -> dict:
 
 
 @get("/api/metrics")
-async def metrics() -> dict:
-    """Lightweight JSON metrics. Prometheus-format planned for v0.4.0."""
+async def metrics() -> Response:
+    """Prometheus text-format exposition.
+
+    Scrape with `curl http://host:port/api/metrics`. Counters are reset on
+    restart (in-memory). Histograms are left for follow-up.
+    """
     from tusk.core import query_tracker, rate_limit
     from tusk.core.connection import list_connections
+    import tusk
 
-    return {
-        "connections_registered": len(list_connections()),
-        "queries_in_flight": len(query_tracker.list_active()),
-        "rate_limit_buckets": len(rate_limit._buckets),
-    }
+    try:
+        from tusk.core.scheduler import get_scheduler
+        sched = get_scheduler()
+        scheduler_up = 1 if (sched and sched.scheduler.running) else 0
+    except Exception:
+        scheduler_up = 0
+
+    try:
+        from tusk.plugins.registry import get_all_plugins
+        plugins_loaded = len(get_all_plugins())
+    except Exception:
+        plugins_loaded = 0
+
+    try:
+        from tusk.engines.ibis_engine import HAS_IBIS
+        ibis_available = 1 if HAS_IBIS else 0
+    except Exception:
+        ibis_available = 0
+
+    lines = [
+        "# HELP tusk_build_info Build information",
+        "# TYPE tusk_build_info gauge",
+        f'tusk_build_info{{version="{tusk.__version__}"}} 1',
+        "",
+        "# HELP tusk_connections_registered Number of registered database connections",
+        "# TYPE tusk_connections_registered gauge",
+        f"tusk_connections_registered {len(list_connections())}",
+        "",
+        "# HELP tusk_queries_in_flight Queries currently executing",
+        "# TYPE tusk_queries_in_flight gauge",
+        f"tusk_queries_in_flight {len(query_tracker.list_active())}",
+        "",
+        "# HELP tusk_rate_limit_buckets Distinct rate-limit tracking buckets",
+        "# TYPE tusk_rate_limit_buckets gauge",
+        f"tusk_rate_limit_buckets {len(rate_limit._buckets)}",
+        "",
+        "# HELP tusk_scheduler_up 1 if APScheduler is running, 0 otherwise",
+        "# TYPE tusk_scheduler_up gauge",
+        f"tusk_scheduler_up {scheduler_up}",
+        "",
+        "# HELP tusk_plugins_loaded Number of loaded plugins",
+        "# TYPE tusk_plugins_loaded gauge",
+        f"tusk_plugins_loaded {plugins_loaded}",
+        "",
+        "# HELP tusk_ibis_available 1 if ibis-framework is importable",
+        "# TYPE tusk_ibis_available gauge",
+        f"tusk_ibis_available {ibis_available}",
+        "",
+    ]
+    return Response(
+        content="\n".join(lines),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
