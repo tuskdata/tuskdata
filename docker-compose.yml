@@ -1,0 +1,51 @@
+# Local smoke-test compose for TuskData.
+#
+# Usage (before building plugin wheels the first time):
+#
+#   make wheels          # build tuskdata + plugins into wheels/
+#   docker compose up --build
+#
+# Or with individual targets:
+#   docker compose up -d postgres
+#   docker compose up tusk
+#
+# Browse at http://localhost:8000.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tusk
+      POSTGRES_PASSWORD: tusk
+      POSTGRES_DB: tusk
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tusk -d tusk"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  tusk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TUSK_DEBUG: "0"
+      TUSK_LOG_LEVEL: info
+      TUSK_LOG_FORMAT: console
+      TUSK_QUERY_TIMEOUT: "300"
+    ports:
+      - "8000:8000"
+    volumes:
+      - tusk-home:/var/lib/tusk
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  tusk-home:
