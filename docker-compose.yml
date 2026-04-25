@@ -1,49 +1,134 @@
-# Local smoke-test compose for TuskData.
+# TuskData — full local smoke compose.
 #
-# Usage (before building plugin wheels the first time):
+# Profiles let you bring up just what you need:
 #
-#   make wheels          # build tuskdata + plugins into wheels/
-#   docker compose up --build
+#   docker compose up --build                       # core: postgres + tusk
+#   docker compose --profile cluster up --build     # + scheduler + worker
+#   docker compose --profile dbtools up             # + adminer for poking PG
+#   docker compose --profile all up --build         # everything
 #
-# Or with individual targets:
-#   docker compose up -d postgres
-#   docker compose up tusk
+# The first time, build wheels:
 #
-# Browse at http://localhost:8000.
+#   make wheels
+#
+# Override defaults via .env (see .env.example):
+#
+#   POSTGRES_PASSWORD=...
+#   TUSK_LOG_LEVEL=debug
+#   TUSK_CLUSTER_SECRET=...
+#
+# Browse:
+#   http://localhost:8000           Studio
+#   http://localhost:8000/api/health
+#   http://localhost:8000/api/metrics
+#   http://localhost:8080           Adminer (with --profile dbtools)
+
+x-tusk-env: &tusk-env
+  TUSK_DEBUG: "${TUSK_DEBUG:-0}"
+  TUSK_LOG_LEVEL: "${TUSK_LOG_LEVEL:-info}"
+  TUSK_LOG_FORMAT: "${TUSK_LOG_FORMAT:-console}"
+  TUSK_QUERY_TIMEOUT: "${TUSK_QUERY_TIMEOUT:-300}"
+  TUSK_CLUSTER_SECRET: "${TUSK_CLUSTER_SECRET:-}"
+  TUSK_CLUSTER_TLS: "${TUSK_CLUSTER_TLS:-0}"
+  TZ: "${TZ:-UTC}"
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: tusk
-      POSTGRES_PASSWORD: tusk
-      POSTGRES_DB: tusk
+      POSTGRES_USER: "${POSTGRES_USER:-tusk}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-tusk}"
+      POSTGRES_DB: "${POSTGRES_DB:-tusk}"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Mirrors Coolify's default behavior: only the internal Docker network
+    # sees Postgres. Uncomment the ports stanza if you want to point a
+    # local pgAdmin at it.
+    # ports:
+    #   - "5432:5432"
+    expose:
+      - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tusk -d tusk"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tusk} -d ${POSTGRES_DB:-tusk}"]
       interval: 10s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   tusk:
     build:
       context: .
       dockerfile: Dockerfile
+    image: tuskdata:local
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      TUSK_DEBUG: "0"
-      TUSK_LOG_LEVEL: info
-      TUSK_LOG_FORMAT: console
-      TUSK_QUERY_TIMEOUT: "300"
+      <<: *tusk-env
     ports:
-      - "8000:8000"
+      - "${TUSK_PORT:-8000}:8000"
     volumes:
       - tusk-home:/var/lib/tusk
+    healthcheck:
+      # Mirrors the Dockerfile HEALTHCHECK so docker compose surfaces it.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---- tusk-cluster: scheduler + at least one worker -------------------
+  # Bring up with: docker compose --profile cluster up
+  # The shared secret has to match across services. Generate with:
+  #   openssl rand -hex 32
+
+  scheduler:
+    profiles: ["cluster", "all"]
+    image: tuskdata:local
+    depends_on:
+      tusk:
+        condition: service_started
+    environment:
+      <<: *tusk-env
+    command: ["tusk", "scheduler", "--host", "0.0.0.0", "--port", "8814"]
+    expose:
+      - "8814"
+    volumes:
+      - tusk-home:/var/lib/tusk
+    restart: unless-stopped
+
+  worker:
+    profiles: ["cluster", "all"]
+    image: tuskdata:local
+    depends_on:
+      scheduler:
+        condition: service_started
+    environment:
+      <<: *tusk-env
+      TUSK_SCHEDULER_HOST: scheduler
+      TUSK_SCHEDULER_PORT: "8814"
+    command: ["tusk", "worker", "--scheduler", "scheduler:8814", "--host", "0.0.0.0", "--port", "8815"]
+    expose:
+      - "8815"
+    volumes:
+      - tusk-home:/var/lib/tusk
+    deploy:
+      replicas: 1   # bump to scale workers
+    restart: unless-stopped
+
+  # ---- Optional: lightweight Postgres admin UI -------------------------
+
+  adminer:
+    profiles: ["dbtools", "all"]
+    image: adminer:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
     restart: unless-stopped
 
 volumes:
