@@ -43,11 +43,17 @@ COPY wheels/ ./wheels/
 # wheel from the wheels/ directory into /opt/tusk-venv. The plugin wheels
 # ship their own dependencies but reference tuskdata via `>=` so we install
 # them with --no-deps once the core is present.
+#
+# fail-fast: the install loop exits non-zero on the first failure. Earlier
+# revisions had `|| true`, which masked silent plugin breakage and only
+# surfaced when the tab didn't appear at runtime.
 RUN uv venv /opt/tusk-venv \
     && uv pip install --python /opt/tusk-venv/bin/python --no-cache \
          "tuskdata[all] @ ." \
+    && set -e \
     && for w in wheels/tusk_*-*.whl; do \
-         uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps "$w" || true; \
+         echo "[plugin install] $w"; \
+         uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps "$w"; \
        done
 
 
@@ -60,19 +66,26 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # PostgreSQL client tools are needed at runtime for pg_dump / psql / pg_restore.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      postgresql-client libpq5 curl \
+      postgresql-client libpq5 curl gosu \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --home-dir /var/lib/tusk --shell /usr/sbin/nologin tusk
+    && useradd --uid 1000 --create-home --home-dir /var/lib/tusk --shell /usr/sbin/nologin tusk
 
 COPY --from=builder /opt/tusk-venv /opt/tusk-venv
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/docker-entrypoint
 
-USER tusk
+# Stay as root for the entrypoint, which fixes volume ownership before
+# dropping privileges to `tusk` via gosu. Coolify and friends often mount
+# bind volumes with the host user's UID; running directly as `tusk` would
+# fail with EACCES on `~/.tusk/.key` and the chmod silencer would hide it.
 WORKDIR /var/lib/tusk
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
   CMD curl -fsS http://127.0.0.1:8000/api/health | grep -q '"status":"ok"' || exit 1
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
 
 # Default command: serve Studio with Granian. Override to run workers,
 # scheduler, or CLI tasks. For reverse proxies (Coolify), set

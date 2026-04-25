@@ -311,17 +311,27 @@ def test_sqlite_query_pagination(client, sqlite_conn_id):
 
 
 def test_query_cancel_endpoint_shape(client, sqlite_conn_id):
-    """cancel endpoint should return a stable payload even when nothing matches."""
-    r = client.post("/api/query/cancel", json={"request_id": "does-not-exist"})
-    assert r.status_code in (200, 201)
-    body = r.json()
-    assert body.get("cancelled") is False
-    assert body.get("reason") == "not_found"
+    """cancel endpoint should return a stable payload even when nothing matches.
 
-    # No body at all → helpful error
-    r2 = client.post("/api/query/cancel", json={})
-    assert r2.status_code in (200, 201)
-    assert "error" in r2.json()
+    The guard is auth-aware — TestClient hits as `testclient` host so we
+    force loopback=True to exercise the body of the handler.
+    """
+    from tusk.studio.routes import admin as admin_module
+    original = admin_module._is_loopback
+    admin_module._is_loopback = lambda req: True
+    try:
+        r = client.post("/api/query/cancel", json={"request_id": "does-not-exist"})
+        assert r.status_code in (200, 201)
+        body = r.json()
+        assert body.get("cancelled") is False
+        assert body.get("reason") == "not_found"
+
+        # No body at all → helpful error
+        r2 = client.post("/api/query/cancel", json={})
+        assert r2.status_code in (200, 201)
+        assert "error" in r2.json()
+    finally:
+        admin_module._is_loopback = original
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +419,50 @@ def test_admin_rejects_non_loopback(client):
     assert _is_loopback(FakeReq("::1")) is True
     assert _is_loopback(FakeReq("10.0.0.5")) is False
     assert _is_loopback(FakeReq("203.0.113.1")) is False
+
+
+def test_admin_guard_wired_to_endpoint(client):
+    """Verify the controller-level guard fires on a real HTTP call,
+    not just unit-tested. Litestar's TestClient sets `request.client.host`
+    to "testclient", which the loopback check rightly rejects — exactly
+    the production behavior when the request isn't from 127.0.0.1.
+    Flipping the helper mid-test demonstrates wiring without depending
+    on the upstream client host.
+    """
+    from tusk.studio.routes import admin as admin_module
+
+    original = admin_module._is_loopback
+
+    # Force loopback=True → request gets past the guard (downstream may
+    # 404 on the missing connection, but it's not 401).
+    admin_module._is_loopback = lambda req: True
+    try:
+        sane = client.get("/api/admin/nonexistent/stats")
+        assert sane.status_code != 401, sane.text
+    finally:
+        admin_module._is_loopback = original
+
+    # Force loopback=False → guard returns 401 before reaching the handler.
+    admin_module._is_loopback = lambda req: False
+    try:
+        blocked = client.get("/api/admin/nonexistent/stats")
+        assert blocked.status_code == 401, blocked.text
+    finally:
+        admin_module._is_loopback = original
+
+
+def test_query_cancel_requires_auth_outside_loopback(client):
+    """`/api/query/cancel` must not be reachable from non-loopback in
+    single-user mode. v0.3.0 forgot to add the guard; v0.3.1 fixes it."""
+    from tusk.studio.routes import admin as admin_module
+
+    original = admin_module._is_loopback
+    admin_module._is_loopback = lambda req: False
+    try:
+        r = client.post("/api/query/cancel", json={"request_id": "x"})
+        assert r.status_code == 401, r.text
+    finally:
+        admin_module._is_loopback = original
 
 
 # ---------------------------------------------------------------------------

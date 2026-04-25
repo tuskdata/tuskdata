@@ -3,7 +3,7 @@
 import time
 import uuid
 import msgspec
-from litestar import Controller, get, post, put, delete
+from litestar import Controller, Request, get, post, put, delete
 from litestar.params import Body
 from litestar.response import Response
 
@@ -347,8 +347,17 @@ class APIController(Controller):
             query_tracker.unregister(request_id)
 
     @post("/query/cancel")
-    async def cancel_query(self, data: dict = Body()) -> dict:
-        """Cancel an in-flight query by request_id."""
+    async def cancel_query(self, request: Request, data: dict = Body()) -> dict:
+        """Cancel an in-flight query by request_id.
+
+        Same auth contract as the admin panel: in single-user mode the call
+        must come from loopback; in multi-user mode it requires an
+        authenticated session. Without this guard a CSRF-tokened request
+        from any user could cancel another user's running query.
+        """
+        from tusk.studio.routes.admin import _check_admin_auth
+        _check_admin_auth(request, None)
+
         request_id = data.get("request_id")
         if not request_id:
             return {"error": "request_id required"}

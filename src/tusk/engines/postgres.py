@@ -19,13 +19,44 @@ log = get_logger("postgres")
 # ============================================================================
 
 try:
+    import asyncio
     from psycopg_pool import AsyncConnectionPool
 
     _pools: dict[str, AsyncConnectionPool] = {}
+    _pool_lock = asyncio.Lock()
+
+    def _redact_dsn(dsn: str) -> str:
+        """Strip user/password from a DSN before logging.
+
+        psycopg accepts both `postgresql://user:pw@host/db` and the
+        keyword form (`host=... user=... password=...`). Redact both.
+        """
+        try:
+            from urllib.parse import urlsplit, urlunsplit
+            parts = urlsplit(dsn)
+            if parts.scheme:
+                netloc = parts.hostname or ""
+                if parts.port:
+                    netloc = f"{netloc}:{parts.port}"
+                return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+        except Exception:
+            pass
+        # Keyword form — drop any `password=...` token.
+        import re as _re
+        return _re.sub(r"password=\S+", "password=***", dsn)
 
     async def _get_pool(dsn: str) -> AsyncConnectionPool:
-        """Get or create a connection pool for the given DSN."""
-        if dsn not in _pools:
+        """Get or create a connection pool for the given DSN.
+
+        The lock makes concurrent first-hit safe: without it, two coroutines
+        observing `dsn not in _pools` could both build a pool, leaking one.
+        """
+        if dsn in _pools:
+            return _pools[dsn]
+        async with _pool_lock:
+            existing = _pools.get(dsn)
+            if existing is not None:
+                return existing
             pool = AsyncConnectionPool(
                 dsn,
                 min_size=1,
@@ -35,8 +66,8 @@ try:
             )
             await pool.open()
             _pools[dsn] = pool
-            log.info("Connection pool created", dsn=dsn[:50] + "...")
-        return _pools[dsn]
+            log.info("Connection pool created", dsn=_redact_dsn(dsn))
+            return pool
 
     async def close_pools() -> None:
         """Close all connection pools (call on shutdown)."""

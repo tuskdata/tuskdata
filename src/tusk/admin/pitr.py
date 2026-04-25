@@ -261,12 +261,14 @@ def list_base_backups(conn_id: str) -> list[BaseBackupInfo]:
             name = path.name
             try:
                 # Format: YYYY-MM-DD_HHMMSS or YYYY-MM-DD_HHMMSS_label
+                # Filenames are written by datetime.now(timezone.utc), so
+                # parse them back as UTC explicitly.
                 parts = name.split("_", 2)
                 date_str = f"{parts[0]}_{parts[1]}"
-                created = datetime.strptime(date_str, "%Y-%m-%d_%H%M%S")
+                created = datetime.strptime(date_str, "%Y-%m-%d_%H%M%S").replace(tzinfo=timezone.utc)
                 label = parts[2] if len(parts) > 2 else None
             except (ValueError, IndexError):
-                created = datetime.fromtimestamp(path.stat().st_mtime)
+                created = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
                 label = None
 
             backups.append(BaseBackupInfo(
@@ -316,7 +318,7 @@ def list_archived_wal(conn_id: str) -> list[dict]:
                 "name": f.name,
                 "size_bytes": stat.st_size,
                 "size_human": _format_bytes(stat.st_size),
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
             })
 
     return wal_files[:100]  # Limit to last 100

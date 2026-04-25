@@ -27,11 +27,11 @@
 - [x] CodeMirror with syntax highlighting
 - [x] Autocomplete (tables, columns, keywords)
 - [x] Line numbers
-- [ ] Close tab with confirmation if unsaved changes
-- [ ] Rename tab (double click)
-- [ ] Tab shows * if unsaved changes
+- [x] Close tab with confirmation if unsaved changes
+- [x] Rename tab (double click)
+- [x] Tab shows * if unsaved changes
 - [ ] Error highlighting
-- [ ] Bracket matching
+- [x] Bracket matching
 - [ ] Multi-cursor (Ctrl+D)
 
 ### 3. Results (Real Data Grid)
@@ -44,18 +44,18 @@
 - [x] Boolean as check/x
 - [x] JSON with syntax highlight
 - [x] Expand long cell (tooltip on hover)
-- [ ] Filter by specific column
-- [ ] Select rows (checkbox)
+- [x] Filter by specific column
+- [x] Select rows (checkbox)
 - [ ] Select/copy cells
 - [x] Resize columns (drag)
-- [ ] Human-readable date formatting
-- [ ] Numbers with separators
+- [x] Human-readable date formatting
+- [x] Numbers with separators
 
 ### 4. Export
 - [x] Export to CSV
 - [x] Export to JSON
-- [ ] Export selection or all
-- [ ] Copy as INSERT statements
+- [x] Export selection or all
+- [x] Copy as INSERT statements
 - [ ] Copy as CSV to clipboard
 
 ### 5. Query History
@@ -93,7 +93,7 @@
 - [x] F5 - Refresh schema
 - [x] Escape - Cancel query
 - [x] Ctrl+Tab - Next tab
-- [ ] Ctrl+/ - Comment line
+- [x] Ctrl+/ - Comment line
 
 ### 9. UX
 - [x] Loading spinner

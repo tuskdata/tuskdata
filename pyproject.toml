@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.3.0"
+version = "0.3.1"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"

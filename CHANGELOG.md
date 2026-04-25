@@ -2,6 +2,63 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.1] - 2026-04-25
+
+Hotfix round on top of v0.3.0 after an independent audit. No new features.
+
+### Security
+- **`/api/query/cancel` now requires auth.** Previously a CSRF-tokened
+  request could cancel anyone's in-flight query by guessing a `request_id`.
+  Same guard as the admin panel (loopback in single-user, admin in
+  multi-user).
+- **DSN redaction in logs.** `engines/postgres.py` no longer logs the
+  first 50 chars of a DSN (which could leak user/password substrings).
+  URL-form DSNs are reduced to `scheme://host:port/db`; keyword form has
+  `password=...` replaced with `password=***`.
+
+### Bugs
+- **tusk-bi placeholder mismatch on PostgreSQL.** `apply_variables()`
+  emits `:name`, then `_apply_params()` rewrote them to `?` for every
+  backend. psycopg requires `%s`, so any dashboard with variables on
+  Postgres failed with "syntax error near ?". Fixed: the placeholder
+  now matches the backend (`%s` for Postgres, `?` for SQLite/DuckDB).
+- **PostgreSQL pool race.** First-hit creation of a pool for a new DSN
+  was unguarded: two concurrent coroutines could each build a pool, with
+  one leaked. Now serialized through an `asyncio.Lock`.
+- **Frontend `minlength` on user-create / reset-password forms** was
+  still 6, conflicting with the backend's 8-char + letter + digit policy.
+  Updated to 8.
+- **tusk-cluster lock coverage gaps.** v0.3.0 added `_state_lock` only
+  to register/heartbeat/status. `list_workers` and `unregister_worker`
+  now also take the lock so concurrent reads see consistent state.
+- **UTC tzinfo in pitr + scheduler.** `pitr.py:266,269,321` parsed
+  filenames as naïve datetimes and read mtimes as local; `scheduler.py:218`
+  passed naïve `datetime.now()` to APScheduler. All upgraded to
+  timezone-aware UTC.
+
+### Deploy hardening
+- **Dockerfile fail-fast on plugin install.** The `for w in wheels/...
+  || true` loop hid wheels that didn't install. The image "succeeded"
+  but a tab silently disappeared. The loop now `set -e`s and dies on
+  first failure.
+- **`docker-entrypoint.sh`** runs as root only long enough to chown
+  `$HOME` to UID 1000 (the baked `tusk` user) before dropping privileges
+  via `gosu`. This is the single biggest first-deploy footgun on Coolify
+  / bind mounts where the host UID doesn't match the container's.
+  Override with `TUSK_SKIP_CHOWN=1` if your orchestrator handles
+  ownership.
+
+### Tests
+- Two new E2E tests assert the controller-level admin guard fires on a
+  real HTTP request and that `/api/query/cancel` returns 401 from a
+  non-loopback caller. Total: 186 passing (was 184).
+
+### Plugin updates
+- **tusk-bi 0.2.1**: placeholder fix.
+- **tusk-cluster 0.2.1**: list_workers/unregister_worker lock coverage.
+
+---
+
 ## [0.3.0] - 2026-04-20
 
 ### Ibis Unified DataFrame API (now default)

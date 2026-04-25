@@ -6,7 +6,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Any
 import msgspec
 
@@ -215,7 +215,7 @@ class SchedulerService:
         try:
             job = self.scheduler.get_job(job_id)
             if job:
-                job.modify(next_run_time=datetime.now())
+                job.modify(next_run_time=datetime.now(timezone.utc))
                 log.info("job_triggered", job_id=job_id)
                 return True
             return False
