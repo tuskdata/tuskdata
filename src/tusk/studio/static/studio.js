@@ -1,15 +1,65 @@
 // Tusk Studio - Main JavaScript Module
 // CodeMirror 6 imports
-import {EditorState} from "https://esm.sh/@codemirror/state@6"
-import {EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection} from "https://esm.sh/@codemirror/view@6"
+import {EditorState, StateField, StateEffect, RangeSet} from "https://esm.sh/@codemirror/state@6"
+import {EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, Decoration} from "https://esm.sh/@codemirror/view@6"
 import {defaultKeymap, indentWithTab, historyKeymap, history} from "https://esm.sh/@codemirror/commands@6"
 import {sql, PostgreSQL, SQLite} from "https://esm.sh/@codemirror/lang-sql@6"
 import {autocompletion, completeFromList} from "https://esm.sh/@codemirror/autocomplete@6"
 import {oneDark} from "https://esm.sh/@codemirror/theme-one-dark@6"
 import {bracketMatching, defaultHighlightStyle, syntaxHighlighting} from "https://esm.sh/@codemirror/language@6"
-import {searchKeymap, highlightSelectionMatches} from "https://esm.sh/@codemirror/search@6"
+import {searchKeymap, highlightSelectionMatches, selectNextOccurrence} from "https://esm.sh/@codemirror/search@6"
 import {closeBrackets, closeBracketsKeymap, completionKeymap} from "https://esm.sh/@codemirror/autocomplete@6"
 import {toggleLineComment} from "https://esm.sh/@codemirror/commands@6"
+
+// ─── Error highlight extension ──────────────────────────────────
+// `setQueryError` effect adds a line decoration with an underline on the
+// SQL line that the server flagged. `clearQueryError` clears it.
+const setQueryError = StateEffect.define();
+const clearQueryError = StateEffect.define();
+const queryErrorField = StateField.define({
+    create() { return Decoration.none; },
+    update(deco, tr) {
+        deco = deco.map(tr.changes);
+        for (const e of tr.effects) {
+            if (e.is(clearQueryError)) deco = Decoration.none;
+            else if (e.is(setQueryError)) {
+                const {from, to} = e.value;
+                deco = Decoration.set([
+                    Decoration.mark({class: "cm-query-error"}).range(from, to),
+                ]);
+            }
+        }
+        // Auto-clear on any further edit
+        if (tr.docChanged && deco.size) deco = Decoration.none;
+        return deco;
+    },
+    provide: f => EditorView.decorations.from(f),
+});
+
+const queryErrorTheme = EditorView.theme({
+    ".cm-query-error": {
+        textDecoration: "underline wavy var(--red, #cc2e3d)",
+        textUnderlineOffset: "3px",
+        background: "rgba(204, 46, 61, 0.10)",
+    },
+});
+
+window.highlightQueryError = function(position) {
+    if (!editor || !position) return;
+    const doc = editor.state.doc;
+    const offset = Math.max(0, Math.min(doc.length, position - 1));
+    // Underline from offset to end of token (next whitespace/punctuation).
+    const text = doc.toString();
+    let end = offset;
+    while (end < text.length && /[A-Za-z0-9_.]/.test(text[end])) end++;
+    if (end === offset) end = Math.min(text.length, offset + 1);
+    editor.dispatch({effects: setQueryError.of({from: offset, to: end})});
+};
+
+window.clearQueryErrorHighlight = function() {
+    if (!editor) return;
+    editor.dispatch({effects: clearQueryError.of(null)});
+};
 
 let currentConnection = null;
 let currentSchema = {};
@@ -139,6 +189,7 @@ window.switchTab = function(tabId) {
         if (currentTab) {
             currentTab.sql = editor.state.doc.toString();
             currentTab.results = currentResults;
+            currentTab.connectionId = currentConnection?.id || currentTab.connectionId || null;
         }
     }
 
@@ -158,6 +209,14 @@ window.switchTab = function(tabId) {
         filterText = '';
         currentPage = 1;
         renderResults();
+
+        // Follow tab's connection if it differs from the current one.
+        // selectConnection() reloads schema + autocomplete, so only call
+        // it when the connection actually changes.
+        if (tab.connectionId && tab.connectionId !== currentConnection?.id
+                && typeof window.selectConnectionById === 'function') {
+            window.selectConnectionById(tab.connectionId);
+        }
     }
 
     renderTabs();
@@ -209,25 +268,27 @@ window.closeTab = function(tabId, event) {
     }
 }
 
-// Render tabs UI
+// Render tabs UI — v0.4 .qtab styling
 function renderTabs() {
     const container = document.getElementById('query-tabs');
+    if (!container) return;
     container.innerHTML = tabs.map(tab => `
-        <div class="query-tab ${tab.id === activeTabId ? 'active' : ''}"
+        <div class="qtab ${tab.id === activeTabId ? 'active' : ''} ${tab.dirty ? 'dirty' : ''}"
              onclick="switchTab('${tab.id}')"
              ondblclick="renameTab('${tab.id}')"
              title="Double-click to rename">
-            <svg class="query-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-            </svg>
-            <span>${tab.name}${tab.dirty ? ' <span class="text-amber-400" title="Unsaved changes">*</span>' : ''}</span>
-            <button class="close-btn" onclick="closeTab('${tab.id}', event)" title="Close tab">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
+            <i data-lucide="file-text"></i>
+            <span>${tab.name}</span>
+            <span class="x" onclick="closeTab('${tab.id}', event)" title="Close tab">
+                <i data-lucide="x"></i>
+            </span>
         </div>
     `).join('');
+    if (window.lucide) lucide.createIcons();
+    // Update editor toolbar dirty chip
+    const dirty = tabs.find(t => t.id === activeTabId)?.dirty;
+    const chip = document.getElementById('dirty-chip');
+    if (chip) chip.style.display = dirty ? '' : 'none';
 }
 
 // Format cell value for display
@@ -335,53 +396,173 @@ function getProcessedRows() {
     return rows;
 }
 
-// Render results table
+// Map a SQL/PG type code or string to a UI category for cell coloring
+function _typeCategory(type) {
+    const t = String(type || '').toLowerCase();
+    if (!t) return 'str';
+    if (t === 'geometry' || t.includes('geom') || t.includes('geo')) return 'geo';
+    if (t.includes('uuid')) return 'uuid';
+    if (t.includes('bool') || t === '16') return 'bool';
+    if (t.includes('json')) return 'json';
+    if (t.includes('int') || t.includes('numeric') || t.includes('decimal')
+        || t.includes('real') || t.includes('double') || t.includes('float')
+        || /^(20|21|23|700|701|1700|1043)$/.test(t)) return 'num';
+    if (t.includes('timestamp') || t.includes('date') || t.includes('time')) return 'date';
+    return 'str';
+}
+
+function _typeShort(type) {
+    const t = String(type || '').toLowerCase();
+    if (!t) return '';
+    // PG OIDs → friendly names
+    const map = {
+        '16': 'bool', '20': 'int8', '21': 'int2', '23': 'int4',
+        '25': 'text', '700': 'float4', '701': 'float8', '1043': 'varchar',
+        '1700': 'numeric', '1082': 'date', '1114': 'timestamp', '1184': 'timestamptz',
+        '2950': 'uuid', '114': 'json', '3802': 'jsonb',
+    };
+    if (map[t]) return map[t];
+    if (t.length <= 12) return t;
+    return t.slice(0, 12);
+}
+
+function _cellClass(cell, category) {
+    if (cell === null || cell === undefined) return 'null-cell';
+    return category + '-cell';
+}
+
+// Update the chips at the top-left of the results toolbar
+function _updateResultChips(rowCount, execMs, isPaginated, hasGeo) {
+    const stats = document.getElementById('result-stats-chip');
+    const statsText = document.getElementById('result-stats-text');
+    if (stats && statsText) {
+        if (rowCount === null) {
+            stats.style.display = 'none';
+        } else {
+            stats.style.display = '';
+            const formatted = typeof rowCount === 'number' ? rowCount.toLocaleString() : rowCount;
+            statsText.textContent = `${formatted} rows · ${execMs}ms`;
+        }
+    }
+    const pag = document.getElementById('result-pagination-chip');
+    if (pag) pag.style.display = isPaginated ? '' : 'none';
+    const geo = document.getElementById('result-geo-chip');
+    if (geo) geo.style.display = hasGeo ? '' : 'none';
+    const mapBtn = document.getElementById('result-view-map');
+    if (mapBtn) mapBtn.style.display = hasGeo ? '' : 'none';
+    const parquet = document.getElementById('result-parquet-btn');
+    if (parquet) parquet.style.display = (currentEngine === 'duckdb') ? '' : 'none';
+}
+
+// Render the bottom status bar (selected count, cols, mem, pager)
+function _updateStatusBar(opts) {
+    const sel = document.getElementById('status-selected');
+    const cols = document.getElementById('status-cols');
+    const mem = document.getElementById('status-mem');
+    const pager = document.getElementById('pager-info');
+    const first = document.getElementById('pager-first');
+    const prev = document.getElementById('pager-prev');
+    const next = document.getElementById('pager-next');
+    const last = document.getElementById('pager-last');
+
+    if (sel) sel.textContent = `${selectedRows.size} selected${opts.total ? ' of ' + opts.total.toLocaleString() : ''}`;
+    if (cols) cols.textContent = opts.cols ? `${opts.cols} cols` : '— cols';
+    if (mem) {
+        if (opts.bytes) {
+            const mb = opts.bytes / 1024 / 1024;
+            mem.textContent = `Mem ${mb >= 1 ? mb.toFixed(1) + 'MB' : (opts.bytes / 1024).toFixed(0) + 'KB'}`;
+        } else {
+            mem.textContent = '—';
+        }
+    }
+    if (pager) pager.textContent = `Page ${opts.page} / ${opts.totalPages || 1}`;
+    if (first) first.disabled = opts.page <= 1;
+    if (prev) prev.disabled = opts.page <= 1;
+    if (next) next.disabled = opts.page >= (opts.totalPages || 1);
+    if (last) last.disabled = opts.page >= (opts.totalPages || 1);
+}
+
+// Update the connection chip + the right-side meta in the tabs row
+function _updateConnMeta() {
+    const meta = document.getElementById('active-conn-meta');
+    const chip = document.getElementById('conn-chip');
+    const chipLabel = document.getElementById('conn-chip-label');
+    if (!currentConnection) {
+        if (meta) meta.innerHTML = '<span class="dot gray"></span><span>No connection</span>';
+        if (chip) chip.style.display = 'none';
+        return;
+    }
+    const typeLabel = {postgres: 'PostgreSQL', sqlite: 'SQLite', duckdb: 'DuckDB'}[currentConnection.type] || currentConnection.type;
+    if (meta) {
+        meta.innerHTML = `<span class="dot green"></span><span>${currentConnection.name}</span><span style="color:var(--fg-4)">·</span><span>${typeLabel}</span>`;
+    }
+    if (chip && chipLabel) {
+        chip.style.display = '';
+        chipLabel.textContent = `${typeLabel} · ${currentConnection.name}`;
+    }
+}
+
+// Approximate memory usage for the rows currently in the page (UI hint)
+function _estimateBytes(rows) {
+    if (!rows || !rows.length) return 0;
+    let total = 0;
+    for (const row of rows) {
+        for (const c of row) {
+            if (c === null || c === undefined) continue;
+            if (typeof c === 'string') total += c.length * 2;
+            else if (typeof c === 'number') total += 8;
+            else if (typeof c === 'boolean') total += 4;
+            else total += JSON.stringify(c).length * 2;
+        }
+    }
+    return total;
+}
+
+// Render results table — v0.4 round 2 .dtable markup
 function renderResults() {
     const headerEl = document.getElementById('results-header');
     const tableEl = document.getElementById('results-table');
 
     if (!currentResults) {
-        headerEl.innerHTML = '';
-        tableEl.innerHTML = '';
+        if (headerEl) headerEl.innerHTML = '';
+        if (tableEl) tableEl.innerHTML = '<div class="results-empty"><div class="ico"><i data-lucide="table" style="width:18px;height:18px"></i></div>Run a query to see results.</div>';
+        _updateResultChips(null, 0, false, false);
+        _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
     if (currentResults.error) {
-        headerEl.innerHTML = '<span class="text-red-400">Error</span>';
-        tableEl.innerHTML = `
-            <div class="card rounded-lg p-4 text-red-400">
-                <pre class="whitespace-pre-wrap font-mono text-sm">${currentResults.error}</pre>
-            </div>
-        `;
+        if (headerEl) headerEl.innerHTML = '';
+        if (tableEl) tableEl.innerHTML = `<div class="inline-error" style="margin:14px"><i data-lucide="alert-circle" style="width:14px;height:14px;flex-shrink:0;margin-top:1px"></i><pre style="margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">${currentResults.error}</pre></div>`;
+        _updateResultChips(null, 0, false, false);
+        _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
     if (!currentResults.columns || currentResults.columns.length === 0) {
-        headerEl.innerHTML = `
-            <span class="text-green-400">${currentResults.row_count || 0} rows</span>
-            <span class="text-gray-500">·</span>
-            <span class="text-gray-400">${currentResults.execution_time_ms || 0}ms</span>
-        `;
-        tableEl.innerHTML = '<div class="text-gray-400">Query executed successfully (no results)</div>';
+        if (headerEl) headerEl.innerHTML = '';
+        if (tableEl) tableEl.innerHTML = `<div class="results-empty"><div class="ico"><i data-lucide="check" style="width:18px;height:18px"></i></div>Query executed successfully (no results) · ${currentResults.execution_time_ms || 0}ms</div>`;
+        _updateResultChips(currentResults.row_count || 0, currentResults.execution_time_ms || 0, false, false);
+        _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
+        if (window.lucide) lucide.createIcons();
         return;
     }
 
-    // Determine pagination mode
+    // Pagination mode
     const isServerPaginated = serverPagination && currentResults.total_count !== undefined;
     const totalCount = isServerPaginated ? currentResults.total_count : currentResults.row_count;
 
     let processedRows, totalFiltered, totalPages, startIdx, endIdx, pageRows;
-
     if (isServerPaginated) {
-        // Server-side pagination: rows are already the current page
         processedRows = currentResults.rows || [];
         totalFiltered = totalCount;
         totalPages = Math.ceil(totalCount / PAGE_SIZE);
         startIdx = (currentPage - 1) * PAGE_SIZE;
         endIdx = Math.min(startIdx + currentResults.row_count, totalCount);
-        pageRows = processedRows;  // Already paginated by server
+        pageRows = processedRows;
     } else {
-        // Client-side pagination
         processedRows = getProcessedRows();
         totalFiltered = processedRows.length;
         totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
@@ -390,122 +571,120 @@ function renderResults() {
         pageRows = processedRows.slice(startIdx, endIdx);
     }
 
-    // Row count display
-    const rowCountDisplay = isServerPaginated
-        ? `${totalCount.toLocaleString()} total rows`
-        : `${currentResults.row_count} rows`;
+    // Pre-compute type categories per column
+    const categories = currentResults.columns.map(c => _typeCategory(c.type));
 
-    // Header with stats, filter, and export buttons
-    headerEl.innerHTML = `
-        <div class="flex items-center justify-between flex-wrap gap-2">
-            <div class="flex items-center gap-2">
-                <span class="text-green-400">${rowCountDisplay}</span>
-                <span class="text-gray-500">·</span>
-                <span class="text-gray-400">${currentResults.execution_time_ms}ms</span>
-                ${isServerPaginated ? '<span class="text-gray-500">·</span><span class="text-blue-400 text-xs">Server paginated</span>' : ''}
-                ${!isServerPaginated && filterText ? `<span class="text-gray-500">·</span><span class="text-yellow-400">${totalFiltered} filtered</span>` : ''}
-            </div>
-            <div class="flex items-center gap-2">
-                ${!isServerPaginated ? `
-                    <input type="text"
-                           id="results-filter"
-                           placeholder="Filter results..."
-                           value="${filterText}"
-                           onkeyup="filterResults(this.value)"
-                           class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-40 focus:outline-none focus:border-indigo-500">
-                ` : ''}
-                ${hasGeoColumn() ? '<button onclick="showMapModal()" class="text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1"><span>🗺️</span> Map</button>' : ''}
-                <button onclick="copyAsInsert()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white" title="Copy selected rows (or all) as SQL INSERT statements">INSERT</button>
-                <button onclick="exportCSV()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">CSV</button>
-                <button onclick="exportJSON()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">JSON</button>
-                ${currentEngine === 'duckdb' ? '<button onclick="showParquetModal()" class="text-xs px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white">Parquet</button>' : ''}
-            </div>
-        </div>
-    `;
+    // Header chips above the table
+    _updateResultChips(totalCount, currentResults.execution_time_ms || 0, isServerPaginated, hasGeoColumn());
 
-    // Table with header filter inputs, checkbox column, and data rows
+    // Optional secondary header text (filtered count + filter input)
+    if (headerEl) {
+        const filterRow = !isServerPaginated ? `
+            <input type="text"
+                   id="results-filter"
+                   placeholder="Filter visible rows…"
+                   value="${(filterText || '').replace(/"/g, '&quot;')}"
+                   onkeyup="filterResults(this.value)"
+                   style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11.5px;color:var(--fg);font-family:var(--font-mono);width:160px">
+        ` : '';
+        const filteredHint = (!isServerPaginated && filterText)
+            ? `<span style="color:var(--accent-amber)">${totalFiltered.toLocaleString()} filtered</span>`
+            : '';
+        headerEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;gap:10px;align-items:center;font-family:var(--font-mono);font-size:11.5px;color:var(--fg-3)">
+                    <span>${(totalCount || 0).toLocaleString()} rows</span>
+                    <span style="color:var(--fg-4)">·</span>
+                    <span>${currentResults.execution_time_ms || 0}ms</span>
+                    ${filteredHint ? '<span style="color:var(--fg-4)">·</span>' + filteredHint : ''}
+                </div>
+                ${filterRow}
+            </div>
+        `;
+    }
+
+    // Per-column filter row (client-side mode only)
     const colFilterRow = isServerPaginated ? '' : `
-        <tr class="bg-[#0d1117]/60">
-            <th class="px-2 py-1 border-b border-[#30363d]"></th>
+        <tr class="col-filter-row">
+            <th class="sticky-check"></th>
             ${currentResults.columns.map((c, i) => `
-                <th class="px-2 py-1 border-b border-[#30363d]">
+                <th>
                     <input type="text"
                            value="${(columnFilters[i] || '').replace(/"/g, '&quot;')}"
                            oninput="setColumnFilter(${i}, this.value)"
-                           placeholder="filter…"
-                           class="w-full bg-transparent text-xs text-gray-300 border border-[#30363d] rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500">
+                           placeholder="filter…">
                 </th>
             `).join('')}
         </tr>`;
 
     tableEl.innerHTML = `
-        <div class="card rounded-lg overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="results-table text-xs" style="min-width: max-content; border-collapse: separate; border-spacing: 0;">
-                    <thead class="bg-[#21262d] sticky top-0 z-10">
-                        <tr>
-                            <th class="px-2 py-1.5 text-left border-b border-[#30363d] w-6 sticky left-0 bg-[#21262d] z-20">
-                                <input type="checkbox"
-                                       ${_allRowsSelected(pageRows) ? 'checked' : ''}
-                                       onchange="toggleAllRows(this.checked)"
-                                       title="Select all rows on this page">
-                            </th>
-                            ${currentResults.columns.map((c, i) => `
-                                <th class="px-3 py-1.5 text-left text-gray-300 font-medium border-b border-[#30363d] cursor-pointer hover:bg-[#30363d] select-none whitespace-nowrap"
-                                    style="max-width: 320px;"
-                                    onclick="sortByColumn(${i})"
-                                    title="${c.name}">
-                                    <div class="flex items-center gap-1">
-                                        <span class="truncate">${c.name}</span>
-                                        <span class="text-gray-500 text-[10px]">${(c.type || '').toLowerCase()}</span>
-                                        ${sortColumn === i ? `<span class="text-indigo-400 ml-auto">${sortDirection === 'asc' ? '↑' : '↓'}</span>` : ''}
-                                    </div>
-                                </th>
-                            `).join('')}
-                        </tr>
-                        ${colFilterRow}
-                    </thead>
-                    <tbody class="font-mono">
-                        ${pageRows.map((row, i) => {
-                            const rowKey = _rowKey(row);
-                            const checked = selectedRows.has(rowKey);
-                            return `
-                            <tr class="${i % 2 === 0 ? 'bg-[#0d1117]/30' : ''} hover:bg-[#21262d]/60 ${checked ? '!bg-indigo-900/30' : ''}"
-                                data-row-index="${i}"
-                                onclick="openRowDetail(${i}, event)"
-                                style="cursor: pointer;">
-                                <td class="px-2 py-1 border-b border-[#30363d]/40 sticky left-0 bg-[#0d1117]">
-                                    <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
-                                </td>
-                                ${row.map(cell => `
-                                    <td class="px-3 py-1 border-b border-[#30363d]/40 max-w-xs truncate" title="${_titleSafe(cell)}">${formatCell(cell)}</td>
-                                `).join('')}
-                            </tr>
-                        `;}).join('')}
-                    </tbody>
-                </table>
-            </div>
-            ${totalPages > 1 ? `
-                <div class="flex items-center justify-between px-4 py-2 bg-[#21262d] border-t border-[#30363d]">
-                    <span class="text-xs text-gray-400">
-                        Showing ${startIdx + 1}-${endIdx} of ${totalFiltered}
-                    </span>
-                    <div class="flex items-center gap-1">
-                        <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}
-                                class="px-2 py-1 text-xs rounded hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed">««</button>
-                        <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}
-                                class="px-2 py-1 text-xs rounded hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed">«</button>
-                        <span class="px-2 text-xs text-gray-400">Page ${currentPage} of ${totalPages}</span>
-                        <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}
-                                class="px-2 py-1 text-xs rounded hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed">»</button>
-                        <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}
-                                class="px-2 py-1 text-xs rounded hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed">»»</button>
-                    </div>
-                </div>
-            ` : ''}
-        </div>
+        <table class="dtable">
+            <thead>
+                <tr>
+                    <th class="sticky-check">
+                        <input type="checkbox"
+                               ${_allRowsSelected(pageRows) ? 'checked' : ''}
+                               onchange="toggleAllRows(this.checked)"
+                               title="Select all rows on this page">
+                    </th>
+                    ${currentResults.columns.map((c, i) => {
+                        const cat = categories[i];
+                        return `
+                        <th onclick="sortByColumn(${i})" title="${c.name} · ${c.type || ''}">
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <span style="font-weight:500;color:var(--fg);font-size:12.5px;font-family:var(--font-ui);text-transform:none;letter-spacing:0">${c.name}</span>
+                                ${sortColumn === i ? `<span class="sort-arrow">${sortDirection === 'asc' ? '↑' : '↓'}</span>` : ''}
+                            </div>
+                            <div class="col-stat">
+                                <span class="type-chip ${cat}">${_typeShort(c.type)}</span>
+                            </div>
+                        </th>`;
+                    }).join('')}
+                </tr>
+                ${colFilterRow}
+            </thead>
+            <tbody>
+                ${pageRows.map((row, i) => {
+                    const rowKey = _rowKey(row);
+                    const checked = selectedRows.has(rowKey);
+                    return `
+                    <tr ${checked ? 'class="sel"' : ''}
+                        data-row-index="${i}"
+                        onclick="openRowDetail(${i}, event)">
+                        <td class="sticky-check" onclick="event.stopPropagation()">
+                            <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
+                        </td>
+                        ${row.map((cell, j) => {
+                            const cls = _cellClass(cell, categories[j]);
+                            return `<td class="${cls}" title="${_titleSafe(cell)}">${formatCell(cell)}</td>`;
+                        }).join('')}
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
     `;
+
+    _updateStatusBar({
+        page: currentPage,
+        totalPages: totalPages,
+        cols: currentResults.columns.length,
+        total: totalCount,
+        bytes: _estimateBytes(pageRows),
+    });
+
+    if (window.lucide) lucide.createIcons();
 }
+
+// Total page count (for the v0.4 status-bar pager)
+window.getTotalPages = function() {
+    if (!currentResults) return 1;
+    const isServerPaginated = serverPagination && currentResults.total_count !== undefined;
+    if (isServerPaginated) {
+        return Math.max(1, Math.ceil((currentResults.total_count || 0) / PAGE_SIZE));
+    }
+    const rows = getProcessedRows();
+    return Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+};
 
 function _rowKey(row) {
     return row.map(c => c === null ? '\x00' : typeof c === 'object' ? JSON.stringify(c) : String(c)).join('\x1f');
@@ -560,6 +739,10 @@ window.openRowDetail = function(pageRowIndex, ev) {
         const tag = ev.target.tagName;
         if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'A') return;
     }
+    // If the user is selecting text inside the cell (drag-select),
+    // don't hijack the click into a drawer open.
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.toString && sel.toString().length > 0) return;
     if (!currentResults || !currentResults.columns || !currentResults.rows) return;
 
     const rows = serverPagination ? currentResults.rows : getProcessedRows()
@@ -661,6 +844,7 @@ window.goToPage = function(page) {
         const totalCount = currentResults?.total_count || 0;
         const totalPages = Math.ceil(totalCount / PAGE_SIZE);
         if (page >= 1 && page <= totalPages) {
+            window.currentPage = page;
             runQuery({ sql: currentSql, page: page, isPageFetch: true });
         }
         return;
@@ -671,9 +855,47 @@ window.goToPage = function(page) {
     const totalPages = Math.ceil(processedRows.length / PAGE_SIZE);
     if (page >= 1 && page <= totalPages) {
         currentPage = page;
+        window.currentPage = page;
         renderResults();
     }
 }
+
+function _resultsToCSV(rows, columns, includeHeader = true) {
+    const headers = columns.map(c => c.name);
+    const escape = (cell) => {
+        if (cell === null || cell === undefined) return '';
+        const str = String(cell);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+    const lines = rows.map(row => row.map(escape).join(','));
+    return (includeHeader ? [headers.join(','), ...lines] : lines).join('\n');
+}
+
+// Copy results as CSV to clipboard. Honors selection (selected rows
+// only) when at least one is selected, otherwise the current page.
+window.copyAsCSV = async function() {
+    if (!currentResults || !currentResults.columns) return;
+    const all = getProcessedRows();
+    let rows;
+    if (selectedRows.size > 0) {
+        rows = all.filter(r => selectedRows.has(_rowKey(r)));
+    } else {
+        rows = all.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    }
+    if (!rows.length) {
+        tuskToast('No rows to copy', 'warning');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(_resultsToCSV(rows, currentResults.columns));
+        tuskToast(`Copied ${rows.length} row${rows.length === 1 ? '' : 's'} as CSV`, 'success');
+    } catch (err) {
+        tuskToast('Could not access clipboard', 'error');
+    }
+};
 
 // Export to CSV
 window.exportCSV = function() {
@@ -812,7 +1034,12 @@ function initEditor(schema = {}, connType = 'postgres') {
                 { key: "Cmd-Enter", run: () => { runQuery(); return true; } },
                 { key: "Ctrl-/", run: toggleLineComment },
                 { key: "Cmd-/", run: toggleLineComment },
+                // Multi-cursor: select next occurrence of word under cursor.
+                { key: "Ctrl-d", run: selectNextOccurrence },
+                { key: "Cmd-d", run: selectNextOccurrence },
             ]),
+            queryErrorField,
+            queryErrorTheme,
             sql({
                 dialect: sqlDialect,
                 schema: schemaForAutocomplete,
@@ -821,9 +1048,11 @@ function initEditor(schema = {}, connType = 'postgres') {
             autocompletion({
                 override: [schemaCompleter]
             }),
-            oneDark,
+            // Apply oneDark only when body is in dark mode. The light theme
+            // is handled via CSS overrides in studio-redesign.css.
+            ...(document.body.getAttribute('data-theme') === 'dark' ? [oneDark] : []),
             EditorView.theme({
-                "&": { height: "180px" },
+                "&": { height: "100%" },
                 ".cm-scroller": { overflow: "auto" }
             }),
             EditorView.updateListener.of(u => {
@@ -843,6 +1072,7 @@ function initEditor(schema = {}, connType = 'postgres') {
 
 // Initialize with empty schema
 initEditor();
+_updateConnMeta();
 
 // Try to restore tabs from localStorage, or create initial tab
 if (!loadTabsFromLocalStorage() || tabs.length === 0) {
@@ -1002,8 +1232,30 @@ async function checkConnectionStatuses(conns) {
     }
 }
 
+// Resolve a connection by id from the cached list (used when switching
+// tabs auto-restores their pinned connection).
+window.selectConnectionById = async function(id) {
+    try {
+        const res = await fetch('/api/connections');
+        const conns = await res.json();
+        const conn = conns.find?.(c => c.id === id);
+        if (conn) selectConnection(conn.id, conn.name, conn.type);
+    } catch (e) {
+        console.error('selectConnectionById failed', e);
+    }
+};
+
 window.selectConnection = async function(id, name, type) {
     currentConnection = { id, name, type };
+    window.currentConnection = currentConnection;
+    _updateConnMeta();
+
+    // Pin the active tab to this connection so future switches stick.
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (activeTab) {
+        activeTab.connectionId = id;
+        saveTabsToLocalStorage();
+    }
 
     // Save last connection to localStorage
     localStorage.setItem('tusk_last_connection', JSON.stringify({ id, name, type }));
@@ -1055,11 +1307,17 @@ function renderSchemaTree(schema, filter = '') {
                     const rowCountStr = rowCount !== undefined ? `<span class="text-indigo-400/70">${formatRowCount(rowCount)}</span>` : '';
                     return `
                     <details class="mt-0.5">
-                        <summary class="cursor-pointer hover:text-white py-0.5 flex items-center gap-1"
-                                 ondblclick="event.stopPropagation(); insertTable('${tableName}')">
+                        <summary class="cursor-pointer hover:text-white py-0.5 flex items-center gap-1 group"
+                                 ondblclick="event.stopPropagation(); insertTable('${tableName}')"
+                                 title="Double-click to insert table name">
                             <span>📋</span> ${tableName}
                             <span class="text-xs text-gray-600">(${cols.length})</span>
                             ${rowCountStr}
+                            <span class="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                                <button class="text-[10px] px-1 rounded bg-[#21262d] hover:bg-indigo-600 text-gray-300 hover:text-white"
+                                        onclick="event.stopPropagation(); insertTableTemplate('${schemaName}', '${tableName}')"
+                                        title="Open INSERT template in a new tab">INSERT</button>
+                            </span>
                         </summary>
                         <div class="ml-4 text-xs text-gray-500">
                             ${cols.map(c => {
@@ -1147,6 +1405,40 @@ window.insertTable = function(table) {
     }
 }
 
+// Build an INSERT template for a table from its column metadata in the
+// current schema and drop it into a fresh tab. Skips columns that are
+// PK + auto-generated when we can detect that (PG SERIAL/IDENTITY look
+// like names ending with `_id` + integer type — best-effort, user edits).
+window.insertTableTemplate = function(schemaName, tableName) {
+    const tables = currentSchema?.[schemaName];
+    const cols = tables?.[tableName] || [];
+    if (!cols.length) {
+        tuskToast(`No column metadata for ${tableName}`, 'warning');
+        return;
+    }
+    const ident = (s) => /^[a-z_][a-z0-9_]*$/.test(s) ? s : `"${s}"`;
+    const colNames = cols.map(c => ident(c.name));
+    const placeholders = cols.map(c => {
+        const t = (c.type || '').toLowerCase();
+        if (t.includes('int') || t.includes('numeric') || t.includes('decimal') || t.includes('real') || t.includes('double')) return '0';
+        if (t.includes('bool')) return 'false';
+        if (t.includes('json')) return "'{}'";
+        if (t.includes('timestamp') || t.includes('date') || t.includes('time')) return 'NOW()';
+        if (t.includes('uuid')) return 'gen_random_uuid()';
+        return "''";
+    });
+    const lines = [
+        `INSERT INTO ${ident(schemaName)}.${ident(tableName)} (`,
+        '    ' + colNames.join(', '),
+        ') VALUES (',
+        '    ' + placeholders.join(', '),
+        ');'
+    ];
+    const text = lines.join('\n');
+    createTab(`Insert ${tableName}`, text);
+    if (editor) editor.focus();
+};
+
 window.insertColumn = function(column) {
     if (editor) {
         const cursor = editor.state.selection.main.head;
@@ -1217,6 +1509,7 @@ window.runQuery = async function(options = {}) {
     if (!isPageFetch) {
         document.getElementById('results-table').innerHTML = '';
     }
+    clearQueryErrorHighlight();
 
     try {
         // Server-side pagination works for every engine now (postgres, duckdb, sqlite)
@@ -1236,11 +1529,14 @@ window.runQuery = async function(options = {}) {
         });
 
         currentResults = await res.json();
+        window.currentResults = currentResults;
 
         // Check if we're in server-side pagination mode
         serverPagination = currentResults.total_count !== undefined;
         currentSql = sqlText;
+        window.currentSql = sqlText;
         currentPage = page;
+        window.currentPage = page;
 
         // Reset sort/filter for new queries (not page fetches)
         if (!isPageFetch) {
@@ -1256,6 +1552,10 @@ window.runQuery = async function(options = {}) {
             activeTab.sql = sqlText;
             activeTab.results = currentResults;
             activeTab.serverPagination = serverPagination;
+        }
+
+        if (currentResults && currentResults.error && currentResults.error_position) {
+            highlightQueryError(currentResults.error_position);
         }
 
         renderResults();
@@ -1967,21 +2267,35 @@ let currentEngine = 'postgres'; // 'postgres', 'sqlite', or 'duckdb'
 
 window.setEngine = function(engine) {
     currentEngine = engine;
+    window.currentEngine = engine;
 
-    // Update button styles
-    document.getElementById('engine-postgres').classList.toggle('active', engine === 'postgres');
-    document.getElementById('engine-sqlite').classList.toggle('active', engine === 'sqlite');
-    document.getElementById('engine-duckdb').classList.toggle('active', engine === 'duckdb');
+    // Update legacy button styles if those elements still exist (old layout)
+    const pg = document.getElementById('engine-postgres');
+    const sl = document.getElementById('engine-sqlite');
+    const dd = document.getElementById('engine-duckdb');
+    if (pg) pg.classList.toggle('active', engine === 'postgres');
+    if (sl) sl.classList.toggle('active', engine === 'sqlite');
+    if (dd) dd.classList.toggle('active', engine === 'duckdb');
 
-    // Update info text
-    const info = document.getElementById('engine-info');
-    if (engine === 'postgres') {
-        info.textContent = currentConnection ? `→ ${currentConnection.name}` : '(select a connection)';
-    } else if (engine === 'sqlite') {
-        info.textContent = currentConnection ? `→ ${currentConnection.name}` : '(select a connection)';
-    } else {
-        info.textContent = '→ In-Memory (supports Parquet, CSV, JSON)';
+    // v0.4 redesign: engine chip in editor toolbar
+    const chip = document.getElementById('engine-chip-label');
+    if (chip) {
+        chip.textContent = {
+            postgres: 'PostgreSQL',
+            sqlite: 'SQLite',
+            duckdb: 'DuckDB',
+        }[engine] || engine;
     }
+
+    const info = document.getElementById('engine-info');
+    if (info) {
+        if (engine === 'duckdb') info.textContent = '→ In-Memory (Parquet, CSV, JSON)';
+        else info.textContent = currentConnection ? `→ ${currentConnection.name}` : '(select a connection)';
+    }
+
+    // Show/hide Parquet button based on engine
+    const parquet = document.getElementById('result-parquet-btn');
+    if (parquet) parquet.style.display = engine === 'duckdb' ? '' : 'none';
 }
 
 window.selectDuckDB = function() {
@@ -2459,6 +2773,7 @@ function hasGeoColumn() {
     const geoIndices = detectGeoColumns(currentResults.columns, currentResults.rows);
     return geoIndices.length > 0;
 }
+window.hasGeoColumn = hasGeoColumn;
 
 // WKT patterns for geo detection
 const WKT_PATTERN = /^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*(Z|M|ZM)?\s*\(/i;
@@ -2480,7 +2795,7 @@ function isGeometryValue(value) {
             if (data.type && ['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection', 'Feature', 'FeatureCollection'].includes(data.type)) {
                 return true;
             }
-        } catch (e) {}
+        } catch (e) { /* not JSON, fall through to hex WKB check */ }
     }
 
     // Check hex WKB (starts with 01 or 00, all hex chars)
@@ -2570,7 +2885,7 @@ function parseWKT(wkt) {
                 return { type: 'MultiPolygon', coordinates: polygons };
             }
         }
-    } catch (e) {}
+    } catch (e) { /* malformed WKT — return null below so caller falls back */ }
 
     return null;
 }
@@ -2712,7 +3027,7 @@ function geometryToGeoJSON(value) {
             try {
                 const data = JSON.parse(v);
                 if (data.type) return data;
-            } catch (e) {}
+            } catch (e) { /* not JSON — try WKT below */ }
         }
 
         // Try WKT
@@ -3163,3 +3478,73 @@ window.exportGeoJSON = function() {
 }
 
 // Map modal backdrop click and escape handled by Alpine.js
+
+// ─── Editor ↔ results splitter ──────────────────────────────────
+// Drag the thin bar between the editor and the results to resize the
+// editor pane. The editor host (`#sql-editor`) gets an explicit pixel
+// height; the results pane fills the rest.
+(function initSplitter() {
+    const splitter = document.getElementById('editor-results-splitter');
+    const editorHost = document.getElementById('sql-editor');
+    if (!splitter || !editorHost) return;
+
+    const KEY = 'tusk_editor_pane_h';
+    const saved = parseInt(localStorage.getItem(KEY));
+    const initial = Number.isFinite(saved) && saved >= 120 ? saved : 220;
+    editorHost.style.height = initial + 'px';
+
+    let dragging = false;
+    let startY = 0;
+    let startHeight = 0;
+    splitter.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dragging = true;
+        startY = e.clientY;
+        startHeight = editorHost.getBoundingClientRect().height;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const next = Math.max(120, Math.min(800, startHeight + (e.clientY - startY)));
+        editorHost.style.height = next + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        const h = parseInt(editorHost.style.height);
+        if (Number.isFinite(h)) localStorage.setItem(KEY, h);
+    });
+})();
+
+// ─── Mobile / responsive niceties ───────────────────────────────
+// On narrow viewports, the sidebar would push the editor offscreen.
+// Add a "Sidebar" toggle button + sticky overlay behavior.
+(function initResponsive() {
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        const aside = document.querySelector('aside.sidebar');
+        if (aside && !aside.dataset.collapsed) {
+            aside.dataset.collapsed = '1';
+            aside.style.display = 'none';
+        }
+        // Inject a small toggle button into the top nav so the sidebar
+        // can be reopened. The base.html top nav already has icon-btn
+        // styles available.
+        const nav = document.querySelector('.tusk-topnav');
+        if (nav && !document.getElementById('mobile-sidebar-toggle')) {
+            const btn = document.createElement('button');
+            btn.id = 'mobile-sidebar-toggle';
+            btn.className = 'tusk-icon-btn md:hidden';
+            btn.title = 'Toggle sidebar';
+            btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+            btn.onclick = () => {
+                const a = document.querySelector('aside.sidebar');
+                if (!a) return;
+                a.style.display = (a.style.display === 'none') ? '' : 'none';
+            };
+            nav.insertBefore(btn, nav.firstChild);
+        }
+    }
+})();

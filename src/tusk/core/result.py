@@ -17,19 +17,21 @@ class QueryResult(msgspec.Struct):
     row_count: int
     execution_time_ms: float
     error: str | None = None
+    error_position: int | None = None  # 1-based char index into the SQL (PG-style)
     total_count: int | None = None  # Total rows (for pagination)
     page: int | None = None
     page_size: int | None = None
 
     @classmethod
-    def from_error(cls, error: str) -> "QueryResult":
+    def from_error(cls, error: str, position: int | None = None) -> "QueryResult":
         """Create a result representing an error"""
         return cls(
             columns=[],
             rows=[],
             row_count=0,
             execution_time_ms=0,
-            error=error
+            error=error,
+            error_position=position,
         )
 
     def to_dict(self) -> dict:
@@ -41,7 +43,8 @@ class QueryResult(msgspec.Struct):
             "execution_time_ms": self.execution_time_ms,
             "error": self.error,
         }
-        # Add pagination fields if present
+        if self.error_position is not None:
+            d["error_position"] = self.error_position
         if self.total_count is not None:
             d["total_count"] = self.total_count
         if self.page is not None:

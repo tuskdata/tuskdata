@@ -2,6 +2,172 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc2] - 2026-04-26 — Closure + Redesign Round 2 (prep)
+
+Release candidate. Combines the v0.4.3 closure pass (Phase 1–7 /
+v0.2.1 leftovers) with **Redesign Round 2**: the Studio body now
+mirrors the v3 mockup at `docs/design/redesign-v3.html`. Tagged
+`rc2` so it can be deployed and exercised before cutting `0.4.3`.
+
+### Round 2 — Studio interior port
+- `static/studio-redesign.css` carries every layout class from the
+  mockup (`studio-shell`, `studio-grid`, `studio-tabs`, `studio-body`,
+  `studio-main`, `editor-wrap`, `editor-toolbar`, `results`,
+  `results-toolbar`, `tablist`, `dtable`, `results-status`, `chip`,
+  `btn`, `btn-brand`, `btn-ghost`, `qtab`). All names match the
+  mockup file 1:1 so it stays the source of truth.
+- `templates/index.html` is rebuilt around the new structure: warm
+  light shell, sidebar with `side-section` blocks, query tab strip
+  with `qtab` styling and a connection-meta strip on the right,
+  editor toolbar with chips (engine, dirty marker, optional
+  connection chip) and a coral `Run` button + ⌘⏎ kbd hint.
+- **Results view tabs** — Table / Map / JSON / Plan switch the
+  visible pane in place. Map opens the existing modal (round 3
+  will inline it); JSON dumps the response payload; Plan calls
+  `/api/admin/{conn}/explain` and shows the JSON plan inline.
+- **`.dtable` results table** with type chips under each column
+  name (`uuid`, `int4`, `geo`, `bool`, `numeric`, …), per-cell
+  type colors (numeric right-aligned amber, geo violet, null
+  italic faded, bool teal), sticky checkbox column, hover /
+  selection highlight via `--brand-soft`.
+- **Status bar** at the bottom of the results pane: `N selected`,
+  cols, approximate page memory (KB/MB), pager (first/prev/next/
+  last) with the `Page X / Y` label and `50 rows / page`. Replaces
+  the old inline pagination strip.
+- **CodeMirror theme** drops `oneDark` when light mode is active,
+  so the editor reads correctly against the warm light surface
+  without the `body.light` overrides we shipped in rc1.
+
+### Theme default
+- Light is now the default. The dark theme still works and is
+  remembered via localStorage.
+
+### Closure pass (carried over from rc1)
+The v0.4.3 closure work shipped in rc1 (Phase 1 multi-cursor,
+error highlight, INSERT template, copy CSV, splitter; Phase 2
+trend graphs, query filters, backup format, grants, settings UI,
+log search; Cluster call timeout; Audit log UI; v0.2.1 leftovers;
+light theme overrides) all rides along here unchanged.
+
+### Studio (Phase 1 polish)
+- **Multi-cursor.** `Ctrl+D` / `Cmd+D` selects the next occurrence of
+  the word under the cursor — same shortcut VS Code/Sublime use.
+- **Error highlighting.** PostgreSQL errors that include a position
+  (psycopg `diag.statement_position`) now paint a wavy red underline
+  on the offending token, with a soft red wash for the line. Edits
+  clear the highlight automatically.
+- **INSERT template from schema browser.** Hover any table in the
+  sidebar — a small `INSERT` button appears that opens a fresh tab
+  with a `INSERT INTO schema.table (...) VALUES (...)` skeleton,
+  with column-type-aware placeholders (`0` for ints, `false` for
+  bool, `NOW()` for timestamps, `gen_random_uuid()` for uuid, etc).
+- **Copy as CSV to clipboard.** New `Copy CSV` button next to the
+  existing `INSERT` / `CSV` buttons in the results header. Honors
+  the row selection like the others.
+- **Resizable editor / results panel.** A vertical splitter lives
+  between the SQL editor pane and the results pane. Drag, persists
+  to localStorage. The legacy horizontal sidebar resize already
+  worked; this closes the second leg.
+- **Tab-bound connections.** Each query tab remembers its connection.
+  Switching tabs now follows the tab's pinned connection back, so
+  you can keep one tab on prod-read-replica and another on local
+  without manually re-selecting on every switch.
+- **Cells select cleanly.** Row click still opens the drawer, but
+  if you have an active text selection inside a cell it doesn't
+  hijack the click. Cells are now `user-select: text`.
+- **Responsive design.** On viewports below 768px the sidebar
+  collapses by default and a toggle button appears in the top nav.
+- **Multi-cursor / Ctrl+D** is announced in the keyboard-shortcut
+  hint strip under the editor.
+
+### Admin (Phase 2 leftovers)
+- **Trend sparklines** on the four stat cards (connections, active
+  queries, cache hit ratio, db size). Pulls from the existing
+  `/api/admin/{conn}/stats/history` endpoint and refreshes every 5s
+  alongside the stat numbers.
+- **Active processes filter.** Two debounced inputs at the top of
+  the processes panel — filter by user and/or database. The
+  `/processes` endpoint now accepts `user` / `database` query
+  params.
+- **Backup format selector.** The "Create Backup" button opens a
+  proper dialog: pick `plain` (.sql.gz, current behavior),
+  `custom` (.dump, `pg_restore`-friendly), or `directory` (.tar.gz
+  archive of `pg_dump -Fd`).
+- **Backup specific tables.** Same dialog has a checkbox to
+  restrict the dump to a subset of tables. The list comes from a
+  new `/api/admin/{conn}/tables` endpoint. Table names are
+  validated against an identifier regex before being passed to
+  `pg_dump -t`.
+- **Backup progress bar.** The backup endpoint accepts an optional
+  `progress_id` and writes phase markers (`dumping` → `archiving` →
+  `hashing` → `done`) into a small log file. The dialog polls
+  `/api/admin/{conn}/backup/progress/{id}` every 800ms and renders
+  a progress bar.
+- **Restore handles all three formats.** Plain → psql, custom →
+  `pg_restore`, directory → extract tar.gz then `pg_restore -Fd`.
+  Format is detected from the filename and metadata sidecar.
+- **View role grants.** Each role in the Roles table gets a key
+  icon that opens a per-role grants modal with three sections:
+  database privileges (CONNECT/CREATE/TEMP), schema privileges
+  (USAGE/CREATE), and table privileges (SELECT/INSERT/UPDATE/
+  DELETE/TRUNCATE/REFERENCES/TRIGGER) for the current database.
+- **Settings: edit + compare with default.** The settings table
+  gains a `Default` column (from `pg_settings.boot_val`) and an
+  `Edit` action for any setting whose context is `user` or
+  `superuser` (i.e. things you can `SET` for the session). The
+  edit prompt fires the existing `/api/admin/{conn}/set-setting`
+  endpoint. Settings whose current value differs from default get
+  a small amber dot.
+- **Settings: filter input.** Debounced free-text filter that hides
+  rows that don't match the setting name.
+- **Logs: search.** Free-text search next to the existing level
+  selector. The endpoint pulls a wider window when search is
+  active (so the filter has something to match on).
+
+### Cluster (Phase 6 leftover)
+- **Worker call timeout.** Scheduler's `do_get` to a worker now
+  uses an explicit Flight call timeout (`TUSK_CLUSTER_CALL_TIMEOUT`
+  env, default 300s). Without it, a wedged worker would block the
+  scheduler thread until the gRPC default ran out, even though the
+  monitor loop had already marked the worker offline and re-queued
+  the job. Worker-failure handling itself was already in place.
+
+### Auth (Phase 7 leftover)
+- **Audit log UI.** The audit-log tab in the Users page gets a
+  free-text search (matches user/action/resource/details/IP), a
+  page navigator, an Export CSV/JSON button, and a fix for
+  timestamps that had previously rendered blank because the route
+  was setting an attribute on a dict.
+- **`/api/audit/export?format=csv|json`** endpoint streams the log
+  with the same filters as the list view, capped at 50k rows.
+
+### tusk-security plugin (Phase 9 leftovers)
+- The CLI subcommands (`tusk security scan|audit|network|sbom|
+  headers|ssl|load-test|status`) were already wired in v0.2.0; the
+  plugin tests now match the current `__version__` instead of
+  hardcoding `0.1.0`, and `load_tester` actually emits the capped
+  concurrency value into its summary.
+
+### v0.2.1 leftovers
+- Empty `catch (e) {}` blocks in `studio.js` got brief comments
+  describing the swallowed-error rationale (parsing fallbacks).
+- New `tests/test_engines_and_core.py` covers DSN redaction,
+  PG error-position parsing, `QueryTracker` register/clear,
+  rate-limit windowing, backup format detection, SSH-tunnel
+  shutdown safety, and the settings-name validator. 13 unit tests,
+  all green.
+
+### Light theme
+- **Light skin actually works now.** The v0.4.0 redesign foundation
+  drop only ported the top nav and the design-token CSS file; the
+  page interiors still ran on Tailwind arbitrary hex colors from
+  the v0.3 dark palette, so flipping to light gave you a half-dark
+  half-light frankenstein. v0.4.3 ships a bridge stylesheet inside
+  `styles.css` that maps every dark hex Tailwind utility used by
+  the templates onto a warm-light equivalent when `body.light` is
+  active. CodeMirror's `oneDark` theme is overridden in the same
+  pass so the editor doesn't stay black against a cream page.
+
 ## [0.4.1] - 2026-04-26 — Row Detail Drawer
 
 ### Added

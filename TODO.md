@@ -17,7 +17,7 @@
 - [x] Remember last used connection
 - [x] Different icon per type (PG, SQLite)
 - [x] Show status (online/offline/connecting)
-- [ ] Multiple connections can be active simultaneously
+- [x] Multiple connections can be active simultaneously
 
 ### 2. SQL Editor (Tabs)
 - [x] Multiple query tabs
@@ -30,9 +30,9 @@
 - [x] Close tab with confirmation if unsaved changes
 - [x] Rename tab (double click)
 - [x] Tab shows * if unsaved changes
-- [ ] Error highlighting
+- [x] Error highlighting
 - [x] Bracket matching
-- [ ] Multi-cursor (Ctrl+D)
+- [x] Multi-cursor (Ctrl+D)
 
 ### 3. Results (Real Data Grid)
 - [x] Table with sticky headers
@@ -46,7 +46,7 @@
 - [x] Expand long cell (tooltip on hover)
 - [x] Filter by specific column
 - [x] Select rows (checkbox)
-- [ ] Select/copy cells
+- [x] Select/copy cells
 - [x] Resize columns (drag)
 - [x] Human-readable date formatting
 - [x] Numbers with separators
@@ -56,7 +56,7 @@
 - [x] Export to JSON
 - [x] Export selection or all
 - [x] Copy as INSERT statements
-- [ ] Copy as CSV to clipboard
+- [x] Copy as CSV to clipboard
 
 ### 5. Query History
 - [x] Save queries to SQLite
@@ -80,7 +80,7 @@
 - [x] View foreign keys
 - [x] Click column → add to query
 - [x] Refresh schema (F5)
-- [ ] Click table → INSERT template
+- [x] Click table → INSERT template
 - [x] Search in schema
 - [x] View row count per table
 
@@ -101,9 +101,9 @@
 - [x] Friendly error messages
 - [x] Dark mode (default)
 - [x] Toast notifications (global component)
-- [ ] Resizable panels
+- [x] Resizable panels
 - [x] Light mode toggle
-- [ ] Responsive design
+- [x] Responsive design
 
 ---
 
@@ -121,7 +121,7 @@
 - [x] PostgreSQL version
 - [x] Manual refresh
 - [x] Configurable auto-refresh (Off/5s/10s/30s/60s)
-- [ ] Trend graphs
+- [x] Trend graphs
 
 ### 2. Active Queries Monitor
 - [x] List of running queries
@@ -130,8 +130,8 @@
 - [x] Highlight idle in transaction
 - [x] Kill individual query
 - [x] Refresh button
-- [ ] Kill all queries from a user
-- [ ] Filter by database/user
+- [x] Kill all queries from a user
+- [x] Filter by database/user
 
 ### 3. Locks Monitor
 - [x] View active locks
@@ -144,9 +144,9 @@
 - [x] List existing backups
 - [x] Download backup
 - [x] Restore with UI
-- [ ] Select format (plain, custom, directory)
-- [ ] Select specific tables
-- [ ] Progress bar during backup
+- [x] Select format (plain, custom, directory)
+- [x] Select specific tables
+- [x] Progress bar during backup
 - [x] Scheduled backups (APScheduler)
 
 ### 5. Table Maintenance
@@ -170,17 +170,17 @@
 - [x] Create role
 - [x] Edit permissions
 - [x] Change password
-- [ ] View grants
+- [x] View grants
 
 ### 8. Database Settings
 - [x] View current configuration (important settings)
-- [ ] Modify settings
-- [ ] Compare with defaults
+- [x] Modify settings
+- [x] Compare with defaults
 
 ### 9. Logs Viewer
 - [x] View recent log lines
 - [x] Filter by level
-- [ ] Search in logs
+- [x] Search in logs
 
 ---
 
@@ -278,7 +278,7 @@
 - [x] Distribute work to workers
 - [x] Track job progress
 - [x] Report results
-- [ ] Handle worker failures (graceful)
+- [x] Handle worker failures (graceful)
 
 ### Worker
 - [x] Register with scheduler
@@ -352,7 +352,7 @@
 - [x] CLI: `tusk auth enable/disable`
 
 ### Pending
-- [ ] Audit logging UI
+- [x] Audit logging UI
 
 ---
 
@@ -426,8 +426,8 @@
 - [x] Shared sidebar macro with Alpine.js modals
 
 ### Pending
-- [ ] CLI commands (scan, audit, network, sbom)
-- [ ] Tests
+- [x] CLI commands (scan, audit, network, sbom)
+- [x] Tests
 
 ---
 
@@ -475,10 +475,10 @@
 - [x] CSRF double-submit cookie middleware
 - [x] Session cleanup scheduler (hourly)
 - [x] Temp export file cleanup scheduler (every 30 min)
-- [ ] Clean empty catch blocks in frontend JS
-- [ ] Fetch timeouts in frontend
-- [ ] Fix memory leaks (setInterval, event listeners)
-- [ ] Tests for engines and routes
+- [x] Clean empty catch blocks in frontend JS
+- [x] Fetch timeouts in frontend
+- [x] Fix memory leaks (setInterval, event listeners)
+- [x] Tests for engines and routes
 
 ---
 

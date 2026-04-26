@@ -378,3 +378,18 @@ body[data-theme="dark"] .tusk-topnav {
 body[data-theme="dark"] .results-table tr.row-active {
   background: var(--brand-soft) !important;
 }
+
+/* Cell text selection: the data grid sets `cursor:pointer` on rows so
+ * click-to-open-drawer works, but that disables native text selection
+ * for individual cells. Allow text selection inside cells; the row
+ * click handler ignores events whose target is a selected text range. */
+.results-table td {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.results-table td a,
+.results-table td button,
+.results-table td input {
+  cursor: pointer;
+}

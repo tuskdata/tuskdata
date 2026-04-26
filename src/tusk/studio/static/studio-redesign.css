@@ -1,0 +1,185 @@
+/* Tusk Studio v0.4.3 — Round 2: interior port of the v3 mockup.
+ *
+ * Companion to design-tokens.css. Loaded after styles.css from base.html
+ * so its rules win.  All class names match
+ * docs/design/redesign-v3.html so the mockup file is the canonical
+ * reference; if you change the markup, sync that file too.
+ *
+ * The dark theme inherits via the design tokens — every color/border/
+ * radius reads from `var(--*)` and design-tokens.css already flips
+ * those under `body[data-theme="dark"]`.
+ */
+
+/* ---------- Buttons (overrides Tailwind defaults inside Studio) ---- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:13px;font-weight:500;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--fg);cursor:pointer;transition:all .12s;font-family:inherit}
+.btn:hover{background:var(--surface-2);border-color:var(--fg-4)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn-primary:hover{opacity:.9;background:var(--ink)}
+.btn-brand{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-brand:hover{background:var(--brand-2);border-color:var(--brand-2)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-ghost:hover{background:var(--surface-2);border-color:transparent}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-danger:hover{filter:brightness(1.05)}
+.btn svg{width:14px;height:14px}
+.btn-sm{padding:4px 8px;font-size:12px}
+.btn-sm svg{width:12px;height:12px}
+
+/* ---------- Chips ------------------------------------------------ */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:500;font-family:var(--font-mono)}
+.chip-green{background:rgba(31,138,76,.10);color:var(--green)}
+.chip-amber{background:rgba(176,119,0,.10);color:var(--accent-amber)}
+.chip-violet{background:rgba(111,90,214,.10);color:var(--accent-violet)}
+.chip-brand{background:var(--brand-soft);color:var(--brand)}
+.chip-rose{background:rgba(200,64,100,.10);color:var(--accent-rose)}
+.chip-teal{background:rgba(13,138,114,.10);color:var(--accent-teal)}
+.chip-red{background:rgba(204,46,61,.10);color:var(--red)}
+.chip-neutral{background:var(--surface-2);color:var(--fg-3)}
+.chip svg{width:11px;height:11px}
+
+/* ---------- Card ------------------------------------------------- */
+.r-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-sm)}
+
+/* ---------- Studio shell ---------------------------------------- */
+.studio-shell{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 56px)}
+.studio-shell .r-sidebar{border-right:1px solid var(--border);background:var(--bg);padding:14px 10px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-width:200px;max-width:480px}
+.studio-shell .r-sidebar .side-section{margin-top:8px}
+.studio-shell .r-sidebar .side-label{font-size:10.5px;font-weight:600;color:var(--fg-3);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px;display:flex;align-items:center;justify-content:space-between}
+.studio-shell .r-sidebar .side-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--fg-2);text-decoration:none;transition:background .12s;position:relative}
+.studio-shell .r-sidebar .side-item:hover{background:var(--surface-2)}
+.studio-shell .r-sidebar .side-item.active{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
+.studio-shell .r-sidebar .side-item svg,
+.studio-shell .r-sidebar .side-item i[data-lucide]{width:14px;height:14px;color:var(--fg-3);flex-shrink:0}
+.studio-shell .r-sidebar .side-item.active svg,
+.studio-shell .r-sidebar .side-item.active i[data-lucide]{color:var(--brand)}
+.studio-shell .r-sidebar .side-item .count{margin-left:auto;font-size:11px;color:var(--fg-4);font-family:var(--font-mono)}
+.studio-shell .r-sidebar .side-actions{margin-left:auto;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+.studio-shell .r-sidebar .side-item:hover .side-actions{opacity:1}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
+.dot.green{background:var(--green);box-shadow:0 0 0 3px rgba(31,138,76,.18)}
+.dot.amber{background:var(--accent-amber)}
+.dot.red{background:var(--red)}
+.dot.gray{background:var(--fg-4)}
+
+/* ---------- Studio grid (right of sidebar) ---------------------- */
+.studio-grid{display:grid;grid-template-rows:auto 1fr;height:calc(100vh - 56px);overflow:hidden}
+.studio-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg);padding:0 12px;height:38px;gap:2px;overflow-x:auto;flex-shrink:0}
+.qtab{display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px;color:var(--fg-3);cursor:pointer;border-radius:6px;height:28px;flex-shrink:0;background:transparent;border:none;font-family:inherit}
+.qtab:hover{background:var(--surface-2)}
+.qtab.active{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-sm)}
+.qtab svg,.qtab i[data-lucide]{width:12px;height:12px}
+.qtab .x{opacity:.4;border-radius:3px;padding:1px;display:grid;place-items:center}
+.qtab .x:hover{opacity:1;background:var(--surface-3)}
+.qtab.dirty::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--brand);display:inline-block}
+
+.studio-body{display:grid;grid-template-columns:1fr;overflow:hidden;min-height:0}
+.studio-main{display:grid;grid-template-rows:auto auto 1fr;overflow:hidden;min-height:0}
+
+/* ---------- Editor wrap ----------------------------------------- */
+.editor-wrap{background:var(--surface);border-bottom:1px solid var(--border);position:relative;display:flex;flex-direction:column}
+.editor-toolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap;gap:8px}
+.editor-toolbar .left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.editor-toolbar .right{display:flex;align-items:center;gap:6px}
+.editor-host{height:200px;overflow:hidden;background:var(--surface)}
+.editor-host .cm-editor{height:100%;background:transparent;font-family:var(--font-mono);font-size:13.5px}
+.editor-host .cm-content{padding:10px 0}
+.editor-host .cm-gutters{background:var(--bg);border-right:1px solid var(--border);color:var(--fg-4)}
+
+/* Splitter for editor↔results */
+.editor-splitter{height:4px;background:transparent;cursor:row-resize;flex-shrink:0;border-bottom:1px solid var(--border)}
+.editor-splitter:hover{background:var(--brand-soft)}
+
+/* ---------- Results --------------------------------------------- */
+.results{display:grid;grid-template-rows:auto 1fr auto;overflow:hidden;background:var(--bg);min-height:0}
+.results-toolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--bg);flex-wrap:wrap;gap:8px}
+.results-toolbar .left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.results-toolbar .right{display:flex;align-items:center;gap:6px}
+.tablist{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:7px}
+.tablist button{padding:4px 10px;font-size:12px;font-weight:500;border:none;background:transparent;color:var(--fg-3);border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit}
+.tablist button svg,.tablist button i[data-lucide]{width:12px;height:12px}
+.tablist button:hover{color:var(--fg)}
+.tablist button.on{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-sm)}
+
+/* View panes — only one is shown at a time */
+.view-pane{overflow:auto;min-height:0}
+.view-pane.hidden{display:none}
+
+/* Data table */
+.dtable{width:100%;border-collapse:separate;border-spacing:0;font-family:var(--font-mono);font-size:12.5px;min-width:max-content}
+.dtable thead th{text-align:left;padding:8px 12px;background:var(--bg);font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px;letter-spacing:.02em;position:sticky;top:0;z-index:1;white-space:nowrap;cursor:pointer;user-select:none}
+.dtable thead th:hover{color:var(--fg);background:var(--surface-2)}
+.dtable thead th .col-stat{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:9.5px;color:var(--fg-4);font-weight:400}
+.dtable thead th .col-stat .type-chip{padding:0 5px;border-radius:3px;background:var(--surface-2);color:var(--fg-3)}
+.dtable thead th .col-stat .type-chip.geo{color:var(--accent-violet);background:rgba(111,90,214,.10)}
+.dtable thead th .col-stat .type-chip.num{color:var(--accent-amber);background:rgba(176,119,0,.10)}
+.dtable thead th .col-stat .type-chip.bool{color:var(--accent-teal);background:rgba(13,138,114,.10)}
+.dtable thead th .col-stat .type-chip.str{color:var(--fg-3)}
+.dtable thead th .col-stat .type-chip.uuid{color:var(--accent-rose);background:rgba(200,64,100,.10)}
+.dtable thead th .sort-arrow{margin-left:auto;color:var(--brand);font-size:11px}
+.dtable thead th.sticky-check{width:32px;padding:8px 6px}
+.dtable tbody td{padding:7px 12px;border-bottom:1px solid var(--border);color:var(--fg);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text;-webkit-user-select:text;cursor:text}
+.dtable tbody td.sticky-check{position:sticky;left:0;background:var(--bg);width:32px;padding:6px}
+.dtable tbody tr:hover td{background:var(--surface-2)}
+.dtable tbody tr:hover td.sticky-check{background:var(--surface-2)}
+.dtable tbody tr.sel td{background:var(--brand-soft) !important}
+.dtable tbody tr.row-active td{background:var(--brand-soft) !important;outline:2px solid var(--brand);outline-offset:-2px}
+.dtable .num-cell{text-align:right;color:var(--accent-amber)}
+.dtable .str-cell{color:var(--fg)}
+.dtable .id-cell{color:var(--fg-3)}
+.dtable .geo-cell{color:var(--accent-violet)}
+.dtable .bool-cell{color:var(--accent-teal)}
+.dtable .json-cell{color:var(--accent-teal);font-size:11px}
+.dtable .null-cell{color:var(--fg-4);font-style:italic;font-family:var(--font-ui)}
+.dtable .date-cell{color:var(--accent-rose)}
+
+/* Per-column header filter row */
+.dtable .col-filter-row th{padding:4px 6px;background:var(--bg);position:sticky;top:35px;z-index:1}
+.dtable .col-filter-row input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px;color:var(--fg);font-family:var(--font-mono)}
+.dtable .col-filter-row input:focus{outline:none;border-color:var(--brand)}
+
+/* Status bar */
+.results-status{display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:var(--bg);border-top:1px solid var(--border);font-size:11.5px;color:var(--fg-3);font-family:var(--font-mono);gap:12px;flex-wrap:wrap}
+.results-status .seg{display:flex;align-items:center;gap:6px}
+.results-status .seg+.seg::before{content:"·";color:var(--fg-4);margin-right:6px}
+.results-status .pager{display:flex;align-items:center;gap:4px}
+.results-status .pager button{width:22px;height:22px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--fg-3);cursor:pointer}
+.results-status .pager button:hover:not(:disabled){background:var(--surface-2);color:var(--fg)}
+.results-status .pager button:disabled{opacity:.4;cursor:not-allowed}
+
+/* Empty state for results */
+.results-empty{padding:36px 14px;text-align:center;color:var(--fg-3);font-size:13px}
+.results-empty .ico{width:42px;height:42px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;color:var(--fg-4);margin:0 auto 10px}
+
+/* JSON viewer pane */
+.json-view{padding:14px;font-family:var(--font-mono);font-size:12px;color:var(--fg);white-space:pre-wrap;word-break:break-word;background:var(--surface);border-radius:0}
+
+/* Plan viewer pane */
+.plan-view{padding:14px;font-family:var(--font-mono);font-size:12px;color:var(--fg);white-space:pre-wrap;background:var(--surface)}
+
+/* Map view container — fills the pane */
+.map-view{position:relative;width:100%;height:100%;min-height:400px;background:var(--surface)}
+
+/* ---------- Modal redesign (used by index.html) ---------------- */
+.modal-shade{position:fixed;inset:0;background:rgba(40,35,25,.45);z-index:60;display:flex;align-items:center;justify-content:center}
+.modal-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);box-shadow:var(--shadow-xl);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;width:480px}
+.modal-card .head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.modal-card .head .title{font-family:var(--font-serif);font-size:22px;line-height:1.1;letter-spacing:-.01em}
+.modal-card .body{padding:16px 18px;overflow:auto;flex:1}
+.modal-card .foot{padding:12px 18px;border-top:1px solid var(--border);background:var(--surface-2);display:flex;gap:8px;justify-content:flex-end}
+
+/* ---------- Form fields ---------------------------------------- */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-size:12px;color:var(--fg-3);font-weight:500}
+.field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;padding:8px 10px;font-size:13px;color:var(--fg);font-family:inherit}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(212,80,43,.15)}
+.field .hint{font-size:11px;color:var(--fg-4)}
+
+/* ---------- Toast / inline error ------------------------------- */
+.inline-error{padding:10px 12px;border-radius:7px;background:rgba(204,46,61,.10);border:1px solid rgba(204,46,61,.25);color:var(--red);font-size:12.5px;display:flex;align-items:start;gap:8px}
+
+/* ---------- Hard-set the body so the redesign always wins on
+              the Studio page even if Tailwind/styles.css set bg ---*/
+body.studio-redesigned,
+body.studio-redesigned main,
+body.studio-redesigned aside{background:var(--bg);color:var(--fg)}

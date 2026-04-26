@@ -669,17 +669,104 @@ class AuditLogController(Controller):
         user_id = request.query_params.get("user_id")
         action = request.query_params.get("action")
 
-        entries = get_audit_logs(limit=limit, offset=offset, user_id=user_id, action=action)
-        total = get_audit_log_count(user_id=user_id, action=action)
+        search = (request.query_params.get("search") or "").strip()
+        # Pull a generous window when filtering by free text — `search` is
+        # applied after fetch since the audit_log SQLite table is small
+        # and there's no FTS index.
+        fetch_limit = max(limit, 1000) if search else limit
+        entries = get_audit_logs(limit=fetch_limit, offset=offset, user_id=user_id, action=action)
+
+        if search:
+            needle = search.lower()
+            entries = [
+                e for e in entries
+                if needle in (e.get("username") or "").lower()
+                or needle in (e.get("action") or "").lower()
+                or needle in (e.get("resource") or "").lower()
+                or needle in (e.get("details") or "").lower()
+                or needle in (e.get("ip_address") or "").lower()
+            ]
+            total = len(entries)
+            entries = entries[:limit]
+        else:
+            total = get_audit_log_count(user_id=user_id, action=action)
+
+        # Display-friendly timestamps. Entries are dicts here; setting a
+        # new key gives the template `e.timestamp_display`.
+        for e in entries:
+            ts = e.get("timestamp")
+            if ts:
+                e["timestamp_display"] = ts.replace("T", " ").split(".")[0]
 
         if is_htmx(request):
-            # Add display-friendly timestamps
-            for e in entries:
-                if hasattr(e, "timestamp") and e.timestamp:
-                    e.timestamp_display = e.timestamp
-            return Template("partials/users/audit.html", context={"entries": entries, "total": total})
+            return Template("partials/users/audit.html", context={
+                "entries": entries,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "page": (offset // max(limit, 1)) + 1,
+                "total_pages": max(1, (total + limit - 1) // max(limit, 1)),
+                "search": search,
+                "action_filter": action or "",
+            })
 
         return {"entries": entries, "total": total}
+
+    @get("/export")
+    async def export_logs(self, request: Request) -> Response:
+        """Stream the audit log as CSV. Honors the same filters as the
+        list endpoint (action, search, user_id). Hard-capped at 50k rows
+        so a malicious user can't exhaust memory."""
+        if not await self._check_admin(request):
+            return Response(content="Unauthorized", status_code=401, media_type="text/plain")
+
+        import csv
+        from io import StringIO
+
+        action = request.query_params.get("action")
+        user_id = request.query_params.get("user_id")
+        search = (request.query_params.get("search") or "").strip()
+        fmt = (request.query_params.get("format") or "csv").lower()
+
+        entries = get_audit_logs(limit=50_000, offset=0, user_id=user_id, action=action)
+        if search:
+            needle = search.lower()
+            entries = [
+                e for e in entries
+                if needle in (e.get("username") or "").lower()
+                or needle in (e.get("action") or "").lower()
+                or needle in (e.get("resource") or "").lower()
+                or needle in (e.get("details") or "").lower()
+                or needle in (e.get("ip_address") or "").lower()
+            ]
+
+        if fmt == "json":
+            import json as _json
+            body = _json.dumps(entries, indent=2, default=str)
+            return Response(
+                content=body,
+                media_type="application/json",
+                headers={"Content-Disposition": 'attachment; filename="audit_log.json"'},
+            )
+
+        buf = StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["timestamp", "user", "user_id", "action", "resource", "details", "ip_address"])
+        for e in entries:
+            writer.writerow([
+                e.get("timestamp", ""),
+                e.get("username", ""),
+                e.get("user_id", ""),
+                e.get("action", ""),
+                e.get("resource", "") or "",
+                e.get("details", "") or "",
+                e.get("ip_address", "") or "",
+            ])
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="audit_log.csv"'},
+        )
 
     async def _check_admin(self, request: Request) -> bool:
         """Check if current user is admin"""

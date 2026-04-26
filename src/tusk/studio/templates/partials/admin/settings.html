@@ -1,12 +1,28 @@
 {% if settings %}
     {% for s in settings %}
-    <tr class="hover:bg-[#21262d]/50">
-        <td class="px-4 py-2 font-mono text-sm">{{ s.name }}{% if s.pending_restart %} <span class="text-xs text-yellow-400">restart needed</span>{% endif %}</td>
+    {% set differs_from_default = s.boot_val and s.setting != s.boot_val %}
+    <tr class="hover:bg-[#21262d]/50" data-setting="{{ s.name }}">
+        <td class="px-4 py-2 font-mono text-sm">
+            {{ s.name }}
+            {% if s.pending_restart %} <span class="text-xs text-yellow-400">restart needed</span>{% endif %}
+            {% if differs_from_default %} <span class="text-xs text-amber-400" title="Differs from default">●</span>{% endif %}
+        </td>
         <td class="px-4 py-2 font-mono text-sm text-indigo-400">{{ s.formatted }}</td>
+        <td class="px-4 py-2 font-mono text-xs text-gray-500">{{ s.boot_val or '-' }}</td>
         <td class="px-4 py-2 text-xs text-gray-500">{{ s.category }}</td>
         <td class="px-4 py-2 text-xs text-gray-500">{{ s.description }}</td>
+        <td class="px-4 py-2 text-right">
+            {% if s.context in ('user', 'superuser') %}
+            <button onclick="window.tuskEditSetting('{{ s.name }}', '{{ s.setting | replace('\'', '\\\'') }}')"
+                    class="text-xs text-indigo-400 hover:text-indigo-300" title="SET for this session">
+                Edit
+            </button>
+            {% else %}
+            <span class="text-xs text-gray-600" title="Requires reload or restart">read-only</span>
+            {% endif %}
+        </td>
     </tr>
     {% endfor %}
 {% else %}
-    <tr><td colspan="4" class="p-4 text-gray-500">No settings found</td></tr>
+    <tr><td colspan="6" class="p-4 text-gray-500">No settings found</td></tr>
 {% endif %}

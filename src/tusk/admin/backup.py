@@ -134,15 +134,63 @@ def get_psql_path() -> str:
     return _find_pg_binary("psql")
 
 
-def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
-    """Create a pg_dump backup of the database
+_VALID_FORMATS = ("plain", "custom", "directory")
+_TABLE_NAME_RE = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_.]*$")
+
+
+def _format_to_extension(fmt: str) -> str:
+    return {
+        "plain": "sql.gz",
+        "custom": "dump",
+        "directory": "tar.gz",
+    }[fmt]
+
+
+def create_backup(
+    config: ConnectionConfig,
+    *,
+    format: str = "plain",
+    tables: list[str] | None = None,
+    progress_path: Path | None = None,
+) -> tuple[bool, str, Path | None]:
+    """Create a pg_dump backup of the database.
+
+    Args:
+        config: connection config
+        format: pg_dump format — `plain` (gzipped SQL, default), `custom`
+            (-Fc, single binary file, restored with pg_restore), or
+            `directory` (-Fd, archived as tar.gz).
+        tables: optional list of unqualified or schema-qualified table names
+            to include (pg_dump `-t`). When provided, only these tables are
+            dumped.
+        progress_path: optional path to write progress messages into. Each
+            line is one phase (e.g. `dumping`, `compressing`, `done`).
+            The UI polls this file while the backup runs.
 
     Returns: (success, message, filepath)
     """
+    if format not in _VALID_FORMATS:
+        return False, f"Invalid format: {format}", None
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Validate table names — pg_dump accepts patterns but we only allow
+    # safe identifiers to avoid argv injection of `--option` flags.
+    if tables:
+        for t in tables:
+            if not _TABLE_NAME_RE.match(t):
+                return False, f"Invalid table name: {t}", None
+
+    def _progress(msg: str) -> None:
+        if progress_path:
+            try:
+                with open(progress_path, "a") as f:
+                    f.write(msg + "\n")
+            except OSError:
+                pass
+
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
-    filename = f"{config.database}_{timestamp}.sql.gz"
+    ext = _format_to_extension(format)
+    filename = f"{config.database}_{timestamp}.{ext}"
     filepath = BACKUP_DIR / filename
 
     pg_dump = get_pg_dump_path()
@@ -153,42 +201,77 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
         "-p", str(config.port),
         "-U", config.user or "postgres",
         "-d", config.database or "postgres",
-        "--format=plain",
     ]
 
+    if format == "plain":
+        cmd.append("--format=plain")
+    elif format == "custom":
+        cmd.append("--format=custom")
+    elif format == "directory":
+        cmd.append("--format=directory")
+
+    if tables:
+        for t in tables:
+            cmd.extend(["-t", t])
+
     env, pgpass_path = _pg_env(config)
+    _progress("dumping")
 
+    tmp_dir: Path | None = None
     try:
-        # pg_dump | gzip > file
-        with open(filepath, "wb") as f:
-            dump_proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env
-            )
-            gzip_proc = subprocess.Popen(
-                ["gzip"],
-                stdin=dump_proc.stdout,
-                stdout=f,
-                stderr=subprocess.PIPE
-            )
-
-            dump_proc.stdout.close()
-            gzip_proc.communicate()
-            dump_proc.wait()
-
-            if dump_proc.returncode != 0:
-                stderr = dump_proc.stderr.read().decode() if dump_proc.stderr else "Unknown error"
+        if format == "plain":
+            # pg_dump | gzip > file
+            with open(filepath, "wb") as f:
+                dump_proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                )
+                gzip_proc = subprocess.Popen(
+                    ["gzip"],
+                    stdin=dump_proc.stdout,
+                    stdout=f,
+                    stderr=subprocess.PIPE,
+                )
+                dump_proc.stdout.close()
+                gzip_proc.communicate()
+                dump_proc.wait()
+                if dump_proc.returncode != 0:
+                    stderr = dump_proc.stderr.read().decode() if dump_proc.stderr else "Unknown error"
+                    filepath.unlink(missing_ok=True)
+                    return False, f"pg_dump failed: {stderr}", None
+        elif format == "custom":
+            # -Fc writes directly to a file via -f
+            cmd.extend(["-f", str(filepath)])
+            result = subprocess.run(cmd, capture_output=True, env=env)
+            if result.returncode != 0:
                 filepath.unlink(missing_ok=True)
-                return False, f"pg_dump failed: {stderr}", None
+                return False, f"pg_dump failed: {result.stderr.decode()}", None
+        else:  # directory
+            tmp_dir = BACKUP_DIR / f".{filename}.staging"
+            cmd.extend(["-f", str(tmp_dir)])
+            result = subprocess.run(cmd, capture_output=True, env=env)
+            if result.returncode != 0:
+                import shutil as _shutil
+                if tmp_dir.exists():
+                    _shutil.rmtree(tmp_dir, ignore_errors=True)
+                return False, f"pg_dump failed: {result.stderr.decode()}", None
+            _progress("archiving")
+            # Tar+gzip the staging directory into our final filepath.
+            import tarfile
+            with tarfile.open(filepath, "w:gz") as tar:
+                tar.add(tmp_dir, arcname=tmp_dir.name)
+            import shutil as _shutil
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir = None
 
         size = filepath.stat().st_size
         size_human = f"{size / 1024 / 1024:.2f} MB" if size > 1024 * 1024 else f"{size / 1024:.1f} KB"
 
-        # Write sidecar metadata JSON — real timestamp, size, sha256, source.
-        # Sits next to the backup so delete_backup also cleans it up.
-        _write_backup_metadata(filepath, config, size)
+        _progress("hashing")
+        _write_backup_metadata(filepath, config, size, fmt=format, tables=tables)
+        _progress("done")
 
         return True, f"Backup created: {filename} ({size_human})", filepath
 
@@ -196,13 +279,23 @@ def create_backup(config: ConnectionConfig) -> tuple[bool, str, Path | None]:
         return False, f"pg_dump not found at '{pg_dump}'. Install PostgreSQL client tools or check Postgres.app installation.", None
     except Exception as e:
         filepath.unlink(missing_ok=True)
+        if tmp_dir and tmp_dir.exists():
+            import shutil as _shutil
+            _shutil.rmtree(tmp_dir, ignore_errors=True)
         return False, f"Backup failed: {str(e)}", None
     finally:
         if pgpass_path:
             pgpass_path.unlink(missing_ok=True)
 
 
-def _write_backup_metadata(filepath: Path, config: ConnectionConfig, size: int) -> None:
+def _write_backup_metadata(
+    filepath: Path,
+    config: ConnectionConfig,
+    size: int,
+    *,
+    fmt: str = "plain",
+    tables: list[str] | None = None,
+) -> None:
     """Write a <backup>.meta.json alongside the backup file."""
     import hashlib
     import json
@@ -221,6 +314,8 @@ def _write_backup_metadata(filepath: Path, config: ConnectionConfig, size: int) 
         "host": config.host,
         "port": config.port,
         "tusk_version": _tusk_version(),
+        "format": fmt,
+        "tables": tables or [],
     }
 
     meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
@@ -249,13 +344,24 @@ def _read_backup_metadata(filepath: Path) -> dict | None:
         return None
 
 
+def _is_backup_file(name: str) -> bool:
+    return name.endswith(".sql.gz") or name.endswith(".dump") or name.endswith(".tar.gz")
+
+
 def list_backups() -> list[dict]:
     """List all available backups. Prefers sidecar metadata when present."""
     if not BACKUP_DIR.exists():
         return []
 
     backups = []
-    for f in sorted(BACKUP_DIR.glob("*.sql.gz"), reverse=True):
+    candidates: list[Path] = []
+    for pattern in ("*.sql.gz", "*.dump", "*.tar.gz"):
+        candidates.extend(BACKUP_DIR.glob(pattern))
+    seen: set[str] = set()
+    for f in sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True):
+        if f.name in seen or not _is_backup_file(f.name):
+            continue
+        seen.add(f.name)
         stat = f.stat()
         meta = _read_backup_metadata(f)
         entry = {
@@ -267,11 +373,23 @@ def list_backups() -> list[dict]:
             "database": (meta or {}).get("database"),
             "host": (meta or {}).get("host"),
             "tusk_version": (meta or {}).get("tusk_version"),
+            "format": (meta or {}).get("format") or _format_from_filename(f.name),
+            "tables": (meta or {}).get("tables") or [],
             "metadata_present": meta is not None,
         }
         backups.append(entry)
 
     return backups
+
+
+def _format_from_filename(name: str) -> str:
+    if name.endswith(".sql.gz"):
+        return "plain"
+    if name.endswith(".dump"):
+        return "custom"
+    if name.endswith(".tar.gz"):
+        return "directory"
+    return "plain"
 
 
 def get_backup_path(filename: str) -> Path | None:
@@ -312,7 +430,7 @@ def delete_backup(filename: str) -> tuple[bool, str]:
     if not filepath.exists():
         return False, f"Backup not found: {filename}"
 
-    if not filepath.suffix == ".gz" or not filepath.name.endswith(".sql.gz"):
+    if not _is_backup_file(filepath.name):
         return False, "Not a valid backup file"
 
     # Clean up sidecar metadata alongside the backup.
@@ -329,7 +447,8 @@ def delete_backup(filename: str) -> tuple[bool, str]:
 
 
 def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
-    """Restore a database from backup
+    """Restore a database from backup. Supports plain (.sql.gz),
+    custom (-Fc, .dump) and directory (-Fd, archived as .tar.gz) formats.
 
     WARNING: This will overwrite the target database!
     """
@@ -337,45 +456,77 @@ def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
     if not filepath:
         return False, f"Backup file not found: {filename}"
 
-    psql = get_psql_path()
-
-    cmd = [
-        psql,
-        "-h", config.host or "localhost",
-        "-p", str(config.port),
-        "-U", config.user or "postgres",
-        "-d", config.database or "postgres",
-    ]
-
+    fmt = _format_from_filename(filename)
     env, pgpass_path = _pg_env(config)
 
     try:
-        # gunzip < file | psql
-        with open(filepath, "rb") as f:
-            gunzip_proc = subprocess.Popen(
-                ["gunzip", "-c"],
-                stdin=f,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            psql_proc = subprocess.Popen(
-                cmd,
-                stdin=gunzip_proc.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env
-            )
+        if fmt == "plain":
+            psql = get_psql_path()
+            cmd = [
+                psql,
+                "-h", config.host or "localhost",
+                "-p", str(config.port),
+                "-U", config.user or "postgres",
+                "-d", config.database or "postgres",
+            ]
+            with open(filepath, "rb") as f:
+                gunzip_proc = subprocess.Popen(
+                    ["gunzip", "-c"],
+                    stdin=f,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                psql_proc = subprocess.Popen(
+                    cmd,
+                    stdin=gunzip_proc.stdout,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                )
+                gunzip_proc.stdout.close()
+                stdout, stderr = psql_proc.communicate()
+                if psql_proc.returncode != 0:
+                    return False, f"Restore failed: {stderr.decode()}"
+            return True, f"Database restored from {filename}"
 
-            gunzip_proc.stdout.close()
-            stdout, stderr = psql_proc.communicate()
+        # custom / directory: pg_restore
+        pg_restore = _find_pg_binary("pg_restore")
+        cmd = [
+            pg_restore,
+            "-h", config.host or "localhost",
+            "-p", str(config.port),
+            "-U", config.user or "postgres",
+            "-d", config.database or "postgres",
+            "--no-owner",
+            "--no-privileges",
+        ]
 
-            if psql_proc.returncode != 0:
-                return False, f"Restore failed: {stderr.decode()}"
+        if fmt == "custom":
+            cmd.append(str(filepath))
+            result = subprocess.run(cmd, capture_output=True, env=env)
+            if result.returncode != 0:
+                return False, f"Restore failed: {result.stderr.decode()}"
+            return True, f"Database restored from {filename}"
 
-        return True, f"Database restored from {filename}"
+        # directory format: extract tar.gz to temp dir then pg_restore -Fd
+        import tempfile as _tempfile
+        import tarfile as _tarfile
+        import shutil as _shutil
+        with _tempfile.TemporaryDirectory(prefix="tusk_restore_") as td:
+            with _tarfile.open(filepath, "r:gz") as tar:
+                tar.extractall(td)
+            # The tar contains exactly one top-level dir
+            entries = [Path(td) / p for p in os.listdir(td)]
+            if len(entries) != 1 or not entries[0].is_dir():
+                return False, "Invalid directory backup archive"
+            cmd.extend(["-F", "d", str(entries[0])])
+            result = subprocess.run(cmd, capture_output=True, env=env)
+            if result.returncode != 0:
+                return False, f"Restore failed: {result.stderr.decode()}"
+            return True, f"Database restored from {filename}"
 
-    except FileNotFoundError:
-        return False, f"psql not found at '{psql}'. Install PostgreSQL client tools or check Postgres.app installation."
+    except FileNotFoundError as e:
+        return False, f"PostgreSQL client tool not found: {e}"
     except Exception as e:
         return False, f"Restore failed: {str(e)}"
     finally:

@@ -257,13 +257,18 @@ async def revoke_role(config: ConnectionConfig, role: str, from_role: str) -> di
 
 
 async def get_role_grants(config: ConnectionConfig, name: str) -> dict:
-    """Get detailed grants for a role"""
+    """Get detailed grants for a role.
+
+    Returns a dict with three keys:
+    - `databases`: per-database CONNECT/CREATE/TEMP flags
+    - `schemas`: per-schema USAGE/CREATE flags (current DB)
+    - `tables`: aggregate SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER per table
+    """
 
     # Validate role name
     if not _VALID_ROLE_RE.match(name) or len(name) > 63:
         return {"error": f"Invalid role name: {name}"}
 
-    # Get database privileges (parameterized to prevent SQL injection)
     db_sql = """
     SELECT datname, has_database_privilege(%s, datname, 'CONNECT') as can_connect,
            has_database_privilege(%s, datname, 'CREATE') as can_create,
@@ -273,7 +278,6 @@ async def get_role_grants(config: ConnectionConfig, name: str) -> dict:
     ORDER BY datname
     """
 
-    # Get schema privileges in current database
     schema_sql = """
     SELECT nspname,
            has_schema_privilege(%s, nspname, 'USAGE') as can_usage,
@@ -283,30 +287,52 @@ async def get_role_grants(config: ConnectionConfig, name: str) -> dict:
     ORDER BY nspname
     """
 
+    table_sql = """
+    SELECT
+        table_schema,
+        table_name,
+        bool_or(privilege_type = 'SELECT') as can_select,
+        bool_or(privilege_type = 'INSERT') as can_insert,
+        bool_or(privilege_type = 'UPDATE') as can_update,
+        bool_or(privilege_type = 'DELETE') as can_delete,
+        bool_or(privilege_type = 'TRUNCATE') as can_truncate,
+        bool_or(privilege_type = 'REFERENCES') as can_references,
+        bool_or(privilege_type = 'TRIGGER') as can_trigger
+    FROM information_schema.role_table_grants
+    WHERE grantee = %s
+      AND table_schema NOT IN ('pg_catalog', 'information_schema')
+    GROUP BY table_schema, table_name
+    ORDER BY table_schema, table_name
+    """
+
     try:
         db_result = await execute_query(config, db_sql, params=(name, name, name))
         schema_result = await execute_query(config, schema_sql, params=(name, name))
+        table_result = await execute_query(config, table_sql, params=(name,))
 
-        databases = []
-        for row in db_result.rows:
-            databases.append({
-                "name": row[0],
-                "can_connect": row[1],
-                "can_create": row[2],
-                "can_temp": row[3]
-            })
+        databases = [
+            {"name": row[0], "can_connect": row[1], "can_create": row[2], "can_temp": row[3]}
+            for row in db_result.rows
+        ]
+        schemas = [
+            {"name": row[0], "can_usage": row[1], "can_create": row[2]}
+            for row in schema_result.rows
+        ]
+        tables = [
+            {
+                "schema": row[0],
+                "name": row[1],
+                "select": row[2],
+                "insert": row[3],
+                "update": row[4],
+                "delete": row[5],
+                "truncate": row[6],
+                "references": row[7],
+                "trigger": row[8],
+            }
+            for row in table_result.rows
+        ]
 
-        schemas = []
-        for row in schema_result.rows:
-            schemas.append({
-                "name": row[0],
-                "can_usage": row[1],
-                "can_create": row[2]
-            })
-
-        return {
-            "databases": databases,
-            "schemas": schemas
-        }
+        return {"databases": databases, "schemas": schemas, "tables": tables}
     except Exception as e:
         return {"error": str(e)}

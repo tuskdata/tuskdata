@@ -15,6 +15,25 @@ from tusk.core.ssh_tunnel import get_tunneled_dsn
 
 log = get_logger("postgres")
 
+
+def _error_position(exc: Exception) -> int | None:
+    """Extract a 1-based char index from a psycopg error if available.
+
+    psycopg surfaces the byte position via `e.diag.statement_position` for
+    PG errors (`SqlState=42*`). Returns None for non-PG errors or when the
+    server didn't report a position.
+    """
+    try:
+        diag = getattr(exc, "diag", None)
+        if diag is None:
+            return None
+        pos = getattr(diag, "statement_position", None)
+        if pos is None:
+            return None
+        return int(pos)
+    except Exception:
+        return None
+
 # ============================================================================
 # Connection Pool Manager
 # ============================================================================
@@ -159,7 +178,7 @@ async def execute_query(
                 )
 
     except Exception as e:
-        return QueryResult.from_error(str(e))
+        return QueryResult.from_error(str(e), position=_error_position(e))
 
 
 _HEX_WKB_RE = re.compile(r'^(01|00)[0-9a-fA-F]{8,}$')
@@ -310,7 +329,7 @@ async def execute_query_paginated(
                 )
 
     except Exception as e:
-        return QueryResult.from_error(str(e))
+        return QueryResult.from_error(str(e), position=_error_position(e))
 
 
 async def fetch_geometries(

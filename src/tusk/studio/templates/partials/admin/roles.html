@@ -10,6 +10,13 @@
         <td class="px-4 py-3">{% if r.can_create_role %}<span class="text-purple-400">Yes</span>{% else %}<span class="text-gray-500">No</span>{% endif %}</td>
         <td class="px-4 py-3 text-xs text-gray-400">{{ r.member_of | join(', ') if r.member_of else '-' }}</td>
         <td class="px-4 py-3 text-right">
+            <button hx-get="/api/admin/{{ conn_id }}/roles/{{ r.name }}/grants"
+                    hx-target="#role-grants-content"
+                    hx-swap="innerHTML"
+                    @click="$dispatch('open-role-grants', { name: '{{ r.name }}' })"
+                    class="p-1.5 hover:bg-[#21262d] rounded text-gray-400" title="View grants">
+                <i data-lucide="key-round" class="w-4 h-4"></i>
+            </button>
             <button @click="editRole('{{ r.name }}', {{ r.can_login | lower }}, {{ r.is_superuser | lower }}, {{ r.can_create_db | lower }}, {{ r.can_create_role | lower }})"
                     class="p-1.5 hover:bg-[#21262d] rounded" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
             <button hx-post="/api/admin/{{ conn_id }}/roles/{{ r.name }}/delete"

@@ -27,6 +27,7 @@
          so per-component overrides can still win. -->
     <link rel="stylesheet" href="/static/design-tokens.css">
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/studio-redesign.css">
     <script src="/static/tusk-fetch.js"></script>
     {% block head %}{% endblock %}
     {% block styles %}<style></style>{% endblock %}
@@ -348,11 +349,8 @@
 
         function initTheme() {
             const saved = localStorage.getItem('tusk-theme');
-            // Round 1 still defaults to dark — the body interiors haven't
-            // been ported yet, so a light default would look broken. Once
-            // round 2 migrates the per-page backgrounds, the default
-            // flips to light.
-            const theme = saved === 'light' ? 'light' : 'dark';
+            // Round 2 ships the warm-light interior; default is light.
+            const theme = saved === 'dark' ? 'dark' : 'light';
             _applyTheme(theme);
         }
 

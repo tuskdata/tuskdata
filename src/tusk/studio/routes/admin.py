@@ -81,6 +81,7 @@ from tusk.admin.roles import (
     drop_role,
     grant_role,
     revoke_role,
+    get_role_grants,
 )
 from tusk.admin.settings import (
     get_settings,
@@ -167,8 +168,12 @@ class AdminController(Controller):
         }
 
     @get("/{conn_id:str}/processes")
-    async def get_processes(self, request: Request, conn_id: str) -> dict | Template:
-        """Get active queries/processes"""
+    async def get_processes(
+        self, request: Request, conn_id: str,
+        user: str | None = None, database: str | None = None,
+    ) -> dict | Template:
+        """Get active queries/processes. Optional `user` / `database`
+        query params filter the list."""
         config = get_connection(conn_id)
         if not config:
             return {"error": "Connection not found"}
@@ -180,6 +185,14 @@ class AdminController(Controller):
 
         if isinstance(queries, dict):
             return queries  # Error case
+
+        # Server-side filter — case-insensitive substring match.
+        if user:
+            uf = user.lower()
+            queries = [q for q in queries if uf in q.user.lower()]
+        if database:
+            df = database.lower()
+            queries = [q for q in queries if df in q.database.lower()]
 
         processes = [
             {
@@ -196,7 +209,12 @@ class AdminController(Controller):
         ]
 
         if is_htmx(request):
-            return Template("partials/admin/processes.html", context={"processes": processes, "conn_id": conn_id})
+            return Template("partials/admin/processes.html", context={
+                "processes": processes,
+                "conn_id": conn_id,
+                "filter_user": user or "",
+                "filter_database": database or "",
+            })
         return {"processes": processes}
 
     @post("/{conn_id:str}/kill/{pid:int}")
@@ -282,8 +300,10 @@ class AdminController(Controller):
         return {"success": ok, "message": msg}
 
     @post("/{conn_id:str}/backup")
-    async def create_db_backup(self, request: Request, conn_id: str) -> dict | Response:
-        """Create a database backup"""
+    async def create_db_backup(self, request: Request, conn_id: str, data: dict = Body(default={})) -> dict | Response:
+        """Create a database backup. Accepts JSON body:
+            { "format": "plain"|"custom"|"directory", "tables": ["...", ...] }
+        """
         config = get_connection(conn_id)
         if not config:
             return {"success": False, "error": "Connection not found"}
@@ -291,7 +311,23 @@ class AdminController(Controller):
         if config.type != "postgres":
             return {"success": False, "error": "Backup only available for PostgreSQL"}
 
-        success, message, filepath = create_backup(config)
+        fmt = (data.get("format") or "plain").strip()
+        tables = data.get("tables") or None
+        progress_id = data.get("progress_id")
+        progress_path = None
+        if progress_id:
+            from tusk.core.connection import TUSK_DIR
+            progress_dir = TUSK_DIR / "backups"
+            progress_dir.mkdir(parents=True, exist_ok=True)
+            progress_path = progress_dir / f".progress-{progress_id}.log"
+            progress_path.write_text("")
+
+        success, message, filepath = create_backup(
+            config, format=fmt, tables=tables, progress_path=progress_path
+        )
+
+        if progress_path:
+            progress_path.unlink(missing_ok=True)
 
         if is_htmx(request):
             return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
@@ -300,6 +336,48 @@ class AdminController(Controller):
             "success": success,
             "message": message,
             "filename": filepath.name if filepath else None,
+        }
+
+    @get("/{conn_id:str}/backup/progress/{progress_id:str}")
+    async def backup_progress(self, conn_id: str, progress_id: str) -> dict:
+        """Read the backup progress log for the given id."""
+        from tusk.core.connection import TUSK_DIR
+        # Restrict id to safe characters
+        import re
+        if not re.match(r"^[A-Za-z0-9_-]{1,64}$", progress_id):
+            return {"error": "Invalid progress id"}
+        path = TUSK_DIR / "backups" / f".progress-{progress_id}.log"
+        if not path.exists():
+            return {"phase": "done", "lines": []}
+        try:
+            lines = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
+        except OSError:
+            lines = []
+        return {"phase": lines[-1] if lines else "running", "lines": lines}
+
+    @get("/{conn_id:str}/tables")
+    async def list_tables(self, conn_id: str) -> dict:
+        """Return all user tables on the current database, used by the
+        backup dialog to let the user pick which tables to dump."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"error": "PostgreSQL connection required"}
+        from tusk.engines import postgres
+        sql = """
+            SELECT table_schema, table_name
+            FROM information_schema.tables
+            WHERE table_type = 'BASE TABLE'
+              AND table_schema NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY table_schema, table_name
+        """
+        result = await postgres.execute_query(config, sql)
+        if result.error:
+            return {"error": result.error}
+        return {
+            "tables": [
+                {"schema": r[0], "name": r[1], "qualified": f"{r[0]}.{r[1]}"}
+                for r in result.rows
+            ]
         }
 
     @get("/{conn_id:str}/backups")
@@ -804,6 +882,24 @@ class AdminController(Controller):
 
         return result
 
+    @get("/{conn_id:str}/roles/{name:str}/grants")
+    async def view_role_grants(self, request: Request, conn_id: str, name: str) -> dict | Template:
+        """Read the per-database/schema/table grants for a role."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"error": "PostgreSQL connection required"}
+        result = await get_role_grants(config, name)
+        if is_htmx(request):
+            if "error" in result:
+                return Template("partials/error-message.html", context={"error": result["error"], "title": "Grants Error"})
+            return Template("partials/admin/role-grants.html", context={
+                "role": name,
+                "databases": result["databases"],
+                "schemas": result["schemas"],
+                "tables": result["tables"],
+            })
+        return result
+
     @post("/{conn_id:str}/roles/{role:str}/grant/{to_role:str}")
     async def grant_role_membership(self, request: Request, conn_id: str, role: str, to_role: str) -> dict | Template | Response:
         """Grant role membership"""
@@ -1059,8 +1155,12 @@ class AdminController(Controller):
         return await get_wal_stats(config)
 
     @get("/{conn_id:str}/logs")
-    async def get_server_logs(self, request: Request, conn_id: str, limit: int = 100, level: str | None = None) -> dict | Template:
-        """Get PostgreSQL server logs"""
+    async def get_server_logs(
+        self, request: Request, conn_id: str,
+        limit: int = 100, level: str | None = None, search: str | None = None,
+    ) -> dict | Template:
+        """Get PostgreSQL server logs. Optional `search` filters lines by
+        case-insensitive substring match (applied after `level`)."""
         config = get_connection(conn_id)
         if not config:
             return {"error": "Connection not found"}
@@ -1068,12 +1168,24 @@ class AdminController(Controller):
         if config.type != "postgres":
             return {"error": "Logs only available for PostgreSQL"}
 
-        data = await get_logs(config, limit=limit, level=level)
+        # Pull a larger window when search is active so the filter has
+        # something to match against.
+        fetch_limit = max(limit, 1000) if search else limit
+        data = await get_logs(config, limit=fetch_limit, level=level)
+        logs = data.get("logs", []) or []
+
+        if search:
+            needle = search.lower()
+            logs = [
+                ln for ln in logs
+                if needle in (ln.get("message") if isinstance(ln, dict) else str(ln)).lower()
+            ]
+            logs = logs[:limit]
 
         if is_htmx(request):
-            return Template("partials/admin/logs.html", context={"logs": data.get("logs", [])})
+            return Template("partials/admin/logs.html", context={"logs": logs, "search": search or ""})
 
-        return data
+        return {"logs": logs, "search": search or ""}
 
     # ===== Point-In-Time Recovery (PITR) =====
 
