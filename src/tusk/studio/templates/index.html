@@ -7,35 +7,33 @@
 {{ map_assets() }}
 {% endblock %}
 
-{% block styles %}
-<style>/* Styles in /static/styles.css */</style>
-{% endblock %}
+{% block styles %}{% endblock %}
 
 {% block header_actions %}
-<button onclick="showSettingsModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-gray-500 hover:text-white" title="Settings">
-    <i data-lucide="settings" class="w-5 h-5"></i>
+<button onclick="showSettingsModal()" class="icon-btn" title="Settings">
+    <i data-lucide="settings"></i>
 </button>
 {% endblock %}
 
 {% block content %}
 <!-- v0.4 Round 2: redesigned Studio interior. Class names map 1:1 to
-     docs/design/redesign-v3.html so the mockup is the source of truth. -->
+     docs/design/redesign-v3.html. All styles live in studio-redesign.css
+     and styles.css; all JS lives in studio.js / studio-views.js. -->
 <div class="studio-shell w-full">
-    <!-- Sidebar — connections, files, schema, saved, history -->
-    <aside class="r-sidebar" x-data="resizableSidebar('studio')" style="position:relative;">
-        <div @mousedown="startResize($event)" style="position:absolute;top:0;right:0;width:4px;height:100%;cursor:col-resize;z-index:5"></div>
+    <aside class="r-sidebar relative" x-data="resizableSidebar('studio')">
+        <div class="resize-handle" @mousedown="startResize($event)"></div>
 
         <div class="side-section">
             <div class="side-label">
                 <span>Connections</span>
-                <button onclick="showConnModal()" class="icon-btn" style="width:20px;height:20px" title="Add connection">
-                    <i data-lucide="plus" style="width:12px;height:12px"></i>
+                <button onclick="showConnModal()" class="icon-btn icon-mini" title="Add connection">
+                    <i data-lucide="plus" class="plus"></i>
                 </button>
             </div>
             <div id="connections-list">
-                <div class="text-fg-3 text-xs px-2 py-1">No connections yet</div>
+                <div class="side-empty">No connections yet</div>
             </div>
-            <div id="duckdb-connection" class="side-item" onclick="selectDuckDB()" style="margin-top:4px">
+            <div id="duckdb-connection" class="side-item mt-1" onclick="selectDuckDB()">
                 <span class="dot gray" id="duckdb-status"></span>
                 <i data-lucide="box"></i>
                 <span>DuckDB (local)</span>
@@ -45,64 +43,64 @@
         <div class="side-section">
             <div class="side-label">
                 <span>Files</span>
-                <span style="display:flex;gap:2px">
-                    <button onclick="showCreateFileModal()" class="icon-btn" style="width:20px;height:20px" title="New database">
-                        <i data-lucide="file-plus" style="width:12px;height:12px"></i>
+                <span class="flex gap-1">
+                    <button onclick="showCreateFileModal()" class="icon-btn icon-mini" title="New database">
+                        <i data-lucide="file-plus"></i>
                     </button>
-                    <button onclick="showAddFolderModal()" class="icon-btn" style="width:20px;height:20px" title="Add folder">
-                        <i data-lucide="folder-plus" style="width:12px;height:12px"></i>
+                    <button onclick="showAddFolderModal()" class="icon-btn icon-mini" title="Add folder">
+                        <i data-lucide="folder-plus"></i>
                     </button>
                 </span>
             </div>
             <div id="files-list">
-                <div class="text-fg-3 text-xs px-2 py-1">No folders added</div>
+                <div class="side-empty">No folders added</div>
             </div>
         </div>
 
-        <div class="side-section" style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div class="side-section flex-grow">
             <div class="side-label">
                 <span>Schema</span>
-                <button onclick="refreshSchema()" class="icon-btn" style="width:20px;height:20px" title="Refresh (F5)">
-                    <i data-lucide="refresh-cw" style="width:11px;height:11px"></i>
+                <button onclick="refreshSchema()" class="icon-btn icon-mini" title="Refresh (F5)">
+                    <i data-lucide="refresh-cw"></i>
                 </button>
             </div>
-            <input type="text" id="schema-search" placeholder="Search tables…"
-                   oninput="filterSchema(this.value)"
-                   style="margin:4px 8px 8px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--fg);font-family:inherit">
-            <div id="schema-tree" style="overflow-y:auto;flex:1;padding:0 4px">
-                <div class="text-fg-3 text-xs px-2 py-1">Select a connection</div>
+            <input type="text" id="schema-search" class="side-search"
+                   placeholder="Search tables…"
+                   oninput="filterSchema(this.value)">
+            <div id="schema-tree" class="side-scroll">
+                <div class="side-empty">Select a connection</div>
             </div>
         </div>
 
         <div class="side-section">
             <div class="side-label"><span>Saved queries</span></div>
             <div id="saved-queries-list">
-                <div class="text-fg-3 text-xs px-2 py-1">No saved queries</div>
+                <div class="side-empty">No saved queries</div>
             </div>
         </div>
 
         <div class="side-section">
             <div class="side-label">
                 <span>History</span>
-                <button onclick="clearHistory()" class="icon-btn" style="width:20px;height:20px" title="Clear">
-                    <i data-lucide="trash-2" style="width:11px;height:11px"></i>
+                <button onclick="clearHistory()" class="icon-btn icon-mini" title="Clear">
+                    <i data-lucide="trash-2"></i>
                 </button>
             </div>
-            <input type="text" id="history-search" placeholder="Search…"
-                   oninput="filterHistory(this.value)"
-                   style="margin:4px 8px 8px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--fg);font-family:inherit">
-            <div id="history-list" style="max-height:240px;overflow-y:auto"></div>
+            <input type="text" id="history-search" class="side-search"
+                   placeholder="Search…"
+                   oninput="filterHistory(this.value)">
+            <div id="history-list" class="history-list"></div>
         </div>
     </aside>
 
     <!-- Studio body: tabs row + (editor + results) -->
     <div class="studio-grid">
         <div class="studio-tabs" id="query-tabs-host">
-            <div id="query-tabs" style="display:flex;gap:2px;overflow-x:auto"></div>
-            <button onclick="createTab()" class="icon-btn" style="margin-left:4px" title="New tab">
-                <i data-lucide="plus" style="width:12px;height:12px"></i>
+            <div id="query-tabs" class="tabs-row"></div>
+            <button onclick="createTab()" class="icon-btn ml-1" title="New tab">
+                <i data-lucide="plus"></i>
             </button>
-            <div style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--fg-3)" class="mono" id="active-conn-meta">
+            <div id="active-conn-meta" class="conn-meta">
                 <span class="dot gray"></span>
                 <span>No connection</span>
             </div>
@@ -114,19 +112,19 @@
                 <div class="editor-wrap">
                     <div class="editor-toolbar">
                         <div class="left">
-                            <span class="chip chip-violet" id="conn-chip" style="display:none">
+                            <span class="chip chip-violet hidden" id="conn-chip">
                                 <i data-lucide="zap"></i><span id="conn-chip-label">Postgres</span>
                             </span>
                             <span class="chip chip-neutral" id="engine-chip">
                                 <i data-lucide="database"></i><span id="engine-chip-label">PostgreSQL</span>
                             </span>
-                            <span class="chip chip-amber" id="dirty-chip" style="display:none">
+                            <span class="chip chip-amber hidden" id="dirty-chip">
                                 <i data-lucide="edit-3"></i>unsaved
                             </span>
                         </div>
                         <div class="right">
-                            <button class="btn btn-sm btn-ghost" onclick="explainCurrentQuery()" title="EXPLAIN this query">
-                                <i data-lucide="sparkles" style="color:var(--brand)"></i>Explain
+                            <button class="btn btn-sm btn-ghost icon-coral" onclick="explainCurrentQuery()" title="EXPLAIN this query">
+                                <i data-lucide="sparkles"></i>Explain
                             </button>
                             <button class="btn btn-sm btn-ghost" onclick="formatCurrentQuery()" title="Pretty-print the SQL">
                                 <i data-lucide="wand-2"></i>Format
@@ -136,7 +134,7 @@
                             </button>
                             <button id="run-btn" class="btn btn-sm btn-brand" onclick="runQuery()">
                                 <i data-lucide="play"></i>Run
-                                <span class="kbd" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.24);color:#fff">⌘⏎</span>
+                                <span class="kbd kbd-on-brand">⌘⏎</span>
                             </button>
                         </div>
                     </div>
@@ -150,22 +148,21 @@
                 <div class="results">
                     <div class="results-toolbar">
                         <div class="left">
-                            <span style="font-weight:500;font-size:13px">Result</span>
-                            <span id="result-stats-chip" class="chip chip-neutral"
-                                  style="display:none">
+                            <span class="results-label">Result</span>
+                            <span id="result-stats-chip" class="chip chip-neutral hidden">
                                 <i data-lucide="check"></i><span id="result-stats-text"></span>
                             </span>
-                            <span id="result-geo-chip" class="chip chip-violet" style="display:none">
+                            <span id="result-geo-chip" class="chip chip-violet hidden">
                                 <i data-lucide="map-pin"></i>Geo detected
                             </span>
-                            <span id="result-pagination-chip" class="chip chip-neutral" style="display:none">
+                            <span id="result-pagination-chip" class="chip chip-neutral hidden">
                                 <i data-lucide="layers"></i>server-paginated
                             </span>
                         </div>
                         <div class="right">
                             <div class="tablist" id="result-views">
                                 <button data-view="table" class="on" onclick="setResultView('table')"><i data-lucide="table"></i>Table</button>
-                                <button data-view="map" onclick="setResultView('map')" id="result-view-map" style="display:none"><i data-lucide="map"></i>Map</button>
+                                <button data-view="map" onclick="setResultView('map')" id="result-view-map" class="hidden"><i data-lucide="map"></i>Map</button>
                                 <button data-view="chart" onclick="setResultView('chart')"><i data-lucide="bar-chart-3"></i>Chart</button>
                                 <button data-view="json" onclick="setResultView('json')"><i data-lucide="braces"></i>JSON</button>
                                 <button data-view="plan" onclick="setResultView('plan')"><i data-lucide="cpu"></i>Plan</button>
@@ -174,13 +171,13 @@
                             <button class="btn btn-sm btn-ghost" onclick="copyAsCSV()" title="Copy as CSV">Copy CSV</button>
                             <button class="btn btn-sm btn-ghost" onclick="exportCSV()" title="Download CSV"><i data-lucide="download"></i>CSV</button>
                             <button class="btn btn-sm btn-ghost" onclick="exportJSON()" title="Download JSON"><i data-lucide="download"></i>JSON</button>
-                            <button class="btn btn-sm btn-ghost" id="result-parquet-btn" onclick="showParquetModal()" style="display:none" title="Export to Parquet"><i data-lucide="download"></i>Parquet</button>
+                            <button class="btn btn-sm btn-ghost hidden" id="result-parquet-btn" onclick="showParquetModal()" title="Export to Parquet"><i data-lucide="download"></i>Parquet</button>
                         </div>
                     </div>
 
                     <div class="view-pane" id="results-table-view">
-                        <div id="results-header" style="padding:8px 14px;font-size:12px;color:var(--fg-3)"></div>
-                        <div id="results-table" style="overflow:auto"></div>
+                        <div id="results-header" class="results-header"></div>
+                        <div id="results-table" class="results-table-host"></div>
                     </div>
 
                     <div class="view-pane hidden map-view" id="results-map-view">
@@ -192,31 +189,29 @@
                     </div>
 
                     <div class="view-pane hidden" id="results-chart-view">
-                        <div class="plan-view">
-                            <div style="padding:14px;color:var(--fg-3)">
-                                <i data-lucide="bar-chart-3" style="width:18px;height:18px;color:var(--fg-4)"></i>
-                                Chart view is coming in v0.5. Pick a numeric column from the result and we'll bar-chart it here.
-                            </div>
+                        <div class="chart-stub">
+                            <i data-lucide="bar-chart-3"></i>
+                            <span>Chart view is coming in v0.5. Pick a numeric column from the result and we'll bar-chart it here.</span>
                         </div>
                     </div>
 
                     <div class="view-pane hidden" id="results-plan-view">
                         <div class="plan-view" id="results-plan-content">
-                            <div style="padding:14px;color:var(--fg-3)">Run the query first, then click Plan to see EXPLAIN.</div>
+                            <div class="plan-empty">Run the query first, then click Plan to see EXPLAIN.</div>
                         </div>
                     </div>
 
                     <div class="results-status" id="results-status">
                         <span id="status-selected">0 selected of 0</span>
-                        <div style="flex:1"></div>
+                        <div class="grow"></div>
                         <span id="status-pager-info">Page 1 of 1</span>
-                        <span style="color:var(--fg-4)">·</span>
+                        <span class="status-sep">·</span>
                         <span id="status-stream">streamed</span>
-                        <div class="pager" id="status-pager" style="margin-left:8px">
-                            <button id="pager-first" onclick="goToPage(1)" title="First"><i data-lucide="chevrons-left" style="width:12px;height:12px"></i></button>
-                            <button id="pager-prev" onclick="pagerPrev()" title="Previous"><i data-lucide="chevron-left" style="width:12px;height:12px"></i></button>
-                            <button id="pager-next" onclick="pagerNext()" title="Next"><i data-lucide="chevron-right" style="width:12px;height:12px"></i></button>
-                            <button id="pager-last" onclick="pagerLast()" title="Last"><i data-lucide="chevrons-right" style="width:12px;height:12px"></i></button>
+                        <div class="pager status-pager-buttons" id="status-pager">
+                            <button id="pager-first" onclick="goToPage(1)" title="First"><i data-lucide="chevrons-left"></i></button>
+                            <button id="pager-prev" onclick="pagerPrev()" title="Previous"><i data-lucide="chevron-left"></i></button>
+                            <button id="pager-next" onclick="pagerNext()" title="Next"><i data-lucide="chevron-right"></i></button>
+                            <button id="pager-last" onclick="pagerLast()" title="Last"><i data-lucide="chevrons-right"></i></button>
                         </div>
                     </div>
                 </div>
@@ -224,105 +219,6 @@
         </div>
     </div>
 </div>
-
-<script>
-// Mark the body so the Studio-only redesign rules can target it
-document.body.classList.add('studio-redesigned');
-
-// View switcher between Table / Map / JSON / Plan
-window.setResultView = async function(view) {
-    document.querySelectorAll('#result-views button').forEach(b => {
-        b.classList.toggle('on', b.dataset.view === view);
-    });
-    document.querySelectorAll('.view-pane').forEach(el => el.classList.add('hidden'));
-    const pane = document.getElementById(`results-${view}-view`);
-    if (pane) pane.classList.remove('hidden');
-
-    if (view === 'json') {
-        const el = document.getElementById('results-json-content');
-        if (window.currentResults) {
-            el.textContent = JSON.stringify(window.currentResults, null, 2);
-        } else {
-            el.textContent = '— no results yet —';
-        }
-    }
-    if (view === 'map' && typeof window.showMapModal === 'function' && window.hasGeoColumn?.()) {
-        // For now we delegate to the modal map; future: render inline.
-        showMapModal();
-    }
-    if (view === 'plan') {
-        await loadExplainPlan();
-    }
-};
-
-window.loadExplainPlan = async function() {
-    const el = document.getElementById('results-plan-content');
-    if (!window.currentConnection || !window.currentSql) {
-        el.innerHTML = '<div class="text-fg-3" style="padding:14px">Run a query first.</div>';
-        return;
-    }
-    if (window.currentConnection.type !== 'postgres') {
-        el.innerHTML = '<div class="text-fg-3" style="padding:14px">EXPLAIN is only available for PostgreSQL connections.</div>';
-        return;
-    }
-    el.innerHTML = '<div class="text-fg-3" style="padding:14px">Loading plan…</div>';
-    try {
-        const res = await fetch(`/api/admin/${window.currentConnection.id}/explain`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sql: window.currentSql, analyze: false}),
-        });
-        const data = await res.json();
-        if (data.error) {
-            el.innerHTML = `<div class="inline-error" style="margin:14px">${data.error}</div>`;
-            return;
-        }
-        el.textContent = JSON.stringify(data.plan, null, 2);
-    } catch (e) {
-        el.innerHTML = `<div class="inline-error" style="margin:14px">${e.message}</div>`;
-    }
-};
-
-window.pagerPrev = function() {
-    const cur = window.currentPage || 1;
-    if (cur > 1) goToPage(cur - 1);
-};
-window.pagerNext = function() {
-    const cur = window.currentPage || 1;
-    const total = window.getTotalPages?.() || 1;
-    if (cur < total) goToPage(cur + 1);
-};
-window.pagerLast = function() {
-    const total = window.getTotalPages?.() || 1;
-    goToPage(total);
-};
-
-// Editor toolbar action: trigger Plan view + run EXPLAIN
-window.explainCurrentQuery = function() {
-    setResultView('plan');
-};
-
-// Editor toolbar action: pretty-print SQL via a tiny client-side
-// formatter. Not a full parser, but handles the common shape:
-// uppercases keywords, breaks before each major clause.
-window.formatCurrentQuery = function() {
-    if (!window.editor) return;
-    const sql = editor.state.doc.toString();
-    if (!sql.trim()) return;
-    const KW = ['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'GROUP BY', 'ORDER BY',
-                'HAVING', 'LIMIT', 'OFFSET', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN',
-                'INNER JOIN', 'OUTER JOIN', 'ON', 'UNION', 'UNION ALL',
-                'INSERT INTO', 'UPDATE', 'DELETE FROM', 'VALUES', 'SET',
-                'RETURNING', 'WITH', 'AS'];
-    let out = sql.replace(/\s+/g, ' ').trim();
-    KW.forEach(k => {
-        const re = new RegExp('\\b' + k.replace(' ', '\\s+') + '\\b', 'gi');
-        out = out.replace(re, '\n' + k);
-    });
-    out = out.replace(/^\n/, '').replace(/\n+/g, '\n').replace(/,\s*/g, ', ');
-    editor.dispatch({changes: {from: 0, to: editor.state.doc.length, insert: out}});
-};
-</script>
 
 {% endblock %}
 
@@ -640,4 +536,5 @@ window.formatCurrentQuery = function() {
 
 {% block scripts %}
 <script type="module" src="/static/studio.js"></script>
+<script src="/static/studio-views.js"></script>
 {% endblock %}

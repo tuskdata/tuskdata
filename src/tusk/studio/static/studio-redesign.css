@@ -183,3 +183,58 @@
 body.studio-redesigned,
 body.studio-redesigned main,
 body.studio-redesigned aside{background:var(--bg);color:var(--fg)}
+
+/* ---------- Sidebar plumbing (replaces inline style="..." attrs)  */
+.r-sidebar .resize-handle{position:absolute;top:0;right:0;width:4px;height:100%;cursor:col-resize;z-index:5}
+.r-sidebar .side-section.flex-grow{flex:1;min-height:0;display:flex;flex-direction:column}
+.r-sidebar .side-search{margin:4px 8px 8px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--fg);font-family:inherit}
+.r-sidebar .side-scroll{overflow-y:auto;flex:1;padding:0 4px}
+.r-sidebar .side-empty{color:var(--fg-3);font-size:12px;padding:4px 8px}
+.r-sidebar .icon-mini{width:20px;height:20px}
+.r-sidebar .icon-mini i[data-lucide]{width:11px;height:11px}
+.r-sidebar .icon-mini i.plus{width:12px;height:12px}
+.r-sidebar .history-list{max-height:240px;overflow-y:auto}
+
+/* ---------- Tab strip right-side meta ----------------------------- */
+.studio-tabs .tabs-row{display:flex;gap:2px;overflow-x:auto}
+.studio-tabs .conn-meta{margin-left:auto;display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--fg-3);font-family:var(--font-mono)}
+
+/* ---------- Editor toolbar ---------------------------------------- */
+.editor-toolbar .kbd-on-brand{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.24);color:#fff}
+.editor-toolbar .icon-coral i[data-lucide]{color:var(--brand)}
+
+/* ---------- Result panes ----------------------------------------- */
+.results-header{padding:8px 14px;font-size:12px;color:var(--fg-3)}
+.results-table-host{overflow:auto}
+.results-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.results-header-stats{display:flex;gap:10px;align-items:center;font-family:var(--font-mono);font-size:11.5px;color:var(--fg-3)}
+.results-header-stats .sep{color:var(--fg-4)}
+.results-header-filtered{color:var(--accent-amber)}
+.results-header-filter{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11.5px;color:var(--fg);font-family:var(--font-mono);width:160px}
+.results-header-filter:focus{outline:none;border-color:var(--brand)}
+
+/* Plan / Chart placeholder */
+.plan-empty{padding:14px;color:var(--fg-3)}
+.plan-empty i[data-lucide]{width:18px;height:18px;color:var(--fg-4);margin-right:6px;vertical-align:middle}
+.plan-error{margin:14px}
+.plan-error pre{margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap}
+
+/* Chart placeholder pane */
+.chart-stub{padding:14px;color:var(--fg-3);display:flex;align-items:start;gap:10px}
+.chart-stub i[data-lucide]{width:18px;height:18px;color:var(--fg-4);flex-shrink:0;margin-top:2px}
+
+/* Status bar bits */
+.results-status .grow{flex:1}
+.results-status .status-sep{color:var(--fg-4)}
+.results-status .status-pager-buttons{margin-left:8px}
+.results-status .pager button i[data-lucide]{width:12px;height:12px}
+
+/* Result toolbar label */
+.results-toolbar .results-label{font-weight:500;font-size:13px}
+
+/* tiny utilities mirroring tailwind without bringing them in */
+.r-sidebar .relative{position:relative}
+.r-sidebar .mt-1{margin-top:4px}
+.r-sidebar .ml-1{margin-left:4px}
+.r-sidebar .flex{display:flex}
+.r-sidebar .gap-1{gap:4px}

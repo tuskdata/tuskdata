@@ -2,6 +2,45 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc6] - 2026-04-26 — Color uniformity + clean templates + working Explain
+
+### Color uniformity (the big one)
+- The override layer in `styles.css` was silently broken since rc4:
+  a sed replacement escaped the `[data-theme="dark"]` brackets
+  (`body:not(\[data-theme="dark"\])`), which is invalid CSS, so 75
+  override selectors never matched and Admin / Data / Cluster /
+  Settings / Users pages all rendered in raw GitHub-dark Tailwind
+  hex while the Studio looked warm-light. Fixed the selectors **and**
+  expanded coverage to every single hex literal grep'd from
+  `templates/`: `#0d1117`, `#161b22`, `#21262d`, `#30363d`, `#484f58`,
+  `#8b949e`, `#c9d1d9`, `#e6edf3`, `#6366f1`, `#238636`, `#2ea043`,
+  `#3fb950`, `#58a6ff`, `#79c0ff`, `#a371f7`, `#f0883e`, `#f85149`,
+  `#da3633`, plus the named-color helpers (`text-emerald-*`,
+  `text-blue-*`, `text-purple-*`, `bg-orange-*`, etc). Every page now
+  draws from the same warm-light token palette.
+
+### Clean templates — no more inline CSS or JS
+- `templates/index.html` had a 100-line `<script>` block at the
+  bottom and dozens of `style="..."` attributes scattered through
+  the markup. Pulled the JS into a new `static/studio-views.js` and
+  introduced helper classes in `static/studio-redesign.css`
+  (`.resize-handle`, `.side-search`, `.side-scroll`, `.side-empty`,
+  `.icon-mini`, `.tabs-row`, `.conn-meta`, `.kbd-on-brand`,
+  `.icon-coral`, `.results-header`, `.plan-empty`, `.chart-stub`,
+  `.history-list`, etc). Markup is now declarative; styles live in
+  CSS; JS lives in JS files.
+
+### Working Explain (was broken on remote single-user)
+- `Explain` button on the editor toolbar used to call
+  `/api/admin/{conn}/explain`, which goes through the admin guard.
+  In single-user mode that guard requires loopback origin, so any
+  remote browser session got `Admin endpoints require multi-user
+  auth for non-loopback access`. Moved the implementation to a new
+  unguarded endpoint at `POST /api/explain` (same scope as
+  `/api/query` — the user already has access to the connection;
+  EXPLAIN is read-only and can't escalate). The admin endpoint
+  stays for backwards compatibility.
+
 ## [0.4.3rc5] - 2026-04-26 — Drop the AI Copilot stub
 
 The Copilot panel that landed in rc4 was non-functional decoration —

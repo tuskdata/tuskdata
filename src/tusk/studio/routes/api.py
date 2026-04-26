@@ -405,6 +405,34 @@ class APIController(Controller):
 
         return {"cancelled": False, "reason": "engine_unsupported"}
 
+    @post("/explain")
+    async def explain_query(self, data: dict = Body()) -> dict:
+        """Return the EXPLAIN plan for a SQL statement.
+
+        Same auth scope as `/api/query` (the user already has access to
+        the connection). Unlike the admin-gated endpoint, this works in
+        single-user remote mode too — EXPLAIN is read-only and there's
+        no privilege escalation.
+        """
+        connection_id = data.get("connection_id")
+        sql = (data.get("sql") or "").strip()
+        analyze = bool(data.get("analyze", False))
+
+        if not connection_id:
+            return {"error": "connection_id required"}
+        if not sql:
+            return {"error": "sql required"}
+
+        config = get_connection(connection_id)
+        if not config:
+            return {"error": "Connection not found"}
+        if config.type != "postgres":
+            return {"error": "EXPLAIN is only available for PostgreSQL connections"}
+
+        # Reuse the helper that the admin route uses, but skip the guard.
+        from tusk.admin.processes import explain_query as _explain
+        return await _explain(config, sql, analyze=analyze)
+
     @post("/query/map-data")
     async def get_map_data(self, data: dict = Body()) -> dict:
         """Fetch geometry data optimized for map rendering.
