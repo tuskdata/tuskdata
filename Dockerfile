@@ -6,12 +6,16 @@
 # (build args) and builds wheels for them on the fly, so the deployment
 # repo only contains TuskData itself. No `make wheels` step required.
 #
-# Build secrets:
-#   --secret id=gh_token,src=/path/to/pat   (HTTPS clone for private repos)
-#   --ssh default                           (SSH clone with your agent)
-# If neither is supplied, falls back to public HTTPS clone.
+# Auth modes for plugin clones (set TUSK_GIT_AUTH build arg):
+#
+#   public  (default) — anonymous HTTPS, works only if every plugin repo is public
+#   token             — HTTPS with a GitHub PAT mounted as build secret `gh_token`
+#                       Coolify: `Build Secrets` → name=`gh_token`, paste the token
+#   ssh               — SSH agent forwarded with `--ssh default`
+#                       Coolify: `Sources → SSH key` configured per plugin repo
 #
 # Build args (override per-deploy in Coolify):
+#   TUSK_GIT_AUTH      public | token | ssh           (default: public)
 #   TUSK_BI_REF        e.g. v0.2.1
 #   TUSK_CI_REF        e.g. v0.2.0
 #   TUSK_SEC_REF       e.g. v0.2.0
@@ -37,6 +41,7 @@ ARG TUSK_CI_REF=v0.2.0
 ARG TUSK_SEC_REF=v0.2.0
 ARG TUSK_CLUSTER_REF=v0.2.1
 ARG TUSK_PLUGINS_ORG=tuskdata
+ARG TUSK_GIT_AUTH=public
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -59,23 +64,38 @@ RUN uv venv /opt/tusk-venv \
     && uv pip install --python /opt/tusk-venv/bin/python --no-cache "tuskdata[all] @ ."
 
 # Clone every plugin at its pinned ref and build a wheel for each.
-# `set -e` so a failed clone or build kills the image build instead of
-# silently shipping a tab-less Studio.
+# Auth path is explicit (TUSK_GIT_AUTH build arg). `set -e` so any failure
+# kills the image build instead of shipping a tab-less Studio.
 RUN --mount=type=secret,id=gh_token \
     --mount=type=ssh \
     set -e ; \
-    if [ -s /run/secrets/gh_token ]; then \
-        TOKEN="$(cat /run/secrets/gh_token)"; \
-        BASE="https://x-access-token:${TOKEN}@github.com/${TUSK_PLUGINS_ORG}"; \
-        echo "[deploy] using https + gh_token" ; \
-    elif [ -d /tmp/buildkit-ssh-agent ] || [ -n "${SSH_AUTH_SOCK:-}" ]; then \
-        BASE="git@github.com:${TUSK_PLUGINS_ORG}"; \
-        mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null ; \
-        echo "[deploy] using ssh agent" ; \
-    else \
-        BASE="https://github.com/${TUSK_PLUGINS_ORG}"; \
-        echo "[deploy] using public https (no auth)" ; \
-    fi ; \
+    case "$TUSK_GIT_AUTH" in \
+      token) \
+        if [ ! -s /run/secrets/gh_token ]; then \
+          echo "ERROR: TUSK_GIT_AUTH=token but no gh_token build secret was mounted." >&2 ; \
+          echo "       In Coolify: Resource → Build Secrets → name=gh_token, paste a PAT with `repo` scope." >&2 ; \
+          exit 1 ; \
+        fi ; \
+        TOKEN="$(cat /run/secrets/gh_token | tr -d '[:space:]')" ; \
+        BASE="https://x-access-token:${TOKEN}@github.com/${TUSK_PLUGINS_ORG}" ; \
+        BASE_DESC="https://x-access-token:***@github.com/${TUSK_PLUGINS_ORG}" ; \
+        ;; \
+      ssh) \
+        BASE="git@github.com:${TUSK_PLUGINS_ORG}" ; \
+        BASE_DESC="$BASE" ; \
+        mkdir -p ~/.ssh && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null ; \
+        echo "[plugins] verifying github SSH access..." ; \
+        ssh -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -E '(success|authenticated)' >/dev/null \
+          || { echo "ERROR: SSH agent has no key authorized for github.com." >&2 ; \
+               echo "       Configure deploy keys in Coolify (Sources → SSH key) or switch to TUSK_GIT_AUTH=token." >&2 ; \
+               exit 1 ; } ; \
+        ;; \
+      public|*) \
+        BASE="https://github.com/${TUSK_PLUGINS_ORG}" ; \
+        BASE_DESC="$BASE" ; \
+        ;; \
+    esac ; \
+    echo "[plugins] auth=${TUSK_GIT_AUTH} base=${BASE_DESC}" ; \
     mkdir -p /tmp/wheels ; \
     for spec in \
         "tusk-bi:${TUSK_BI_REF}" \
@@ -84,12 +104,20 @@ RUN --mount=type=secret,id=gh_token \
         "tusk-cluster:${TUSK_CLUSTER_REF}" ; \
     do \
         repo="${spec%%:*}" ; ref="${spec##*:}" ; \
-        echo "[plugin] cloning ${repo}@${ref}" ; \
-        git clone --depth 1 --branch "$ref" "${BASE}/${repo}.git" "/tmp/${repo}" ; \
-        echo "[plugin] building wheel for ${repo}" ; \
+        echo "[plugins] cloning ${repo}@${ref}" ; \
+        if ! git clone --depth 1 --branch "$ref" "${BASE}/${repo}.git" "/tmp/${repo}" 2>/tmp/git-err ; then \
+          echo "ERROR: failed to clone ${repo}@${ref}" >&2 ; \
+          cat /tmp/git-err >&2 ; \
+          echo "       Common causes:" >&2 ; \
+          echo "       - Repo is private and TUSK_GIT_AUTH=${TUSK_GIT_AUTH} doesn't have permission" >&2 ; \
+          echo "       - Tag '${ref}' does not exist in ${BASE_DESC}/${repo}" >&2 ; \
+          echo "       - Wrong TUSK_PLUGINS_ORG (currently '${TUSK_PLUGINS_ORG}')" >&2 ; \
+          exit 1 ; \
+        fi ; \
+        echo "[plugins] building wheel for ${repo}" ; \
         ( cd "/tmp/${repo}" && python -m build --wheel --outdir /tmp/wheels ) ; \
-    done \
-    && ls -la /tmp/wheels
+    done ; \
+    ls -la /tmp/wheels
 
 # Install plugin wheels into the venv. fail-fast if any wheel breaks.
 RUN set -e ; \

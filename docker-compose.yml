@@ -34,6 +34,7 @@ x-build-args: &build-args
   TUSK_SEC_REF: "${TUSK_SEC_REF:-v0.2.0}"
   TUSK_CLUSTER_REF: "${TUSK_CLUSTER_REF:-v0.2.1}"
   TUSK_PLUGINS_ORG: "${TUSK_PLUGINS_ORG:-tuskdata}"
+  TUSK_GIT_AUTH: "${TUSK_GIT_AUTH:-public}"
 
 services:
   tusk:
