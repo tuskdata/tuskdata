@@ -1,47 +1,26 @@
 # syntax=docker/dockerfile:1.7
 #
-# TuskData — production image
+# TuskData — minimal community image
 #
-# Two-stage build. The builder stage clones plugin repos at the pinned refs
-# (build args) and builds wheels for them on the fly, so the deployment
-# repo only contains TuskData itself. No `make wheels` step required.
+# This Dockerfile builds the core TuskData app, optionally bundled with
+# the public tusk-cluster plugin. For the full suite (BI, CI, security)
+# see https://github.com/tuskdata/tuskdata-compose.
 #
-# Auth modes for plugin clones (set TUSK_GIT_AUTH build arg):
-#
-#   public  (default) — anonymous HTTPS, works only if every plugin repo is public
-#   token             — HTTPS with a GitHub PAT mounted as build secret `gh_token`
-#                       Coolify: `Build Secrets` → name=`gh_token`, paste the token
-#   ssh               — SSH agent forwarded with `--ssh default`
-#                       Coolify: `Sources → SSH key` configured per plugin repo
-#
-# Build args (override per-deploy in Coolify):
-#   TUSK_GIT_AUTH      public | token | ssh           (default: public)
-#   TUSK_BI_REF        e.g. v0.2.1
-#   TUSK_CI_REF        e.g. v0.2.0
-#   TUSK_SEC_REF       e.g. v0.2.0
-#   TUSK_CLUSTER_REF   e.g. v0.2.1
+# Build args:
+#   TUSK_CLUSTER_REF   tusk-cluster ref (default: v0.2.1, public repo)
+#   WITH_CLUSTER       1 | 0 — bake tusk-cluster into the image
+#                      (default: 1)
 #
 # Runtime env:
-#   TUSK_DEBUG              0|1
-#   TUSK_LOG_LEVEL          debug|info|warning|error|critical
-#   TUSK_LOG_FORMAT         console|json
-#   TUSK_QUERY_TIMEOUT      seconds, default 300
-#   TUSK_CLUSTER_SECRET     for tusk-cluster worker auth
-#   TUSK_CLUSTER_TLS        1 to dial workers over grpc+tls
-#   TUSK_PORT               internal listen port, default 8000
-#   HOME                    where ~/.tusk lives (use a volume!)
+#   TUSK_DEBUG, TUSK_LOG_LEVEL, TUSK_LOG_FORMAT, TUSK_QUERY_TIMEOUT
+#   TUSK_CLUSTER_SECRET, TUSK_CLUSTER_TLS, TUSK_PORT, HOME, TZ
 #
-# Default port: 8000 (host port mapped via Coolify or compose).
-# Healthcheck hits /api/health — passes when status="ok".
+# Default port: 8000. Healthcheck on /api/health.
 
 FROM python:3.13-slim AS builder
 
-ARG TUSK_BI_REF=v0.2.1
-ARG TUSK_CI_REF=v0.2.0
-ARG TUSK_SEC_REF=v0.2.0
 ARG TUSK_CLUSTER_REF=v0.2.1
-ARG TUSK_PLUGINS_ORG=tuskdata
-ARG TUSK_GIT_AUTH=public
+ARG WITH_CLUSTER=1
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -49,7 +28,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_SYSTEM_PYTHON=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential git curl ca-certificates openssh-client \
+      build-essential git curl ca-certificates \
       libpq-dev postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
@@ -59,72 +38,23 @@ WORKDIR /build
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
 
-# Build TuskData wheel + venv with the [all] extras in one shot.
+# Build TuskData itself + the [all] extras into the venv.
 RUN uv venv /opt/tusk-venv \
     && uv pip install --python /opt/tusk-venv/bin/python --no-cache "tuskdata[all] @ ."
 
-# Clone every plugin at its pinned ref and build a wheel for each.
-# Auth path is explicit (TUSK_GIT_AUTH build arg). `set -e` so any failure
-# kills the image build instead of shipping a tab-less Studio.
-RUN --mount=type=secret,id=gh_token \
-    --mount=type=ssh \
-    set -e ; \
-    case "$TUSK_GIT_AUTH" in \
-      token) \
-        if [ ! -s /run/secrets/gh_token ]; then \
-          echo "ERROR: TUSK_GIT_AUTH=token but no gh_token build secret was mounted." >&2 ; \
-          echo "       In Coolify: Resource → Build Secrets → name=gh_token, paste a PAT with `repo` scope." >&2 ; \
-          exit 1 ; \
-        fi ; \
-        TOKEN="$(cat /run/secrets/gh_token | tr -d '[:space:]')" ; \
-        BASE="https://x-access-token:${TOKEN}@github.com/${TUSK_PLUGINS_ORG}" ; \
-        BASE_DESC="https://x-access-token:***@github.com/${TUSK_PLUGINS_ORG}" ; \
-        ;; \
-      ssh) \
-        BASE="git@github.com:${TUSK_PLUGINS_ORG}" ; \
-        BASE_DESC="$BASE" ; \
-        mkdir -p ~/.ssh && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null ; \
-        echo "[plugins] verifying github SSH access..." ; \
-        ssh -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -E '(success|authenticated)' >/dev/null \
-          || { echo "ERROR: SSH agent has no key authorized for github.com." >&2 ; \
-               echo "       Configure deploy keys in Coolify (Sources → SSH key) or switch to TUSK_GIT_AUTH=token." >&2 ; \
-               exit 1 ; } ; \
-        ;; \
-      public|*) \
-        BASE="https://github.com/${TUSK_PLUGINS_ORG}" ; \
-        BASE_DESC="$BASE" ; \
-        ;; \
-    esac ; \
-    echo "[plugins] auth=${TUSK_GIT_AUTH} base=${BASE_DESC}" ; \
-    mkdir -p /tmp/wheels ; \
-    for spec in \
-        "tusk-bi:${TUSK_BI_REF}" \
-        "tusk-ci:${TUSK_CI_REF}" \
-        "tusk-security:${TUSK_SEC_REF}" \
-        "tusk-cluster:${TUSK_CLUSTER_REF}" ; \
-    do \
-        repo="${spec%%:*}" ; ref="${spec##*:}" ; \
-        echo "[plugins] cloning ${repo}@${ref}" ; \
-        if ! git clone --depth 1 --branch "$ref" "${BASE}/${repo}.git" "/tmp/${repo}" 2>/tmp/git-err ; then \
-          echo "ERROR: failed to clone ${repo}@${ref}" >&2 ; \
-          cat /tmp/git-err >&2 ; \
-          echo "       Common causes:" >&2 ; \
-          echo "       - Repo is private and TUSK_GIT_AUTH=${TUSK_GIT_AUTH} doesn't have permission" >&2 ; \
-          echo "       - Tag '${ref}' does not exist in ${BASE_DESC}/${repo}" >&2 ; \
-          echo "       - Wrong TUSK_PLUGINS_ORG (currently '${TUSK_PLUGINS_ORG}')" >&2 ; \
-          exit 1 ; \
-        fi ; \
-        echo "[plugins] building wheel for ${repo}" ; \
-        ( cd "/tmp/${repo}" && python -m build --wheel --outdir /tmp/wheels ) ; \
-    done ; \
-    ls -la /tmp/wheels
-
-# Install plugin wheels into the venv. fail-fast if any wheel breaks.
+# Optionally bundle the public tusk-cluster plugin. Skip with WITH_CLUSTER=0
+# if you don't need distributed query support.
 RUN set -e ; \
-    for w in /tmp/wheels/tusk_*.whl; do \
-        echo "[install] $w" ; \
-        uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps "$w" ; \
-    done
+    if [ "${WITH_CLUSTER}" = "1" ]; then \
+        echo "[plugin] cloning tusk-cluster@${TUSK_CLUSTER_REF}" ; \
+        git clone --depth 1 --branch "${TUSK_CLUSTER_REF}" \
+            https://github.com/tuskdata/tusk-cluster.git /tmp/tusk-cluster ; \
+        ( cd /tmp/tusk-cluster && python -m build --wheel --outdir /tmp/wheels ) ; \
+        uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps \
+            /tmp/wheels/tusk_cluster-*.whl ; \
+    else \
+        echo "[plugin] tusk-cluster skipped (WITH_CLUSTER=0)" ; \
+    fi
 
 
 FROM python:3.13-slim AS runtime
@@ -135,9 +65,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOME=/var/lib/tusk \
     TUSK_PORT=8000
 
-# postgresql-client at runtime → pg_dump / psql / pg_restore for admin.
-# gosu lets the entrypoint chown the persistent volume before dropping
-# privileges to the unprivileged `tusk` user.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client libpq5 curl gosu \
     && rm -rf /var/lib/apt/lists/* \

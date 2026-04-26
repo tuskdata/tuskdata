@@ -1,22 +1,19 @@
-# TuskData — Docker Compose for local smoke tests.
+# TuskData — minimal community Compose file.
 #
-# Default profile: just the Studio. No Postgres sidecar — TuskData stores
-# its own state in SQLite under /var/lib/tusk and treats Postgres as an
-# external user-managed data source. Configure connections from the UI
-# pointing at whatever PG you already run.
+# Default `up` runs the Studio bundled with the public tusk-cluster
+# plugin. Set WITH_CLUSTER=0 in .env to drop it. Profiles let you bring
+# up extras for testing:
 #
-# Profiles:
-#   --profile cluster   adds tusk scheduler + worker
-#   --profile pg        adds a local Postgres sidecar (only for testing)
-#   --profile dbtools   adds Adminer at :8080 to poke an external PG
-#   --profile all       everything
+#   --profile cluster   adds scheduler + worker for distributed queries
+#   --profile pg        adds a Postgres sidecar (testing only)
+#   --profile dbtools   adds Adminer at :8080
 #
-# Usage:
+# For the full TuskData suite (BI, CI, security plugins), use the
+# tuskdata/tuskdata-compose deployment harness instead — it composes
+# this image with the closed plugin set.
+#
 #   cp .env.example .env
 #   docker compose up --build
-#
-#   docker compose --profile cluster up --build
-#   docker compose --profile pg --profile dbtools up
 
 x-tusk-env: &tusk-env
   TUSK_DEBUG: "${TUSK_DEBUG:-0}"
@@ -28,27 +25,18 @@ x-tusk-env: &tusk-env
   TUSK_PORT: "${TUSK_PORT:-8000}"
   TZ: "${TZ:-UTC}"
 
-x-build-args: &build-args
-  TUSK_BI_REF: "${TUSK_BI_REF:-v0.2.1}"
-  TUSK_CI_REF: "${TUSK_CI_REF:-v0.2.0}"
-  TUSK_SEC_REF: "${TUSK_SEC_REF:-v0.2.0}"
-  TUSK_CLUSTER_REF: "${TUSK_CLUSTER_REF:-v0.2.1}"
-  TUSK_PLUGINS_ORG: "${TUSK_PLUGINS_ORG:-tuskdata}"
-  TUSK_GIT_AUTH: "${TUSK_GIT_AUTH:-public}"
-
 services:
   tusk:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        <<: *build-args
+        TUSK_CLUSTER_REF: "${TUSK_CLUSTER_REF:-v0.2.1}"
+        WITH_CLUSTER: "${WITH_CLUSTER:-1}"
     image: tuskdata:local
     environment:
       <<: *tusk-env
     ports:
-      # Map host:container. Host port comes from .env (default 7000 to
-      # dodge typical Coolify dashboard collisions on 8000).
       - "${TUSK_HOST_PORT:-7000}:8000"
     volumes:
       - tusk-home:/var/lib/tusk
@@ -60,7 +48,6 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ---- tusk-cluster: scheduler + worker --------------------------------
   scheduler:
     profiles: ["cluster", "all"]
     image: tuskdata:local
@@ -93,10 +80,6 @@ services:
       replicas: 1
     restart: unless-stopped
 
-  # ---- Optional local Postgres (only with --profile pg) ----------------
-  # If you already have Postgres elsewhere (typical), skip this and add
-  # the connection from the Studio UI. This service is for isolated
-  # smoke tests only.
   postgres:
     profiles: ["pg", "all"]
     image: postgres:16-alpine
@@ -115,7 +98,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ---- Adminer for poking an external (or local) Postgres --------------
   adminer:
     profiles: ["dbtools", "all"]
     image: adminer:latest

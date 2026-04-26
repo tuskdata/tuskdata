@@ -2,6 +2,32 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.3] - 2026-04-26
+
+The deployment artifacts that referenced first-party plugin repositories
+by name have moved out of this repository. The closed plugin set
+(BI / CI / security) is now composed in the dedicated tuskdata-compose
+deployment harness.
+
+### Changed
+- **Dockerfile** is now scoped to the public surface: builds TuskData
+  core and optionally bundles the public tusk-cluster plugin
+  (`WITH_CLUSTER=1` by default). No private repo references.
+- **docker-compose.yml** no longer pins refs for the closed plugins.
+- **.env.example** trimmed to public knobs only.
+
+### Removed
+- `docs/DEPLOY.md` and `scripts/release.sh` — moved to
+  `tuskdata/tuskdata-compose`. The full-suite deploy walkthrough lives
+  there now.
+
+### How to deploy the full suite
+Use the `tuskdata-compose` repo as the Coolify build target. Its
+Dockerfile clones every component (tuskdata + every plugin) at the refs
+you pin, with explicit auth modes for private repo access.
+
+---
+
 ## [0.3.2] - 2026-04-25
 
 Deploy-track release. No app behavior changes; the image build pipeline
