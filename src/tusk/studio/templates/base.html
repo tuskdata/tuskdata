@@ -25,6 +25,11 @@
     {% endif %}
     <!-- Design tokens (v0.4 redesign foundation). Loads before styles.css
          so per-component overrides can still win. -->
+    <!-- v0.4 redesign — single source of truth, copied byte-for-byte from
+         docs/design/redesign-v3.html. Loads first so the mockup classes
+         (.shell, .sidebar, .side-section, .nav-tab, .btn, .chip, .dash-card,
+         .dtable, etc) are the authoritative definitions. -->
+    <link rel="stylesheet" href="/static/tusk-app.css">
     <link rel="stylesheet" href="/static/design-tokens.css">
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/studio-redesign.css">

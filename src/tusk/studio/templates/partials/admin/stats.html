@@ -1,30 +1,34 @@
-<div class="grid grid-cols-4 gap-4" x-data="{}" x-init="window.tuskRefreshSparklines && window.tuskRefreshSparklines()">
-    <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-        <div class="text-gray-400 text-sm mb-1">Connections</div>
-        <div class="text-2xl font-bold">{{ connections }}/{{ max_connections }}</div>
-        <div class="mt-2 h-1.5 bg-[#30363d] rounded-full overflow-hidden">
-            <div class="h-full bg-blue-500 transition-all" style="width: {{ connection_pct }}%"></div>
-        </div>
-        <svg class="tusk-sparkline mt-2" data-metric="connections" width="100%" height="28" preserveAspectRatio="none" viewBox="0 0 100 28"></svg>
+{# Stats cards — mockup .dash-card.span-3 with serif numbers + sparklines.
+   Sparklines pulled in by tuskRefreshSparklines() in admin.html scripts. #}
+<div class="dash-card span-3">
+    <div class="dash-card-h">
+        <div class="l">Connections</div>
+        <i data-lucide="users" style="width:13px;height:13px;color:var(--accent-violet)"></i>
     </div>
-    <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-        <div class="text-gray-400 text-sm mb-1">Active Queries</div>
-        <div class="text-2xl font-bold">{{ active_queries }}</div>
-        <div class="mt-2 text-xs text-gray-500">currently running</div>
-        <svg class="tusk-sparkline mt-2" data-metric="active_queries" width="100%" height="28" preserveAspectRatio="none" viewBox="0 0 100 28"></svg>
+    <div class="dash-card-v">{{ connections }}<span style="font-size:18px;color:var(--fg-3)"> / {{ max_connections }}</span></div>
+    <svg class="tusk-sparkline" data-metric="connections" viewBox="0 0 200 36" preserveAspectRatio="none" style="height:36px"></svg>
+</div>
+<div class="dash-card span-3">
+    <div class="dash-card-h">
+        <div class="l">Active queries</div>
+        <i data-lucide="activity" style="width:13px;height:13px;color:var(--green)"></i>
     </div>
-    <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-        <div class="text-gray-400 text-sm mb-1">Cache Hit Ratio</div>
-        <div class="text-2xl font-bold">{{ cache_hit_ratio }}%</div>
-        <div class="mt-2 h-1.5 bg-[#30363d] rounded-full overflow-hidden">
-            <div class="h-full bg-green-500 transition-all" style="width: {{ cache_hit_ratio }}%"></div>
-        </div>
-        <svg class="tusk-sparkline mt-2" data-metric="cache_hit_ratio" width="100%" height="28" preserveAspectRatio="none" viewBox="0 0 100 28"></svg>
+    <div class="dash-card-v" style="color:var(--green)">{{ active_queries }}</div>
+    <svg class="tusk-sparkline" data-metric="active_queries" viewBox="0 0 200 36" preserveAspectRatio="none" style="height:36px"></svg>
+</div>
+<div class="dash-card span-3">
+    <div class="dash-card-h">
+        <div class="l">Cache hit ratio</div>
+        <i data-lucide="zap" style="width:13px;height:13px;color:var(--brand)"></i>
     </div>
-    <div class="stat-card rounded-xl p-4 border border-[#30363d]">
-        <div class="text-gray-400 text-sm mb-1">Database Size</div>
-        <div class="text-2xl font-bold">{{ db_size_human }}</div>
-        <div class="mt-2 text-xs text-gray-500">Up {{ uptime }}</div>
-        <svg class="tusk-sparkline mt-2" data-metric="db_size_bytes" width="100%" height="28" preserveAspectRatio="none" viewBox="0 0 100 28"></svg>
+    <div class="dash-card-v" style="color:var(--green)">{{ cache_hit_ratio }}<span style="font-size:18px">%</span></div>
+    <svg class="tusk-sparkline" data-metric="cache_hit_ratio" viewBox="0 0 200 36" preserveAspectRatio="none" style="height:36px"></svg>
+</div>
+<div class="dash-card span-3">
+    <div class="dash-card-h">
+        <div class="l">Database size</div>
+        <i data-lucide="hard-drive" style="width:13px;height:13px;color:var(--accent-amber)"></i>
     </div>
+    <div class="dash-card-v">{{ db_size_human }}</div>
+    <svg class="tusk-sparkline" data-metric="db_size_bytes" viewBox="0 0 200 36" preserveAspectRatio="none" style="height:36px"></svg>
 </div>

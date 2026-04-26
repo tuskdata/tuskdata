@@ -38,45 +38,46 @@
         </div>
     </aside>
 
-<!-- Main Content -->
-<main class="flex-1 overflow-auto p-6" x-data="adminPage()">
+<!-- Main Content — uses mockup classes from tusk-app.css -->
+<main class="dash-page" x-data="adminPage()" style="flex:1;overflow:auto">
     <template x-if="!connId">
-        <div class="flex items-center justify-center h-full text-gray-500">
-            <div class="text-center">
-                <i data-lucide="database" class="w-16 h-16 mx-auto mb-4 text-gray-600"></i>
-                <div>Select a PostgreSQL server from the sidebar</div>
-                <div class="text-sm mt-2">SQLite connections don't have admin features</div>
+        <div class="dash-empty" style="display:flex;align-items:center;justify-content:center;min-height:60vh;color:var(--fg-3);text-align:center">
+            <div>
+                <i data-lucide="database" style="width:48px;height:48px;color:var(--fg-4);margin-bottom:14px"></i>
+                <div style="font-family:var(--serif);font-size:24px;color:var(--fg)">Select a PostgreSQL server</div>
+                <div style="font-size:13px;margin-top:6px">SQLite connections don't have admin features.</div>
             </div>
         </div>
     </template>
 
     <template x-if="connId">
         <div :key="connId">
-            <!-- Server Info Header -->
-            <div class="mb-6 flex items-center justify-between">
+            <!-- Server header -->
+            <div class="dash-head">
                 <div>
-                    <h2 class="text-xl font-bold" x-text="connName"></h2>
-                    <p class="text-sm text-gray-400 mt-1" id="server-version"></p>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span class="dot green"></span>
+                        <span class="dash-title" x-text="connName"></span>
+                    </div>
+                    <div class="dash-desc mono" id="server-version" style="font-family:var(--font-mono);font-size:12px"></div>
                 </div>
-                <button @click="refreshAll()"
-                        class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm flex items-center gap-1.5">
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    Refresh All
-                </button>
+                <div class="flex gap-2">
+                    <button @click="$dispatch('open-backup-options')" class="btn"><i data-lucide="hard-drive-download"></i>Backup now</button>
+                    <button @click="refreshAll()" class="btn"><i data-lucide="refresh-cw"></i>Refresh</button>
+                </div>
             </div>
 
-            <!-- Stats Cards -->
+            <!-- Stats — 4 dash-cards with serif numbers -->
             <div id="admin-stats"
                  :hx-get="'/api/admin/' + connId + '/stats'"
                  hx-trigger="adminRefresh from:body, every 5s"
                  hx-swap="innerHTML"
-                 class="mb-6">
-                <div class="grid grid-cols-4 gap-4">
-                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
-                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
-                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
-                    <div class="stat-card rounded-xl p-4 border border-[#30363d] animate-pulse"><div class="h-12 bg-[#21262d] rounded"></div></div>
-                </div>
+                 class="dash-grid"
+                 style="margin-bottom:20px">
+                <div class="dash-card span-3"><div class="dash-card-h"><div class="l">Connections</div></div><div class="dash-card-v" style="color:var(--fg-3)">—</div></div>
+                <div class="dash-card span-3"><div class="dash-card-h"><div class="l">Active queries</div></div><div class="dash-card-v" style="color:var(--fg-3)">—</div></div>
+                <div class="dash-card span-3"><div class="dash-card-h"><div class="l">Cache hit ratio</div></div><div class="dash-card-v" style="color:var(--fg-3)">—</div></div>
+                <div class="dash-card span-3"><div class="dash-card-h"><div class="l">Database size</div></div><div class="dash-card-v" style="color:var(--fg-3)">—</div></div>
             </div>
 
             <!-- Active Processes -->

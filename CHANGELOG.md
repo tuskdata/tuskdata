@@ -2,6 +2,40 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc9] - 2026-04-26 — Real port: mockup CSS as the source of truth
+
+Stop overriding, start porting. The full CSS from
+`docs/design/redesign-v3.html` (the canonical mockup the user keeps
+pointing at) is now copied byte-for-byte to
+`static/tusk-app.css` and loaded first in `base.html`. Every layout
+class the mockup uses — `.shell`, `.sidebar`, `.side-section`,
+`.side-item`, `.dot`, `.btn`, `.btn-primary`, `.btn-brand`,
+`.btn-ghost`, `.chip` (every variant), `.nav-tab`, `.nav-tabs`,
+`.dash-page`, `.dash-head`, `.dash-title`, `.dash-desc`,
+`.dash-grid`, `.dash-card`, `.dash-card-h/-v/-d`, `.span-3`/`-4`/
+`-6`/`-8`/`-12`, `.dtable`, `.qtab`, `.editor-wrap`, etc — is now
+defined directly from the mockup CSS, not via Tailwind override
+hacks.
+
+### Admin — first page on the new shell
+- Header refactored from a nondescript "Server Info" title to the
+  mockup's `.dash-head` with serif title (`localhost · statuos`),
+  green dot status, mono-font version line, and `Backup now` /
+  `Refresh` `.btn` actions.
+- Stats cards now use `.dash-grid` + four `.dash-card.span-3` with
+  serif numbers (`var(--serif)` × 36px), color-coded sparklines
+  (`tuskRefreshSparklines` already in place from rc4), and the
+  small lucide icons in the corner exactly like the mockup.
+- Sidebar already ported to `.r-sidebar` / `.side-section` /
+  `.side-item` / `.dot` in rc8.
+
+The remaining admin sections (active processes, locks, table
+maintenance, extensions, etc.) still use the legacy markup — the
+override layer keeps their colors uniform but the layout doesn't
+match the mockup yet. Those land in rc10+ as I port them card by
+card. Same plan for `data.html`, `cluster.html`, `users.html`,
+`profile.html`, and the four plugin packages.
+
 ## [0.4.3rc8] - 2026-04-26 — Color uniformity across every page
 
 The override layer in rc6/rc7 was scoped to
