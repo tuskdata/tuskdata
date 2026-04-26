@@ -2,6 +2,43 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc8] - 2026-04-26 — Color uniformity across every page
+
+The override layer in rc6/rc7 was scoped to
+`body:not([data-theme="dark"])`, which meant it only applied in light
+mode. In dark mode the Tailwind hex literals (`#0d1117`, etc.) stayed
+literally GitHub-dark while the design tokens used a different warm
+dark palette — every page rendered in a different shade of dark and
+the result was the visual chaos the user was rightly angry about.
+
+This release:
+
+- **Strips the `body:not(...)` scope** from every override so the
+  rules apply unconditionally. The values use design-token vars
+  (`var(--bg)`, `var(--surface)`, etc.) which already flip with the
+  theme attribute, so the same selector handles both modes
+  uniformly.
+- **Universal hex coverage** — every Tailwind arbitrary hex literal
+  grep'd from core templates AND the four plugin packages (`bi`,
+  `ci`, `sec`, `cluster`) now has a mapping. This includes the
+  greens (`#10b981`, `#16a34a`, `#22c55e`, `#34d399`, `#6ee7b7`),
+  reds (`#dc2626`, `#ef4444`, `#f87171`), ambers (`#f59e0b`,
+  `#fbbf24`, `#fb923c`), violets (`#8b5cf6`, `#818cf8`, `#3d7fff`,
+  `#a5b4fc`, `#c4b5fd`), pinks (`#ec4899`, `#f43f5e`), and
+  cyans (`#06b6d4`).
+- **Tailwind named-color sweep** — `text-rose-*`, `bg-cyan-*`,
+  `text-violet-*`, `bg-pink-*`, `text-fuchsia-*`, `text-sky-*`,
+  `text-lime-*`, `text-teal-*`, plus the slate / zinc / neutral /
+  stone gray scales — all routed onto design tokens so any plugin
+  that reaches for them stays uniform with core.
+- **Admin sidebar ported** to the redesign shell (`r-sidebar`,
+  `side-section`, `side-item`, `dot`) so it stops rendering with
+  the legacy GitHub-dark Tailwind boxes.
+
+This is still the bridge solution. The proper fix is a per-template
+rewrite that drops the Tailwind hex altogether — that lands page by
+page in v0.5.
+
 ## [0.4.3rc7] - 2026-04-26 — Admin works on private LAN
 
 The single-user admin guard was loopback-only, which means accessing

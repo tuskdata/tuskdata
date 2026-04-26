@@ -404,72 +404,71 @@ header {
      #f0883e → --accent-amber
      #f85149/#da3633 → --red
    ============================================ */
-body:not([data-theme="dark"]) {
+body {
     background: var(--bg);
     color: var(--fg);
 }
 
 /* Backgrounds */
-body:not([data-theme="dark"]) .bg-\[\#0d1117\],
-body:not([data-theme="dark"]) .bg-\[\#0d1117\]\/30,
-body:not([data-theme="dark"]) .bg-\[\#0d1117\]\/60 { background-color: var(--bg) !important; }
-body:not([data-theme="dark"]) .bg-\[\#0d1117\]\/30 { background-color: rgba(245, 243, 238, 0.5) !important; }
-body:not([data-theme="dark"]) .bg-\[\#0d1117\]\/60 { background-color: rgba(245, 243, 238, 0.7) !important; }
+.bg-\[\#0d1117\] { background-color: var(--bg) !important; }
+.bg-\[\#0d1117\]\/30 { background-color: var(--surface-2) !important; }
+.bg-\[\#0d1117\]\/60 { background-color: var(--surface) !important; }
 
-body:not([data-theme="dark"]) .bg-\[\#161b22\] { background-color: var(--surface) !important; }
+.bg-\[\#161b22\] { background-color: var(--surface) !important; }
+.bg-\[\#161b22\]\/80,
+.bg-\[\#161b22\]\/90 { background-color: var(--surface) !important; }
 
-body:not([data-theme="dark"]) .bg-\[\#21262d\],
-body:not([data-theme="dark"]) .bg-\[\#21262d\]\/50,
-body:not([data-theme="dark"]) .bg-\[\#21262d\]\/60 { background-color: var(--surface-2) !important; }
-body:not([data-theme="dark"]) .bg-\[\#21262d\]\/50 { background-color: rgba(245, 243, 238, 0.6) !important; }
+.bg-\[\#21262d\] { background-color: var(--surface-2) !important; }
+.bg-\[\#21262d\]\/50,
+.bg-\[\#21262d\]\/60 { background-color: var(--surface-2) !important; }
 
-body:not([data-theme="dark"]) .bg-\[\#30363d\] { background-color: var(--surface-3) !important; }
+.bg-\[\#30363d\] { background-color: var(--surface-3) !important; }
 
-body:not([data-theme="dark"]) .hover\:bg-\[\#21262d\]:hover { background-color: var(--surface-2) !important; }
-body:not([data-theme="dark"]) .hover\:bg-\[\#30363d\]:hover { background-color: var(--surface-3) !important; }
+.hover\:bg-\[\#21262d\]:hover { background-color: var(--surface-2) !important; }
+.hover\:bg-\[\#30363d\]:hover { background-color: var(--surface-3) !important; }
 
 /* Borders */
-body:not([data-theme="dark"]) .border-\[\#30363d\],
-body:not([data-theme="dark"]) .border-\[\#30363d\]\/40,
-body:not([data-theme="dark"]) .border-\[\#30363d\]\/50,
-body:not([data-theme="dark"]) .border-b-\[\#30363d\] { border-color: var(--border) !important; }
-body:not([data-theme="dark"]) .divide-\[\#30363d\] > * + * { border-color: var(--border) !important; }
+.border-\[\#30363d\],
+.border-\[\#30363d\]\/40,
+.border-\[\#30363d\]\/50,
+.border-b-\[\#30363d\] { border-color: var(--border) !important; }
+.divide-\[\#30363d\] > * + * { border-color: var(--border) !important; }
 
-body:not([data-theme="dark"]) .focus\:border-indigo-500:focus { border-color: var(--brand) !important; }
+.focus\:border-indigo-500:focus { border-color: var(--brand) !important; }
 
 /* Text */
-body:not([data-theme="dark"]) .text-\[\#8b949e\] { color: var(--fg-3) !important; }
-body:not([data-theme="dark"]) .text-gray-300 { color: var(--fg-2) !important; }
-body:not([data-theme="dark"]) .text-gray-400 { color: var(--fg-3) !important; }
-body:not([data-theme="dark"]) .text-gray-500 { color: var(--fg-3) !important; }
-body:not([data-theme="dark"]) .text-gray-600 { color: var(--fg-4) !important; }
-body:not([data-theme="dark"]) .text-white { color: var(--fg) !important; }
+.text-\[\#8b949e\] { color: var(--fg-3) !important; }
+.text-gray-300 { color: var(--fg-2) !important; }
+.text-gray-400 { color: var(--fg-3) !important; }
+.text-gray-500 { color: var(--fg-3) !important; }
+.text-gray-600 { color: var(--fg-4) !important; }
+.text-white { color: var(--fg) !important; }
 
-body:not([data-theme="dark"]) .hover\:text-white:hover { color: var(--fg) !important; }
+.hover\:text-white:hover { color: var(--fg) !important; }
 
 /* Brand button — keep coral, not indigo */
-body:not([data-theme="dark"]) .bg-indigo-600 { background-color: var(--brand) !important; }
-body:not([data-theme="dark"]) .bg-indigo-600.hover\:bg-indigo-700:hover,
-body:not([data-theme="dark"]) .hover\:bg-indigo-700:hover { background-color: var(--brand-2) !important; }
-body:not([data-theme="dark"]) .text-indigo-400 { color: var(--brand) !important; }
-body:not([data-theme="dark"]) .text-indigo-300 { color: var(--brand-2) !important; }
-body:not([data-theme="dark"]) .border-indigo-500 { border-color: var(--brand) !important; }
-body:not([data-theme="dark"]) .accent-indigo-500 { accent-color: var(--brand) !important; }
-body:not([data-theme="dark"]) .ring-indigo-500\/50 { --tw-ring-color: rgba(212, 80, 43, 0.5) !important; }
+.bg-indigo-600 { background-color: var(--brand) !important; }
+.bg-indigo-600.hover\:bg-indigo-700:hover,
+.hover\:bg-indigo-700:hover { background-color: var(--brand-2) !important; }
+.text-indigo-400 { color: var(--brand) !important; }
+.text-indigo-300 { color: var(--brand-2) !important; }
+.border-indigo-500 { border-color: var(--brand) !important; }
+.accent-indigo-500 { accent-color: var(--brand) !important; }
+.ring-indigo-500\/50 { --tw-ring-color: rgba(212, 80, 43, 0.5) !important; }
 
 /* Card / sidebar — use the design-token surfaces in light mode */
-body:not([data-theme="dark"]) .card,
-body:not([data-theme="dark"]) .stat-card {
+.card,
+.stat-card {
     background: var(--surface) !important;
     border-color: var(--border) !important;
     color: var(--fg);
 }
-body:not([data-theme="dark"]) .sidebar {
+.sidebar {
     background: var(--surface);
     border-color: var(--border);
 }
-body:not([data-theme="dark"]) .sidebar-item.active,
-body:not([data-theme="dark"]) .nav-tab.active {
+.sidebar-item.active,
+.nav-tab.active {
     background: var(--surface-2);
     color: var(--fg);
 }
@@ -477,70 +476,70 @@ body:not([data-theme="dark"]) .nav-tab.active {
 /* Top nav already uses design tokens via .tusk-topnav */
 
 /* Tab pills (legacy .nav-tab/.query-tab) */
-body:not([data-theme="dark"]) .query-tab { color: var(--fg-3); }
-body:not([data-theme="dark"]) .query-tab.active { color: var(--fg); background: var(--surface-2); }
-body:not([data-theme="dark"]) .query-tab:hover { color: var(--fg); }
+.query-tab { color: var(--fg-3); }
+.query-tab.active { color: var(--fg); background: var(--surface-2); }
+.query-tab:hover { color: var(--fg); }
 
 /* Inputs */
-body:not([data-theme="dark"]) input,
-body:not([data-theme="dark"]) select,
-body:not([data-theme="dark"]) textarea {
+input,
+select,
+textarea {
     background: var(--surface) !important;
     color: var(--fg) !important;
     border-color: var(--border) !important;
 }
-body:not([data-theme="dark"]) input::placeholder,
-body:not([data-theme="dark"]) textarea::placeholder { color: var(--fg-4) !important; }
+input::placeholder,
+textarea::placeholder { color: var(--fg-4) !important; }
 
 /* Code/kbd surfaces */
-body:not([data-theme="dark"]) kbd,
-body:not([data-theme="dark"]) code {
+kbd,
+code {
     background: var(--surface-2);
     color: var(--fg);
     border-color: var(--border);
 }
 
 /* Tables */
-body:not([data-theme="dark"]) table thead { background: var(--surface-2); color: var(--fg-3); }
-body:not([data-theme="dark"]) table tbody tr:hover { background: var(--surface-2); }
+table thead { background: var(--surface-2); color: var(--fg-3); }
+table tbody tr:hover { background: var(--surface-2); }
 
 /* CodeMirror — switch the editor theme away from oneDark in light mode.
    The oneDark theme paints over everything; we can't easily disable it,
    but we can soften the worst clashes with the surrounding chrome. */
-body:not([data-theme="dark"]) .cm-editor { background: var(--surface) !important; }
-body:not([data-theme="dark"]) .cm-editor .cm-content { color: var(--fg); }
-body:not([data-theme="dark"]) .cm-editor .cm-gutters { background: var(--surface-2); border-color: var(--border); color: var(--fg-3); }
-body:not([data-theme="dark"]) .cm-editor .cm-activeLine { background: var(--surface-2) !important; }
-body:not([data-theme="dark"]) .cm-editor .cm-activeLineGutter { background: var(--surface-3) !important; }
+.cm-editor { background: var(--surface) !important; }
+.cm-editor .cm-content { color: var(--fg); }
+.cm-editor .cm-gutters { background: var(--surface-2); border-color: var(--border); color: var(--fg-3); }
+.cm-editor .cm-activeLine { background: var(--surface-2) !important; }
+.cm-editor .cm-activeLineGutter { background: var(--surface-3) !important; }
 
 /* Engine/chip pills — lift contrast in light */
-body:not([data-theme="dark"]) .engine-btn { color: var(--fg-3); }
-body:not([data-theme="dark"]) .engine-btn.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
+.engine-btn { color: var(--fg-3); }
+.engine-btn.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
 
 /* Make the "ring" indicator on selected connection visible */
-body:not([data-theme="dark"]) .ring-1.ring-indigo-500\/50 { box-shadow: 0 0 0 1px rgba(212, 80, 43, 0.4) !important; }
+.ring-1.ring-indigo-500\/50 { box-shadow: 0 0 0 1px rgba(212, 80, 43, 0.4) !important; }
 
 /* Modal backdrop a touch lighter so light-mode modals don't look pitch */
-body:not([data-theme="dark"]) .bg-black\/50,
-body:not([data-theme="dark"]) .bg-black\/60 { background-color: rgba(40, 35, 25, 0.4) !important; }
-body:not([data-theme="dark"]) .bg-black\/80 { background-color: rgba(40, 35, 25, 0.55) !important; }
+.bg-black\/50,
+.bg-black\/60 { background-color: rgba(40, 35, 25, 0.4) !important; }
+.bg-black\/80 { background-color: rgba(40, 35, 25, 0.55) !important; }
 
 /* HTMX query-tab styles (loaded later in studio.js renderTabs) */
-body:not([data-theme="dark"]) .query-tab .close-btn:hover { background: var(--surface-3); }
+.query-tab .close-btn:hover { background: var(--surface-3); }
 
 /* Map CRS warning bar — keep amber but on a light background */
-body:not([data-theme="dark"]) .bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
+.bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
 
 /* Fallback for any remaining dark-only buttons */
-body:not([data-theme="dark"]) .text-amber-400 { color: var(--accent-amber) !important; }
-body:not([data-theme="dark"]) .text-yellow-400 { color: var(--accent-amber) !important; }
-body:not([data-theme="dark"]) .text-red-400 { color: var(--red) !important; }
-body:not([data-theme="dark"]) .text-green-400 { color: var(--green) !important; }
-body:not([data-theme="dark"]) .bg-red-500\/20 { background-color: rgba(204, 46, 61, 0.12) !important; }
-body:not([data-theme="dark"]) .bg-green-500\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
-body:not([data-theme="dark"]) .bg-yellow-500\/20 { background-color: rgba(176, 119, 0, 0.12) !important; }
-body:not([data-theme="dark"]) .bg-amber-500\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
-body:not([data-theme="dark"]) .border-amber-500\/30 { border-color: rgba(176, 119, 0, 0.30) !important; }
+.text-amber-400 { color: var(--accent-amber) !important; }
+.text-yellow-400 { color: var(--accent-amber) !important; }
+.text-red-400 { color: var(--red) !important; }
+.text-green-400 { color: var(--green) !important; }
+.bg-red-500\/20 { background-color: rgba(204, 46, 61, 0.12) !important; }
+.bg-green-500\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
+.bg-yellow-500\/20 { background-color: rgba(176, 119, 0, 0.12) !important; }
+.bg-amber-500\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
+.border-amber-500\/30 { border-color: rgba(176, 119, 0, 0.30) !important; }
 
 /* ─── Full hex coverage (rest of the literals used by templates) ───
    These extend the block above with every remaining GitHub-dark hex
@@ -549,96 +548,261 @@ body:not([data-theme="dark"]) .border-amber-500\/30 { border-color: rgba(176, 11
    without touching the templates themselves. */
 
 /* Backgrounds — complete the page/card scale */
-body:not([data-theme="dark"]) .bg-\[\#0d1117\]\/50 { background-color: rgba(245, 243, 238, 0.5) !important; }
-body:not([data-theme="dark"]) .bg-\[\#161b22\]\/80 { background-color: rgba(255, 255, 255, 0.85) !important; }
-body:not([data-theme="dark"]) .bg-\[\#161b22\]\/90 { background-color: rgba(255, 255, 255, 0.92) !important; }
-body:not([data-theme="dark"]) .bg-\[\#21262d\]\/50 { background-color: rgba(245, 243, 238, 0.6) !important; }
-body:not([data-theme="dark"]) .bg-\[\#484f58\] { background-color: var(--fg-4) !important; }
+.bg-\[\#0d1117\]\/50 { background-color: rgba(245, 243, 238, 0.5) !important; }
+.bg-\[\#161b22\]\/80 { background-color: rgba(255, 255, 255, 0.85) !important; }
+.bg-\[\#161b22\]\/90 { background-color: rgba(255, 255, 255, 0.92) !important; }
+.bg-\[\#21262d\]\/50 { background-color: rgba(245, 243, 238, 0.6) !important; }
+.bg-\[\#484f58\] { background-color: var(--fg-4) !important; }
 
 /* Borders */
-body:not([data-theme="dark"]) .border-\[\#21262d\] { border-color: var(--border) !important; }
-body:not([data-theme="dark"]) .border-\[\#58a6ff\] { border-color: var(--accent-violet) !important; }
-body:not([data-theme="dark"]) .border-\[\#6366f1\] { border-color: var(--brand) !important; }
+.border-\[\#21262d\] { border-color: var(--border) !important; }
+.border-\[\#58a6ff\] { border-color: var(--accent-violet) !important; }
+.border-\[\#6366f1\] { border-color: var(--brand) !important; }
 
 /* GitHub text scale */
-body:not([data-theme="dark"]) .text-\[\#e6edf3\] { color: var(--fg) !important; }
-body:not([data-theme="dark"]) .text-\[\#c9d1d9\] { color: var(--fg-2) !important; }
-body:not([data-theme="dark"]) .text-\[\#484f58\] { color: var(--fg-4) !important; }
+.text-\[\#e6edf3\] { color: var(--fg) !important; }
+.text-\[\#c9d1d9\] { color: var(--fg-2) !important; }
+.text-\[\#484f58\] { color: var(--fg-4) !important; }
 
 /* Indigo brand surfaces — coerce to coral */
-body:not([data-theme="dark"]) .bg-\[\#6366f1\] { background-color: var(--brand) !important; }
-body:not([data-theme="dark"]) .bg-\[\#6366f1\]\/5  { background-color: var(--brand-soft) !important; }
-body:not([data-theme="dark"]) .bg-\[\#6366f1\]\/10 { background-color: var(--brand-tint) !important; }
-body:not([data-theme="dark"]) .bg-\[\#6366f1\]\/50 { background-color: rgba(212, 80, 43, 0.5) !important; }
+.bg-\[\#6366f1\] { background-color: var(--brand) !important; }
+.bg-\[\#6366f1\]\/5  { background-color: var(--brand-soft) !important; }
+.bg-\[\#6366f1\]\/10 { background-color: var(--brand-tint) !important; }
+.bg-\[\#6366f1\]\/50 { background-color: rgba(212, 80, 43, 0.5) !important; }
 
 /* Green button scale */
-body:not([data-theme="dark"]) .bg-\[\#238636\],
-body:not([data-theme="dark"]) .bg-\[\#2ea043\],
-body:not([data-theme="dark"]) .hover\:bg-\[\#2ea043\]:hover { background-color: var(--green) !important; color: #fff !important; }
-body:not([data-theme="dark"]) .bg-\[\#3fb950\]\/10,
-body:not([data-theme="dark"]) .bg-\[\#3fb950\]\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
-body:not([data-theme="dark"]) .text-\[\#3fb950\] { color: var(--green) !important; }
-body:not([data-theme="dark"]) .bg-\[\#238636\]\/20 { background-color: rgba(31, 138, 76, 0.18) !important; }
+.bg-\[\#238636\],
+.bg-\[\#2ea043\],
+.hover\:bg-\[\#2ea043\]:hover { background-color: var(--green) !important; color: #fff !important; }
+.bg-\[\#3fb950\]\/10,
+.bg-\[\#3fb950\]\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
+.text-\[\#3fb950\] { color: var(--green) !important; }
+.bg-\[\#238636\]\/20 { background-color: rgba(31, 138, 76, 0.18) !important; }
 
 /* Red */
-body:not([data-theme="dark"]) .bg-\[\#da3633\],
-body:not([data-theme="dark"]) .bg-\[\#f85149\] { background-color: var(--red) !important; color: #fff !important; }
-body:not([data-theme="dark"]) .bg-\[\#f85149\]\/20 { background-color: rgba(204, 46, 61, 0.15) !important; }
+.bg-\[\#da3633\],
+.bg-\[\#f85149\] { background-color: var(--red) !important; color: #fff !important; }
+.bg-\[\#f85149\]\/20 { background-color: rgba(204, 46, 61, 0.15) !important; }
 
 /* Amber */
-body:not([data-theme="dark"]) .bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
-body:not([data-theme="dark"]) .bg-\[\#f0883e\]\/20 { background-color: rgba(176, 119, 0, 0.18) !important; }
+.bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
+.bg-\[\#f0883e\]\/20 { background-color: rgba(176, 119, 0, 0.18) !important; }
 
 /* Violet/purple */
-body:not([data-theme="dark"]) .bg-\[\#a371f7\]\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
-body:not([data-theme="dark"]) .text-\[\#a371f7\] { color: var(--accent-violet) !important; }
-body:not([data-theme="dark"]) .bg-\[\#79c0ff\]\/20 { background-color: rgba(111, 90, 214, 0.12) !important; }
-body:not([data-theme="dark"]) .text-\[\#79c0ff\] { color: var(--accent-violet) !important; }
-body:not([data-theme="dark"]) .bg-\[\#58a6ff\]\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
-body:not([data-theme="dark"]) .text-\[\#58a6ff\] { color: var(--accent-violet) !important; }
+.bg-\[\#a371f7\]\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
+.text-\[\#a371f7\] { color: var(--accent-violet) !important; }
+.bg-\[\#79c0ff\]\/20 { background-color: rgba(111, 90, 214, 0.12) !important; }
+.text-\[\#79c0ff\] { color: var(--accent-violet) !important; }
+.bg-\[\#58a6ff\]\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
+.text-\[\#58a6ff\] { color: var(--accent-violet) !important; }
 
 /* Neutral grey-blue (#8b949e) backgrounds */
-body:not([data-theme="dark"]) .bg-\[\#8b949e\]\/20 { background-color: rgba(168, 165, 154, 0.20) !important; }
+.bg-\[\#8b949e\]\/20 { background-color: rgba(168, 165, 154, 0.20) !important; }
 
 /* Tailwind named-color text/bg fallbacks for everything else used */
-body:not([data-theme="dark"]) .text-emerald-400,
-body:not([data-theme="dark"]) .text-emerald-500 { color: var(--green) !important; }
-body:not([data-theme="dark"]) .bg-emerald-600,
-body:not([data-theme="dark"]) .hover\:bg-emerald-700:hover { background-color: var(--green) !important; color: #fff !important; }
+.text-emerald-400,
+.text-emerald-500 { color: var(--green) !important; }
+.bg-emerald-600,
+.hover\:bg-emerald-700:hover { background-color: var(--green) !important; color: #fff !important; }
 
-body:not([data-theme="dark"]) .text-blue-400,
-body:not([data-theme="dark"]) .text-blue-500 { color: var(--accent-violet) !important; }
-body:not([data-theme="dark"]) .bg-blue-500,
-body:not([data-theme="dark"]) .bg-blue-600,
-body:not([data-theme="dark"]) .hover\:bg-blue-700:hover { background-color: var(--accent-violet) !important; color: #fff !important; }
+.text-blue-400,
+.text-blue-500 { color: var(--accent-violet) !important; }
+.bg-blue-500,
+.bg-blue-600,
+.hover\:bg-blue-700:hover { background-color: var(--accent-violet) !important; color: #fff !important; }
 
-body:not([data-theme="dark"]) .text-purple-400,
-body:not([data-theme="dark"]) .text-purple-500 { color: var(--accent-violet) !important; }
+.text-purple-400,
+.text-purple-500 { color: var(--accent-violet) !important; }
 
-body:not([data-theme="dark"]) .text-orange-400 { color: var(--accent-amber) !important; }
-body:not([data-theme="dark"]) .text-rose-400 { color: var(--accent-rose) !important; }
+.text-orange-400 { color: var(--accent-amber) !important; }
+.text-rose-400 { color: var(--accent-rose) !important; }
 
 /* Status / badge backgrounds (semantic 500/20 transparent variants) */
-body:not([data-theme="dark"]) .bg-blue-500\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
-body:not([data-theme="dark"]) .bg-purple-500\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
-body:not([data-theme="dark"]) .bg-orange-500\/20 { background-color: rgba(176, 119, 0, 0.15) !important; }
-body:not([data-theme="dark"]) .bg-emerald-500\/20 { background-color: rgba(31, 138, 76, 0.15) !important; }
+.bg-blue-500\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
+.bg-purple-500\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
+.bg-orange-500\/20 { background-color: rgba(176, 119, 0, 0.15) !important; }
+.bg-emerald-500\/20 { background-color: rgba(31, 138, 76, 0.15) !important; }
 
 /* `gray-700` etc that still leak through */
-body:not([data-theme="dark"]) .bg-gray-700 { background-color: var(--surface-2) !important; }
-body:not([data-theme="dark"]) .bg-gray-800 { background-color: var(--surface) !important; }
-body:not([data-theme="dark"]) .bg-gray-900 { background-color: var(--bg) !important; }
-body:not([data-theme="dark"]) .text-gray-100,
-body:not([data-theme="dark"]) .text-gray-200 { color: var(--fg) !important; }
-body:not([data-theme="dark"]) .border-gray-700,
-body:not([data-theme="dark"]) .border-gray-800 { border-color: var(--border) !important; }
+.bg-gray-700 { background-color: var(--surface-2) !important; }
+.bg-gray-800 { background-color: var(--surface) !important; }
+.bg-gray-900 { background-color: var(--bg) !important; }
+.text-gray-100,
+.text-gray-200 { color: var(--fg) !important; }
+.border-gray-700,
+.border-gray-800 { border-color: var(--border) !important; }
 
 /* divide-* color overrides */
-body:not([data-theme="dark"]) .divide-gray-700 > * + *,
-body:not([data-theme="dark"]) .divide-gray-800 > * + * { border-color: var(--border) !important; }
+.divide-gray-700 > * + *,
+.divide-gray-800 > * + * { border-color: var(--border) !important; }
+
+/* ─── Universal hex coverage — plugins + core, every literal grep'd
+   from src/tusk/studio/templates AND tusk_{bi,ci,sec,cluster}/templates.
+   Maps each Tailwind arbitrary or named color used anywhere in the
+   app onto a design token so every page draws from the same palette
+   regardless of theme. ─── */
+
+/* Greens — every shade used by status badges, CI pipeline, etc */
+.bg-\[\#10b981\],
+.bg-\[\#16a34a\],
+.bg-\[\#22c55e\],
+.bg-\[\#34d399\] { background-color: var(--green) !important; color: #fff !important; }
+.text-\[\#10b981\],
+.text-\[\#16a34a\],
+.text-\[\#22c55e\],
+.text-\[\#34d399\],
+.text-\[\#6ee7b7\] { color: var(--green) !important; }
+.bg-\[\#10b981\]\/10,
+.bg-\[\#22c55e\]\/10,
+.bg-\[\#10b981\]\/20,
+.bg-\[\#22c55e\]\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
+.bg-\[\#6ee7b7\]\/10 { background-color: rgba(31, 138, 76, 0.10) !important; }
+.border-\[\#10b981\],
+.border-\[\#22c55e\] { border-color: var(--green) !important; }
+
+/* Reds */
+.bg-\[\#dc2626\],
+.bg-\[\#ef4444\] { background-color: var(--red) !important; color: #fff !important; }
+.text-\[\#dc2626\],
+.text-\[\#ef4444\],
+.text-\[\#f87171\] { color: var(--red) !important; }
+.bg-\[\#dc2626\]\/10,
+.bg-\[\#dc2626\]\/20,
+.bg-\[\#ef4444\]\/10,
+.bg-\[\#ef4444\]\/20,
+.bg-\[\#f87171\]\/10,
+.bg-\[\#f87171\]\/20 { background-color: rgba(204, 46, 61, 0.15) !important; }
+
+/* Ambers / oranges */
+.bg-\[\#f59e0b\],
+.bg-\[\#fbbf24\],
+.bg-\[\#fb923c\] { background-color: var(--accent-amber) !important; color: #fff !important; }
+.text-\[\#f59e0b\],
+.text-\[\#fbbf24\],
+.text-\[\#fb923c\] { color: var(--accent-amber) !important; }
+.bg-\[\#f59e0b\]\/10,
+.bg-\[\#f59e0b\]\/20,
+.bg-\[\#fb923c\]\/10,
+.bg-\[\#fb923c\]\/20,
+.bg-\[\#fbbf24\]\/10,
+.bg-\[\#fbbf24\]\/20 { background-color: rgba(176, 119, 0, 0.12) !important; }
+.border-\[\#f59e0b\],
+.border-\[\#fb923c\] { border-color: var(--accent-amber) !important; }
+
+/* Violets / purples */
+.bg-\[\#8b5cf6\],
+.bg-\[\#818cf8\],
+.bg-\[\#3d7fff\] { background-color: var(--accent-violet) !important; color: #fff !important; }
+.text-\[\#8b5cf6\],
+.text-\[\#818cf8\],
+.text-\[\#a5b4fc\],
+.text-\[\#c4b5fd\],
+.text-\[\#3d7fff\] { color: var(--accent-violet) !important; }
+.bg-\[\#8b5cf6\]\/10,
+.bg-\[\#8b5cf6\]\/20,
+.bg-\[\#818cf8\]\/10,
+.bg-\[\#818cf8\]\/20 { background-color: rgba(111, 90, 214, 0.15) !important; }
+.border-\[\#8b5cf6\],
+.border-\[\#818cf8\] { border-color: var(--accent-violet) !important; }
+
+/* Pinks / roses */
+.bg-\[\#ec4899\],
+.bg-\[\#f43f5e\] { background-color: var(--accent-rose) !important; color: #fff !important; }
+.text-\[\#ec4899\],
+.text-\[\#f43f5e\] { color: var(--accent-rose) !important; }
+.bg-\[\#ec4899\]\/10,
+.bg-\[\#ec4899\]\/20,
+.bg-\[\#f43f5e\]\/10,
+.bg-\[\#f43f5e\]\/20 { background-color: rgba(200, 64, 100, 0.15) !important; }
+
+/* Cyans / teals */
+.bg-\[\#06b6d4\] { background-color: var(--accent-teal) !important; color: #fff !important; }
+.text-\[\#06b6d4\] { color: var(--accent-teal) !important; }
+.bg-\[\#06b6d4\]\/10,
+.bg-\[\#06b6d4\]\/20 { background-color: rgba(13, 138, 114, 0.15) !important; }
+
+/* Tailwind named-color sweeps — covers every text-* / bg-* / border-* the
+   templates reach for without an arbitrary hex. */
+.text-rose-300,
+.text-rose-500 { color: var(--accent-rose) !important; }
+.bg-rose-500,
+.bg-rose-600 { background-color: var(--accent-rose) !important; color: #fff !important; }
+.bg-rose-500\/10,
+.bg-rose-500\/20 { background-color: rgba(200, 64, 100, 0.15) !important; }
+
+.text-cyan-400,
+.text-cyan-500 { color: var(--accent-teal) !important; }
+.bg-cyan-500,
+.bg-cyan-600 { background-color: var(--accent-teal) !important; color: #fff !important; }
+.bg-cyan-500\/10,
+.bg-cyan-500\/20 { background-color: rgba(13, 138, 114, 0.15) !important; }
+
+.text-violet-400,
+.text-violet-500 { color: var(--accent-violet) !important; }
+.bg-violet-500,
+.bg-violet-600 { background-color: var(--accent-violet) !important; color: #fff !important; }
+
+.text-pink-400,
+.text-pink-500 { color: var(--accent-rose) !important; }
+.bg-pink-500,
+.bg-pink-600 { background-color: var(--accent-rose) !important; color: #fff !important; }
+
+.text-fuchsia-400,
+.text-fuchsia-500 { color: var(--accent-rose) !important; }
+
+.text-teal-400,
+.text-teal-500 { color: var(--accent-teal) !important; }
+
+.text-lime-400,
+.text-lime-500 { color: var(--green) !important; }
+
+.text-sky-400,
+.text-sky-500 { color: var(--accent-violet) !important; }
+
+/* Generic indigo named-classes that haven't been mapped above */
+.text-indigo-500 { color: var(--brand) !important; }
+.bg-indigo-500,
+.bg-indigo-700 { background-color: var(--brand) !important; color: #fff !important; }
+.bg-indigo-500\/10,
+.bg-indigo-500\/20,
+.bg-indigo-600\/10,
+.bg-indigo-600\/20 { background-color: var(--brand-tint) !important; }
+.border-indigo-400,
+.border-indigo-600 { border-color: var(--brand) !important; }
+
+/* Tailwind 'slate' often slips in through plugins */
+.text-slate-300 { color: var(--fg-2) !important; }
+.text-slate-400 { color: var(--fg-3) !important; }
+.text-slate-500 { color: var(--fg-3) !important; }
+.bg-slate-700 { background-color: var(--surface-2) !important; }
+.bg-slate-800,
+.bg-slate-900 { background-color: var(--surface) !important; }
+
+/* Zinc, neutral, stone — same fallbacks */
+.text-zinc-300,
+.text-neutral-300,
+.text-stone-300 { color: var(--fg-2) !important; }
+.text-zinc-400,
+.text-neutral-400,
+.text-stone-400 { color: var(--fg-3) !important; }
+.text-zinc-500,
+.text-neutral-500,
+.text-stone-500 { color: var(--fg-3) !important; }
+.bg-zinc-700,
+.bg-neutral-700,
+.bg-stone-700 { background-color: var(--surface-2) !important; }
+.bg-zinc-800,
+.bg-neutral-800,
+.bg-stone-800 { background-color: var(--surface) !important; }
+.bg-zinc-900,
+.bg-neutral-900,
+.bg-stone-900 { background-color: var(--bg) !important; }
+.border-zinc-700,
+.border-neutral-700,
+.border-stone-700 { border-color: var(--border) !important; }
 
 /* Forms: every input variant the templates use */
-body:not([data-theme="dark"]) .focus\:border-\[\#58a6ff\]:focus,
-body:not([data-theme="dark"]) .focus\:border-\[\#6366f1\]:focus,
-body:not([data-theme="dark"]) .focus\:ring-\[\#58a6ff\]:focus,
-body:not([data-theme="dark"]) .focus\:ring-\[\#6366f1\]:focus { border-color: var(--brand) !important; --tw-ring-color: rgba(212, 80, 43, 0.25) !important; }
+.focus\:border-\[\#58a6ff\]:focus,
+.focus\:border-\[\#6366f1\]:focus,
+.focus\:ring-\[\#58a6ff\]:focus,
+.focus\:ring-\[\#6366f1\]:focus { border-color: var(--brand) !important; --tw-ring-color: rgba(212, 80, 43, 0.25) !important; }
