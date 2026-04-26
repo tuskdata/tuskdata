@@ -2,6 +2,27 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc7] - 2026-04-26 — Admin works on private LAN
+
+The single-user admin guard was loopback-only, which means accessing
+the admin panel from any other machine on your home/office LAN
+(`10.0.0.188`, `192.168.1.x`, etc.) returned 401 on every endpoint
+and the page rendered as empty `Loading…` skeletons with a wall of
+"Admin endpoints require multi-user auth for non-loopback access"
+toasts.
+
+Added two opt-in escape hatches:
+- `TUSK_ADMIN_ALLOW_LAN=1` — accept any RFC1918 private address
+  (10/8, 172.16/12, 192.168/16) and IPv6 unique-local (fc00::/7).
+  Defaulted to `1` in `tuskdata-compose/docker-compose.yml` so the
+  expected use case (personal LAN deploy) Just Works. Set to `0` to
+  go back to strict loopback-only.
+- `TUSK_ADMIN_ALLOW_REMOTE=1` — accept any origin including public
+  internet. Don't use this unless multi-user auth is also on.
+
+The error message now points at the env vars so the user knows the
+escape hatch exists.
+
 ## [0.4.3rc6] - 2026-04-26 — Color uniformity + clean templates + working Explain
 
 ### Color uniformity (the big one)

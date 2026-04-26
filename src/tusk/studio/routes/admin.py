@@ -1,5 +1,7 @@
 """Admin API routes for PostgreSQL administration"""
 
+import os
+import ipaddress
 import msgspec
 from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
@@ -24,20 +26,54 @@ def _is_loopback(connection: Request) -> bool:
     return host in _LOOPBACK_HOSTS or host.startswith("127.")
 
 
+def _is_private_lan(connection: Request) -> bool:
+    """True if the request originates from a private RFC1918 network.
+
+    This is more permissive than loopback — covers `10.0.0.0/8`,
+    `172.16.0.0/12`, `192.168.0.0/16`, and IPv6 unique-local `fc00::/7`.
+    Used when `TUSK_ADMIN_ALLOW_LAN=1` so admin works on a home/office
+    LAN deploy without forcing multi-user auth.
+    """
+    client = getattr(connection, "client", None)
+    host = getattr(client, "host", None) if client else None
+    if not host:
+        return False
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_private or addr.is_loopback
+
+
 def _check_admin_auth(connection: Request, _: object) -> None:
     """Guard admin endpoints.
 
-    - Multi-user mode: require authenticated admin user.
-    - Single-user mode: require loopback origin. Remote access in single-user
-      mode is refused so the admin panel is never exposed without auth.
+    Modes:
+    - Multi-user (`auth_mode = "multi"`): require an authenticated admin
+      user. Always wins.
+    - Single-user, default: require loopback origin so the admin panel
+      never leaks to the network without auth.
+    - Single-user with `TUSK_ADMIN_ALLOW_LAN=1`: also accept any RFC1918
+      private address (10/8, 172.16/12, 192.168/16, fc00::/7). Use this
+      on a personal home-LAN deployment where remote-from-loopback is
+      a hassle and the network is already trusted.
+    - Single-user with `TUSK_ADMIN_ALLOW_REMOTE=1`: accept any origin,
+      including the public internet. **Don't use unless you know what
+      you're doing** — there is no auth in single-user mode.
     """
     config = get_config()
 
     if config.auth_mode != "multi":
         if _is_loopback(connection):
             return
+        if os.environ.get("TUSK_ADMIN_ALLOW_REMOTE") == "1":
+            return
+        if os.environ.get("TUSK_ADMIN_ALLOW_LAN") == "1" and _is_private_lan(connection):
+            return
         raise NotAuthorizedException(
-            "Admin endpoints require multi-user auth for non-loopback access"
+            "Admin endpoints require multi-user auth for non-loopback access. "
+            "Set TUSK_ADMIN_ALLOW_LAN=1 to allow private-network access in "
+            "single-user mode, or enable multi-user auth."
         )
 
     from tusk.core.auth import get_session, get_user_by_id
