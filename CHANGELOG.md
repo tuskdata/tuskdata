@@ -2,6 +2,14 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc3] - 2026-04-26 — Pin apscheduler<4 (hotfix)
+
+Same payload as rc2 — only the dependency pin changed. APScheduler
+4.0 went stable upstream and reorganized its module layout: the old
+`apscheduler.schedulers.asyncio` import path is gone, which made
+`tusk.core.scheduler` blow up at import time on a fresh install.
+Pinned to `apscheduler>=3.10,<4` (and same in the admin extra).
+
 ## [0.4.3rc2] - 2026-04-26 — Closure + Redesign Round 2 (prep)
 
 Release candidate. Combines the v0.4.3 closure pass (Phase 1–7 /

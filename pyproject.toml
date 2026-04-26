@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.3rc2"
+version = "0.4.3rc3"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -51,13 +51,13 @@ studio = [
     "duckdb>=1.0",           # Analytics engine
     "polars>=1.0",           # DataFrame transforms
     "pyarrow>=17.0",         # Arrow format support
-    "apscheduler>=3.10",     # Task scheduler
+    "apscheduler>=3.10,<4",  # Task scheduler — 4.x reorganized imports (no apscheduler.schedulers)
     "ibis-framework[duckdb,polars]>=10.0",  # Unified DataFrame API (ETL engine)
 ]
 
 # Admin features (scheduled tasks, monitoring)
 admin = [
-    "apscheduler>=3.11.2",   # Task scheduler
+    "apscheduler>=3.11.2,<4",  # Task scheduler — pin under 4.x
     "psutil>=5.9",           # System metrics
 ]
 
