@@ -299,19 +299,25 @@ def on_shutdown() -> None:
         except Exception as e:
             log.error("Plugin shutdown failed", plugin=plugin.name, error=str(e))
 
-    # Close PostgreSQL connection pools
+    # Close PostgreSQL connection pools + SSH tunnels
     try:
         from tusk.engines.postgres import close_pools
+        from tusk.core.ssh_tunnel import close_all_tunnels
+
+        async def _shutdown_async():
+            await close_pools()
+            await close_all_tunnels()
+
         try:
             loop = asyncio.get_running_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, close_pools())
+                future = executor.submit(asyncio.run, _shutdown_async())
                 future.result(timeout=10)
         except RuntimeError:
-            asyncio.run(close_pools())
+            asyncio.run(_shutdown_async())
     except Exception as e:
-        log.warning("Failed to close connection pools", error=str(e))
+        log.warning("Failed to close connection pools / ssh tunnels", error=str(e))
 
     # Cleanup plugin files
     cleanup_plugin_statics(STATIC_DIR)

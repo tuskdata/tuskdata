@@ -142,7 +142,7 @@
      x-cloak
      class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
     <div class="absolute inset-0" @click="open = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[420px] border border-[#30363d] shadow-2xl" @click.stop>
+    <div class="relative bg-[#161b22] rounded-xl p-6 w-[480px] max-h-[90vh] overflow-y-auto border border-[#30363d] shadow-2xl" @click.stop x-data="{ sshOpen: false }">
         <h3 id="conn-modal-title" class="text-lg font-bold mb-4">Add Connection</h3>
         <form id="conn-form" class="space-y-4">
             <input type="hidden" name="edit_id" id="conn-edit-id" value="">
@@ -164,6 +164,61 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-sm text-gray-400 mb-1">User</label><input name="user" id="conn-user" placeholder="postgres" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"></div>
                     <div><label class="block text-sm text-gray-400 mb-1">Password</label><input name="password" id="conn-password" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"><p id="password-hint" class="text-xs text-gray-500 mt-1 hidden">Leave empty to keep current</p></div>
+                </div>
+
+                <!-- SSH tunnel: collapsible. Host the DB lives on stays in the
+                     fields above; here we describe how to reach it. -->
+                <div class="border border-[#30363d] rounded-lg">
+                    <button type="button"
+                            @click="sshOpen = !sshOpen"
+                            class="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-[#21262d]">
+                        <span class="flex items-center gap-2">
+                            <i data-lucide="lock" class="w-4 h-4"></i>
+                            SSH Tunnel
+                            <span class="text-xs text-gray-500" id="ssh-summary"></span>
+                        </span>
+                        <span x-text="sshOpen ? '▾' : '▸'" class="text-gray-500"></span>
+                    </button>
+                    <div x-show="sshOpen" x-cloak class="p-3 border-t border-[#30363d] space-y-3">
+                        <p class="text-xs text-gray-500">
+                            Optional. Reach the database through a bastion host. The fields above are
+                            seen <em>from the bastion</em>, so use the database's internal hostname (often
+                            <code class="bg-[#0d1117] px-1 rounded">localhost</code> or a private IP).
+                        </p>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="col-span-2">
+                                <label class="block text-sm text-gray-400 mb-1">SSH Host</label>
+                                <input name="ssh_host" id="conn-ssh-host" placeholder="bastion.example.com"
+                                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-400 mb-1">Port</label>
+                                <input name="ssh_port" id="conn-ssh-port" placeholder="22" value="22"
+                                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">SSH User</label>
+                            <input name="ssh_user" id="conn-ssh-user" placeholder="deploy"
+                                   class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">
+                                Private Key <span class="text-xs text-gray-500">(PEM contents — paste, don't upload)</span>
+                            </label>
+                            <textarea name="ssh_private_key" id="conn-ssh-key" rows="4"
+                                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."
+                                      class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-xs focus:outline-none focus:border-indigo-500"></textarea>
+                            <p class="text-xs text-gray-500 mt-1">Leave empty to use the SSH password below.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">
+                                SSH Password <span class="text-xs text-gray-500">(or key passphrase)</span>
+                            </label>
+                            <input type="password" name="ssh_password" id="conn-ssh-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;"
+                                   class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
                 </div>
             </div>
             <div id="file-db-fields" class="hidden">

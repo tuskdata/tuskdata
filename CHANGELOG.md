@@ -2,7 +2,47 @@
 
 All notable changes to Tusk will be documented in this file.
 
-## [0.3.4] - 2026-04-26
+## [0.3.5] - 2026-04-26
+
+### Added — SSH tunneling for PostgreSQL connections
+
+Connections can now reach databases sitting behind a bastion host
+without configuring system-level port-forwards. Six new optional fields
+on `ConnectionConfig`:
+
+- `ssh_host`, `ssh_port` (default 22), `ssh_user`
+- `ssh_password` *or* `ssh_private_key` (PEM contents, paste in)
+- `ssh_known_hosts` (optional pin; default = trust on first use)
+
+`ssh_password` and `ssh_private_key` encrypt at rest with the same
+Fernet key as the database password. The Studio's connection form gains
+a collapsible "SSH Tunnel" panel. The DB host/port stay as the values
+the bastion sees — typically `localhost` or a private IP.
+
+Implementation: new `core/ssh_tunnel.py` opens an asyncssh session +
+`forward_local_port` per connection, returns a `127.0.0.1:<random>` DSN
+for psycopg. Tunnels are reused across queries (one per connection id),
+torn down on shutdown. Wired through `engines/postgres.py` so every
+query path — `execute_query`, `execute_query_paginated`,
+`fetch_geometries`, `cancel_query`, `test_connection` — auto-tunnels
+when configured.
+
+### Changed — Studio results table styling
+
+Tighter, denser layout that doesn't waste horizontal space:
+
+- Cell padding reduced from `px-4 py-2` to `px-3 py-1`
+- Font dropped to `text-xs` for the table body (cells stay readable, no
+  more giant rows for short values)
+- Column type (e.g. `int8`, `text`) shown next to the header name in
+  small grey
+- Header text non-uppercase, less aggressive color contrast
+- Per-cell `max-w-xs` + `truncate`: long values clip with an ellipsis
+  and reveal in the title tooltip
+- Checkbox column sticks left when scrolling horizontally
+- Sort indicator shifted to the right edge of the header in indigo
+- Alternating row tint slightly stronger for scan-ability
+
 
 ### Fixed
 - **Version badge stuck at v0.2.1.** `src/tusk/__init__.py` had a

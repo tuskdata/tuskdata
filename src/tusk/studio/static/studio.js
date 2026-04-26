@@ -441,38 +441,41 @@ function renderResults() {
     tableEl.innerHTML = `
         <div class="card rounded-lg overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="text-sm" style="min-width: max-content;">
-                    <thead class="bg-[#21262d] sticky top-0">
+                <table class="results-table text-xs" style="min-width: max-content; border-collapse: separate; border-spacing: 0;">
+                    <thead class="bg-[#21262d] sticky top-0 z-10">
                         <tr>
-                            <th class="px-2 py-2 text-left border-b border-[#30363d] w-8">
+                            <th class="px-2 py-1.5 text-left border-b border-[#30363d] w-6 sticky left-0 bg-[#21262d] z-20">
                                 <input type="checkbox"
                                        ${_allRowsSelected(pageRows) ? 'checked' : ''}
                                        onchange="toggleAllRows(this.checked)"
                                        title="Select all rows on this page">
                             </th>
                             ${currentResults.columns.map((c, i) => `
-                                <th class="px-4 py-2 text-left text-gray-400 font-medium border-b border-[#30363d] cursor-pointer hover:bg-[#30363d] select-none"
-                                    onclick="sortByColumn(${i})">
+                                <th class="px-3 py-1.5 text-left text-gray-300 font-medium border-b border-[#30363d] cursor-pointer hover:bg-[#30363d] select-none whitespace-nowrap"
+                                    style="max-width: 320px;"
+                                    onclick="sortByColumn(${i})"
+                                    title="${c.name}">
                                     <div class="flex items-center gap-1">
-                                        ${c.name}
-                                        ${sortColumn === i ? (sortDirection === 'asc' ? '↑' : '↓') : '<span class="text-gray-600">↕</span>'}
+                                        <span class="truncate">${c.name}</span>
+                                        <span class="text-gray-500 text-[10px]">${(c.type || '').toLowerCase()}</span>
+                                        ${sortColumn === i ? `<span class="text-indigo-400 ml-auto">${sortDirection === 'asc' ? '↑' : '↓'}</span>` : ''}
                                     </div>
                                 </th>
                             `).join('')}
                         </tr>
                         ${colFilterRow}
                     </thead>
-                    <tbody class="font-mono text-xs">
+                    <tbody class="font-mono">
                         ${pageRows.map((row, i) => {
                             const rowKey = _rowKey(row);
                             const checked = selectedRows.has(rowKey);
                             return `
-                            <tr class="${i % 2 === 0 ? '' : 'bg-[#0d1117]/50'} hover:bg-[#21262d] ${checked ? 'bg-indigo-900/20' : ''}">
-                                <td class="px-2 py-2 border-b border-[#30363d]/50">
+                            <tr class="${i % 2 === 0 ? 'bg-[#0d1117]/30' : ''} hover:bg-[#21262d]/60 ${checked ? '!bg-indigo-900/30' : ''}">
+                                <td class="px-2 py-1 border-b border-[#30363d]/40 sticky left-0 bg-[#0d1117]">
                                     <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
                                 </td>
                                 ${row.map(cell => `
-                                    <td class="px-4 py-2 border-b border-[#30363d]/50">${formatCell(cell)}</td>
+                                    <td class="px-3 py-1 border-b border-[#30363d]/40 max-w-xs truncate" title="${_titleSafe(cell)}">${formatCell(cell)}</td>
                                 `).join('')}
                             </tr>
                         `;}).join('')}
@@ -503,6 +506,12 @@ function renderResults() {
 
 function _rowKey(row) {
     return row.map(c => c === null ? '\x00' : typeof c === 'object' ? JSON.stringify(c) : String(c)).join('\x1f');
+}
+
+function _titleSafe(value) {
+    if (value === null || value === undefined) return '';
+    const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return s.replace(/"/g, '&quot;').slice(0, 500);
 }
 
 function _allRowsSelected(rows) {
@@ -1342,6 +1351,18 @@ window.showEditConnModal = async function(connId) {
         document.getElementById('conn-database').value = conn.database || '';
         document.getElementById('conn-user').value = conn.user || '';
         document.getElementById('conn-password').value = ''; // Don't show password
+        // SSH tunnel fields. The API never returns ssh_password / ssh_private_key
+        // (include_secrets=False) — leave them blank so partial edits don't wipe them.
+        const sshHost = document.getElementById('conn-ssh-host');
+        const sshPort = document.getElementById('conn-ssh-port');
+        const sshUser = document.getElementById('conn-ssh-user');
+        const sshKey  = document.getElementById('conn-ssh-key');
+        const sshPwd  = document.getElementById('conn-ssh-password');
+        if (sshHost) sshHost.value = conn.ssh_host || '';
+        if (sshPort) sshPort.value = conn.ssh_port || 22;
+        if (sshUser) sshUser.value = conn.ssh_user || '';
+        if (sshKey)  sshKey.value  = '';
+        if (sshPwd)  sshPwd.value  = '';
     } else if (conn.type === 'sqlite' || conn.type === 'duckdb') {
         document.getElementById('conn-path').value = conn.path || '';
     }

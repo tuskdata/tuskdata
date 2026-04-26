@@ -35,9 +35,20 @@ class ConnectionConfig(msgspec.Struct):
     # SQLite fields
     path: str | None = None
 
+    # Optional SSH tunnel (PostgreSQL only). When ssh_host is set, the
+    # postgres engine opens a forwarded port via asyncssh and points
+    # psycopg at the local end. ssh_password and ssh_private_key are
+    # encrypted at rest just like `password`.
+    ssh_host: str | None = None
+    ssh_port: int = 22
+    ssh_user: str | None = None
+    ssh_password: str | None = None
+    ssh_private_key: str | None = None  # PEM contents, not a path
+    ssh_known_hosts: str | None = None  # optional pin; default = accept-new
+
     @property
     def dsn(self) -> str:
-        """PostgreSQL connection string"""
+        """PostgreSQL connection string (direct, no tunnel)."""
         if self.type != "postgres":
             raise ValueError("DSN only for PostgreSQL")
         user = quote(self.user or "", safe="")
@@ -46,8 +57,28 @@ class ConnectionConfig(msgspec.Struct):
         database = self.database or "postgres"
         return f"postgresql://{user}:{password}@{host}:{self.port}/{database}"
 
-    def to_dict(self, include_password: bool = False) -> dict:
-        """Convert to dictionary for serialization"""
+    @property
+    def uses_ssh_tunnel(self) -> bool:
+        return bool(self.ssh_host and self.ssh_user)
+
+    def local_dsn(self, local_port: int) -> str:
+        """DSN pointing at a forwarded local port (for tunneled connections)."""
+        if self.type != "postgres":
+            raise ValueError("DSN only for PostgreSQL")
+        user = quote(self.user or "", safe="")
+        password = quote(self.password or "", safe="")
+        database = self.database or "postgres"
+        return f"postgresql://{user}:{password}@127.0.0.1:{local_port}/{database}"
+
+    def to_dict(self, include_secrets: bool = False, include_password: bool | None = None) -> dict:
+        """Convert to dictionary for serialization.
+
+        `include_password` is the legacy alias kept for backwards compat
+        — pass `include_secrets=True` for new code.
+        """
+        if include_password is not None:
+            include_secrets = include_secrets or include_password
+
         data = {
             "id": self.id,
             "name": self.name,
@@ -61,8 +92,21 @@ class ConnectionConfig(msgspec.Struct):
                 data["database"] = self.database
             if self.user is not None:
                 data["user"] = self.user
-            if include_password and self.password is not None:
+            if include_secrets and self.password is not None:
                 data["password"] = self.password
+
+            if self.ssh_host:
+                data["ssh_host"] = self.ssh_host
+                data["ssh_port"] = self.ssh_port
+                if self.ssh_user is not None:
+                    data["ssh_user"] = self.ssh_user
+                if self.ssh_known_hosts is not None:
+                    data["ssh_known_hosts"] = self.ssh_known_hosts
+                if include_secrets:
+                    if self.ssh_password is not None:
+                        data["ssh_password"] = self.ssh_password
+                    if self.ssh_private_key is not None:
+                        data["ssh_private_key"] = self.ssh_private_key
         elif self.type in ("sqlite", "duckdb"):
             if self.path is not None:
                 data["path"] = self.path
@@ -118,6 +162,12 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
         user=kwargs.get("user", old_config.user),
         password=kwargs.get("password", old_config.password),
         path=kwargs.get("path", old_config.path),
+        ssh_host=kwargs.get("ssh_host", old_config.ssh_host),
+        ssh_port=kwargs.get("ssh_port", old_config.ssh_port),
+        ssh_user=kwargs.get("ssh_user", old_config.ssh_user),
+        ssh_password=kwargs.get("ssh_password", old_config.ssh_password),
+        ssh_private_key=kwargs.get("ssh_private_key", old_config.ssh_private_key),
+        ssh_known_hosts=kwargs.get("ssh_known_hosts", old_config.ssh_known_hosts),
     )
 
     _connections[conn_id] = new_config
@@ -125,20 +175,24 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
     return new_config
 
 
+_SECRET_FIELDS = ("password", "ssh_password", "ssh_private_key")
+
+
 def save_connections_to_file() -> None:
     """Save all connections to TOML file.
 
-    Passwords are encrypted with Fernet before writing to disk.
-    File permissions are set to 0600.
+    Every secret field (db password, ssh password, ssh private key) is
+    encrypted with Fernet before writing. File mode is 0600.
     """
     TUSK_DIR.mkdir(parents=True, exist_ok=True)
 
     connections_data = []
     for conn in _connections.values():
-        d = conn.to_dict(include_password=True)
-        pw = d.get("password")
-        if pw:
-            d["password"] = encrypt(pw) if not is_encrypted(pw) else pw
+        d = conn.to_dict(include_secrets=True)
+        for field in _SECRET_FIELDS:
+            value = d.get(field)
+            if value:
+                d[field] = encrypt(value) if not is_encrypted(value) else value
         connections_data.append(d)
 
     data = {"connections": connections_data}
@@ -155,8 +209,8 @@ def save_connections_to_file() -> None:
 def load_connections_from_file() -> None:
     """Load connections from TOML file into registry.
 
-    Decrypts passwords that are prefixed as encrypted. Plain-text passwords
-    (legacy) are accepted as-is and will be re-saved encrypted on next write.
+    Decrypts secret fields that are prefixed as encrypted. Plain-text
+    legacy values are accepted and re-saved encrypted on next write.
     """
     if not CONN_FILE.exists():
         return
@@ -166,10 +220,12 @@ def load_connections_from_file() -> None:
 
     needs_migration = False
     for conn_data in data.get("connections", []):
-        raw_pw = conn_data.get("password")
-        if raw_pw and not is_encrypted(raw_pw):
-            needs_migration = True
-        password = decrypt(raw_pw) if raw_pw else None
+        decoded: dict = {}
+        for field in _SECRET_FIELDS:
+            raw = conn_data.get(field)
+            if raw and not is_encrypted(raw):
+                needs_migration = True
+            decoded[field] = decrypt(raw) if raw else None
 
         config = ConnectionConfig(
             id=conn_data.get("id", uuid.uuid4().hex[:12]),
@@ -179,8 +235,14 @@ def load_connections_from_file() -> None:
             port=conn_data.get("port", 5432),
             database=conn_data.get("database"),
             user=conn_data.get("user"),
-            password=password,
+            password=decoded["password"],
             path=conn_data.get("path"),
+            ssh_host=conn_data.get("ssh_host"),
+            ssh_port=conn_data.get("ssh_port", 22),
+            ssh_user=conn_data.get("ssh_user"),
+            ssh_password=decoded["ssh_password"],
+            ssh_private_key=decoded["ssh_private_key"],
+            ssh_known_hosts=conn_data.get("ssh_known_hosts"),
         )
         add_connection(config, persist=False)
 

@@ -48,6 +48,12 @@ class APIController(Controller):
                 database=data.get("database", ""),
                 user=data.get("user", ""),
                 password=data.get("password", ""),
+                ssh_host=data.get("ssh_host") or None,
+                ssh_port=int(data.get("ssh_port", 22)),
+                ssh_user=data.get("ssh_user") or None,
+                ssh_password=data.get("ssh_password") or None,
+                ssh_private_key=data.get("ssh_private_key") or None,
+                ssh_known_hosts=data.get("ssh_known_hosts") or None,
             )
         elif conn_type == "duckdb":
             config = ConnectionConfig(
@@ -90,6 +96,16 @@ class APIController(Controller):
             update_kwargs["password"] = data["password"]
         if "path" in data:
             update_kwargs["path"] = data["path"]
+        # SSH tunnel fields. Empty string clears the field; missing keeps current.
+        for ssh_field in ("ssh_host", "ssh_user", "ssh_known_hosts"):
+            if ssh_field in data:
+                update_kwargs[ssh_field] = data[ssh_field] or None
+        if "ssh_port" in data:
+            update_kwargs["ssh_port"] = int(data["ssh_port"] or 22)
+        if "ssh_password" in data and data["ssh_password"]:
+            update_kwargs["ssh_password"] = data["ssh_password"]
+        if "ssh_private_key" in data and data["ssh_private_key"]:
+            update_kwargs["ssh_private_key"] = data["ssh_private_key"]
 
         updated = update_connection(conn_id, **update_kwargs)
         if updated:
@@ -107,11 +123,11 @@ class APIController(Controller):
 
     @get("/connections/{conn_id:str}")
     async def get_conn(self, conn_id: str) -> dict:
-        """Get a connection's details (for editing)"""
+        """Get a connection's details (for editing). Secrets are stripped."""
         config = get_connection(conn_id)
         if not config:
             return {"error": "Connection not found"}
-        return config.to_dict(include_password=False)
+        return config.to_dict(include_secrets=False)
 
     @get("/connections/{conn_id:str}/databases")
     async def list_databases(self, conn_id: str) -> dict:
@@ -181,6 +197,12 @@ class APIController(Controller):
                 database=data.get("database", ""),
                 user=data.get("user", ""),
                 password=data.get("password", ""),
+                ssh_host=data.get("ssh_host") or None,
+                ssh_port=int(data.get("ssh_port", 22)),
+                ssh_user=data.get("ssh_user") or None,
+                ssh_password=data.get("ssh_password") or None,
+                ssh_private_key=data.get("ssh_private_key") or None,
+                ssh_known_hosts=data.get("ssh_known_hosts") or None,
             )
             success, message = await postgres.test_connection(config)
         elif conn_type == "duckdb":

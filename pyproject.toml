@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.3.4"
+version = "0.3.5"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -39,6 +39,7 @@ dependencies = [
 postgres = [
     "psycopg[binary]>=3.0",
     "psycopg_pool>=3.0",
+    "asyncssh>=2.20",          # SSH tunneling for connections behind a bastion
 ]
 
 # Web UI + Data engines (Studio, Data page)

@@ -11,6 +11,7 @@ from tusk.core.connection import ConnectionConfig
 from tusk.core.result import QueryResult, ColumnInfo
 from tusk.core.logging import get_logger
 from tusk.core import query_tracker
+from tusk.core.ssh_tunnel import get_tunneled_dsn
 
 log = get_logger("postgres")
 
@@ -121,7 +122,7 @@ async def execute_query(
     start = time.perf_counter()
 
     try:
-        async with _connect(config.dsn) as conn:
+        async with _connect(await get_tunneled_dsn(config)) as conn:
             if request_id:
                 backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
                 query_tracker.update(request_id, pid=backend_pid)
@@ -255,7 +256,7 @@ async def execute_query_paginated(
     start = time.perf_counter()
 
     try:
-        async with _connect(config.dsn) as conn:
+        async with _connect(await get_tunneled_dsn(config)) as conn:
             if request_id:
                 backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
                 query_tracker.update(request_id, pid=backend_pid)
@@ -333,7 +334,7 @@ async def fetch_geometries(
     start = time.perf_counter()
 
     try:
-        async with _connect(config.dsn) as conn:
+        async with _connect(await get_tunneled_dsn(config)) as conn:
             if QUERY_TIMEOUT_SEC > 0:
                 async with conn.cursor() as cur:
                     await cur.execute(f"SET statement_timeout = '{QUERY_TIMEOUT_SEC * 1000}'")
@@ -518,7 +519,7 @@ async def get_schema(config: ConnectionConfig) -> dict:
 async def cancel_query(config: ConnectionConfig, pid: int) -> bool:
     """Send pg_cancel_backend(pid) on a fresh connection. Returns True on success."""
     try:
-        async with await psycopg.AsyncConnection.connect(config.dsn) as conn:
+        async with await psycopg.AsyncConnection.connect(await get_tunneled_dsn(config)) as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT pg_cancel_backend(%s)", (pid,))
                 result = await cur.fetchone()

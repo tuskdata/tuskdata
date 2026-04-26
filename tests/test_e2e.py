@@ -203,6 +203,88 @@ def test_sqlite_connection_crud(client, tmp_path):
     assert "widgets" in str(tables).lower()
 
 
+def test_ssh_credentials_round_trip_through_encryption(tmp_path):
+    """ssh_password and ssh_private_key encrypt at rest just like `password`."""
+    from tusk.core import connection as conn_module
+    from tusk.core import crypto as crypto_module
+
+    saved = (
+        conn_module.TUSK_DIR, conn_module.CONN_FILE,
+        dict(conn_module._connections),
+        crypto_module.TUSK_DIR, crypto_module.KEY_FILE, crypto_module._cached,
+    )
+    sandbox = tmp_path / ".tusk"
+    sandbox.mkdir()
+    conn_module.TUSK_DIR = sandbox
+    conn_module.CONN_FILE = sandbox / "connections.toml"
+    conn_module._connections.clear()
+    crypto_module.TUSK_DIR = sandbox
+    crypto_module.KEY_FILE = sandbox / ".key"
+    crypto_module._cached = None
+
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nfake-pem-data\n-----END OPENSSH PRIVATE KEY-----\n"
+
+    try:
+        cfg = conn_module.ConnectionConfig(
+            name="behind-bastion",
+            type="postgres",
+            host="10.0.0.5",
+            port=5432,
+            database="app",
+            user="alice",
+            password="dbpw",
+            ssh_host="bastion.example.com",
+            ssh_port=22,
+            ssh_user="deploy",
+            ssh_password="ssh-passphrase",
+            ssh_private_key=pem,
+        )
+        conn_module.add_connection(cfg)
+        conn_module.save_connections_to_file()
+
+        raw = conn_module.CONN_FILE.read_text()
+        # Every secret must be encrypted on disk; nothing leaks plain-text.
+        for needle in ("dbpw", "ssh-passphrase", "fake-pem-data"):
+            assert needle not in raw, f"plain-text secret found: {needle}"
+
+        conn_module._connections.clear()
+        conn_module.load_connections_from_file()
+        loaded = conn_module.get_connection(cfg.id)
+        assert loaded is not None
+        assert loaded.password == "dbpw"
+        assert loaded.ssh_password == "ssh-passphrase"
+        assert loaded.ssh_private_key == pem
+        assert loaded.uses_ssh_tunnel is True
+
+        # Local DSN points at 127.0.0.1:<forwarded-port>
+        local = loaded.local_dsn(local_port=12345)
+        assert "127.0.0.1:12345" in local
+        assert "10.0.0.5" not in local
+    finally:
+        (
+            conn_module.TUSK_DIR, conn_module.CONN_FILE,
+            conns,
+            crypto_module.TUSK_DIR, crypto_module.KEY_FILE, crypto_module._cached,
+        ) = saved
+        conn_module._connections.clear()
+        conn_module._connections.update(conns)
+
+
+def test_ssh_tunnel_passthrough_for_direct_connections():
+    """When ssh_* fields are empty, get_tunneled_dsn returns the plain DSN."""
+    import asyncio
+    from tusk.core.connection import ConnectionConfig
+    from tusk.core.ssh_tunnel import get_tunneled_dsn
+
+    cfg = ConnectionConfig(
+        name="direct", type="postgres",
+        host="db.local", port=5432, database="app", user="u", password="p",
+    )
+    dsn = asyncio.run(get_tunneled_dsn(cfg))
+    assert dsn == cfg.dsn
+    assert cfg.uses_ssh_tunnel is False
+
+
 def test_postgres_password_round_trips_through_encryption(tmp_path):
     """Plain-text legacy passwords decrypt passthrough; saves re-encrypt them.
 
