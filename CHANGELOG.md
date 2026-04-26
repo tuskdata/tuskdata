@@ -2,6 +2,35 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.1] - 2026-04-26 — Row Detail Drawer
+
+### Added
+- **Row detail drawer.** Click any row in the Studio results table and
+  a panel slides in from the right with that row's full contents as a
+  key/value list — the value column is mono-spaced and color-coded by
+  type (NULL italic muted, numbers amber-right-aligned, booleans
+  violet, JSON teal). Three actions at the bottom:
+  - **Copy JSON** — full row as a `{...}` to the clipboard
+  - **Copy INSERT** — single SQL `INSERT` statement against the
+    detected source table (or `target_table` placeholder if the row
+    came from a join)
+  - **Edit** — opens a new editor tab pre-loaded with an `UPDATE`
+    skeleton; first column is assumed to be the primary key, the rest
+    become `SET` clauses. Disabled (with tooltip) when the source
+    query joined or sub-queried so a round-trip can't be reasonably
+    inferred.
+- The active row gets a coral outline + soft tint so you don't lose
+  track when reading the drawer.
+- `Esc` closes the drawer; clicking another row swaps the contents
+  in place.
+
+### Notes
+- Lives in the global `base.html`, exposed as `window.tuskRowDetail`.
+  Other pages (Data tab previews, plugin tables) can adopt it by
+  calling `tuskRowDetail.open({columns, row, rowIndex, totalRows, table})`.
+
+---
+
 ## [0.4.0] - 2026-04-26 — Redesign Round 1: Foundations
 
 The first cut of the v0.4.x visual redesign. The shell flips to the new

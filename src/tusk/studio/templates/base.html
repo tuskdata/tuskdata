@@ -115,6 +115,34 @@
 
     {% block modals %}{% endblock %}
 
+    <!-- Row Detail Drawer (v0.4.0). Slides in from the right when a
+         results-table row is clicked. Available on any page that uses
+         tuskRowDetail.open(...). -->
+    <div id="row-detail" class="row-detail-overlay" role="dialog" aria-hidden="true">
+        <div class="row-detail-head">
+            <span class="title serif">Row</span>
+            <span class="meta" id="row-detail-meta"></span>
+            <button type="button" class="close" onclick="tuskRowDetail.close()" title="Close (Esc)">
+                <i data-lucide="x" style="width:16px;height:16px"></i>
+            </button>
+        </div>
+        <div class="row-detail-body">
+            <div class="kv" id="row-detail-kv"></div>
+        </div>
+        <div class="row-detail-foot">
+            <button type="button" onclick="tuskRowDetail.copyJSON()" title="Copy this row as JSON">
+                <i data-lucide="braces"></i>Copy JSON
+            </button>
+            <button type="button" onclick="tuskRowDetail.copyINSERT()" title="Copy as SQL INSERT">
+                <i data-lucide="code-2"></i>Copy INSERT
+            </button>
+            <button type="button" class="primary" onclick="tuskRowDetail.edit()" id="row-detail-edit-btn"
+                    title="Open as editable UPDATE in a new tab">
+                <i data-lucide="pencil"></i>Edit
+            </button>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -417,6 +445,144 @@
         }
 
         window.tuskToast = showToast;
+
+        // ─── Row detail drawer ──────────────────────────────────
+        // Single global helper used by every results table. Pages call
+        // tuskRowDetail.open({columns, row, rowIndex, totalRows, table})
+        // and the drawer takes care of rendering, escaping, copy, edit.
+        (function () {
+            let _state = null;
+
+            function _classifyValue(v) {
+                if (v === null || v === undefined) return 'is-null';
+                if (typeof v === 'boolean') return 'is-bool';
+                if (typeof v === 'number') return 'is-num';
+                if (typeof v === 'object') return 'is-json';
+                return '';
+            }
+            function _formatValue(v) {
+                if (v === null || v === undefined) return 'NULL';
+                if (typeof v === 'boolean') return v ? 'true' : 'false';
+                if (typeof v === 'object') {
+                    try { return JSON.stringify(v, null, 2); }
+                    catch { return String(v); }
+                }
+                return String(v);
+            }
+            function _esc(s) {
+                return String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+            function _sqlLiteral(v) {
+                if (v === null || v === undefined) return 'NULL';
+                if (v === true) return 'TRUE';
+                if (v === false) return 'FALSE';
+                if (typeof v === 'number') return String(v);
+                if (typeof v === 'object') return "'" + JSON.stringify(v).replace(/'/g, "''") + "'";
+                return "'" + String(v).replace(/'/g, "''") + "'";
+            }
+
+            function _render() {
+                const drawer = document.getElementById('row-detail');
+                const meta = document.getElementById('row-detail-meta');
+                const kv = document.getElementById('row-detail-kv');
+                const editBtn = document.getElementById('row-detail-edit-btn');
+                if (!_state) return;
+
+                meta.textContent = `Row ${_state.rowIndex + 1} of ${_state.totalRows}` +
+                    (_state.table ? ` · ${_state.table}` : '');
+
+                const parts = [];
+                _state.columns.forEach((col, i) => {
+                    const value = _state.row[i];
+                    const cls = _classifyValue(value);
+                    parts.push(`<div class="k">${_esc(col)}</div>`);
+                    parts.push(`<div class="v ${cls}">${_esc(_formatValue(value))}</div>`);
+                });
+                kv.innerHTML = parts.join('');
+
+                // Edit only makes sense when we know the source table.
+                editBtn.disabled = !_state.table;
+                editBtn.title = _state.table
+                    ? 'Open as editable UPDATE in a new tab'
+                    : 'Edit needs a single-table query — JOINs and subqueries can\'t round-trip';
+
+                drawer.classList.add('open');
+                drawer.setAttribute('aria-hidden', 'false');
+                if (window.lucide) lucide.createIcons();
+            }
+
+            window.tuskRowDetail = {
+                open(payload) {
+                    _state = Object.assign(
+                        { columns: [], row: [], rowIndex: 0, totalRows: 0, table: null },
+                        payload || {}
+                    );
+                    _render();
+                },
+                close() {
+                    const drawer = document.getElementById('row-detail');
+                    if (!drawer) return;
+                    drawer.classList.remove('open');
+                    drawer.setAttribute('aria-hidden', 'true');
+                    _state = null;
+                },
+                copyJSON() {
+                    if (!_state) return;
+                    const obj = {};
+                    _state.columns.forEach((c, i) => { obj[c] = _state.row[i]; });
+                    const text = JSON.stringify(obj, null, 2);
+                    navigator.clipboard.writeText(text)
+                        .then(() => showToast('Row copied as JSON', 'success'))
+                        .catch(() => showToast('Could not copy to clipboard', 'error'));
+                },
+                copyINSERT() {
+                    if (!_state) return;
+                    const table = _state.table || 'target_table';
+                    const cols = _state.columns.map(c => `"${c}"`).join(', ');
+                    const vals = _state.row.map(_sqlLiteral).join(', ');
+                    const stmt = `INSERT INTO ${table} (${cols}) VALUES (${vals});`;
+                    navigator.clipboard.writeText(stmt)
+                        .then(() => showToast('INSERT copied to clipboard', 'success'))
+                        .catch(() => showToast('Could not copy to clipboard', 'error'));
+                },
+                edit() {
+                    if (!_state || !_state.table) return;
+                    // Build an UPDATE skeleton. The first column is assumed to be
+                    // the primary key for the WHERE clause; the user adjusts.
+                    const table = _state.table;
+                    const pkCol = _state.columns[0];
+                    const pkVal = _sqlLiteral(_state.row[0]);
+                    const setClauses = _state.columns
+                        .slice(1)
+                        .map((c, i) => `  "${c}" = ${_sqlLiteral(_state.row[i + 1])}`)
+                        .join(',\n');
+                    const sql = `UPDATE ${table} SET\n${setClauses}\nWHERE "${pkCol}" = ${pkVal};`;
+
+                    if (typeof window.createTab === 'function') {
+                        window.createTab(`Edit row ${_state.rowIndex + 1}`, sql);
+                        this.close();
+                    } else {
+                        // Fallback: copy to clipboard
+                        navigator.clipboard.writeText(sql)
+                            .then(() => showToast('UPDATE copied to clipboard', 'success'))
+                            .catch(() => showToast('Could not copy to clipboard', 'error'));
+                    }
+                },
+            };
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const drawer = document.getElementById('row-detail');
+                    if (drawer && drawer.classList.contains('open')) {
+                        e.preventDefault();
+                        window.tuskRowDetail.close();
+                    }
+                }
+            });
+        })();
 
         // ─── Confirmation / Prompt dialogs ───────────────────────
         // Promise-based replacements for native confirm() / prompt()

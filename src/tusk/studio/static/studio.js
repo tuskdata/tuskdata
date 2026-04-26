@@ -470,7 +470,10 @@ function renderResults() {
                             const rowKey = _rowKey(row);
                             const checked = selectedRows.has(rowKey);
                             return `
-                            <tr class="${i % 2 === 0 ? 'bg-[#0d1117]/30' : ''} hover:bg-[#21262d]/60 ${checked ? '!bg-indigo-900/30' : ''}">
+                            <tr class="${i % 2 === 0 ? 'bg-[#0d1117]/30' : ''} hover:bg-[#21262d]/60 ${checked ? '!bg-indigo-900/30' : ''}"
+                                data-row-index="${i}"
+                                onclick="openRowDetail(${i}, event)"
+                                style="cursor: pointer;">
                                 <td class="px-2 py-1 border-b border-[#30363d]/40 sticky left-0 bg-[#0d1117]">
                                     <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
                                 </td>
@@ -530,6 +533,63 @@ window.toggleRow = function(rowKey, ev) {
     if (selectedRows.has(rowKey)) selectedRows.delete(rowKey);
     else selectedRows.add(rowKey);
     renderResults();
+}
+
+// Heuristic: extract single source table from a SELECT query so the
+// row-detail drawer can offer Edit / Copy-as-INSERT against the right
+// target. Returns null for joins, subqueries, or anything we can't
+// confidently parse.
+function _detectSourceTable(sql) {
+    if (!sql) return null;
+    const stripped = sql.replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim();
+    if (!/^SELECT\b/i.test(stripped)) return null;
+    if (/\bJOIN\b/i.test(stripped)) return null;
+    if (/\bUNION\b/i.test(stripped)) return null;
+    const m = stripped.match(/\bFROM\s+([a-zA-Z_][\w\.]*|"[^"]+"(\.[^"\s]+)?)/i);
+    if (!m) return null;
+    const candidate = m[1];
+    // Skip subqueries: FROM (SELECT...) AS x
+    if (candidate.startsWith('(')) return null;
+    return candidate;
+}
+
+window.openRowDetail = function(pageRowIndex, ev) {
+    if (ev && ev.target) {
+        // Don't open the drawer when clicking the row's checkbox (that has
+        // its own onclick that already stops propagation, but be defensive).
+        const tag = ev.target.tagName;
+        if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'A') return;
+    }
+    if (!currentResults || !currentResults.columns || !currentResults.rows) return;
+
+    const rows = serverPagination ? currentResults.rows : getProcessedRows()
+        .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    const row = rows[pageRowIndex];
+    if (!row) return;
+
+    const totalRows = serverPagination
+        ? (currentResults.total_count || rows.length)
+        : currentResults.row_count;
+    const absoluteIndex = serverPagination
+        ? ((currentPage - 1) * PAGE_SIZE) + pageRowIndex
+        : ((currentPage - 1) * PAGE_SIZE) + pageRowIndex;
+
+    const sql = (tabs.find(t => t.id === activeTabId) || {}).sql || currentSql;
+
+    // Visual highlight
+    document.querySelectorAll('#results-table tr.row-active').forEach(el => el.classList.remove('row-active'));
+    const tr = document.querySelector(`#results-table tbody tr[data-row-index="${pageRowIndex}"]`);
+    if (tr) tr.classList.add('row-active');
+
+    if (window.tuskRowDetail) {
+        tuskRowDetail.open({
+            columns: currentResults.columns.map(c => c.name),
+            row: row,
+            rowIndex: absoluteIndex,
+            totalRows: totalRows,
+            table: _detectSourceTable(sql),
+        });
+    }
 }
 
 window.toggleAllRows = function(checked) {
