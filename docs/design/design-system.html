@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Tusk · Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fbfaf7;--surface:#ffffff;--surface-2:#f5f3ee;--surface-3:#ecebe3;
+  --border:#e4e1d7;--border-strong:#d6d2c4;
+  --fg:#1a1a17;--fg-2:#3d3c37;--fg-3:#76746a;--fg-4:#a8a59a;
+  --brand:#d4502b;--brand-2:#b73f1d;--brand-soft:#fef0e9;--brand-tint:#fde6dc;
+  --ink:#0f0f0e;
+  --accent-violet:#6f5ad6;--accent-teal:#0d8a72;--accent-amber:#b07700;--accent-rose:#c84064;
+  --green:#1f8a4c;--red:#cc2e3d;
+  --shadow-sm:0 1px 2px rgba(15,15,14,.04),0 1px 1px rgba(15,15,14,.03);
+  --shadow:0 1px 2px rgba(15,15,14,.04),0 4px 12px rgba(15,15,14,.06);
+  --shadow-lg:0 4px 8px rgba(15,15,14,.04),0 12px 32px rgba(15,15,14,.08);
+  --shadow-xl:0 8px 16px rgba(15,15,14,.06),0 24px 64px rgba(15,15,14,.12);
+  --r-sm:6px;--r:8px;--r-lg:12px;--r-xl:16px;--r-2xl:20px;
+  --serif:"Instrument Serif",Georgia,serif;
+}
+html,body{background:var(--bg);color:var(--fg);font-family:"Geist",-apple-system,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
+.serif{font-family:var(--serif);font-weight:400}
+
+/* Layout */
+.ds-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.ds-side{position:sticky;top:0;height:100vh;border-right:1px solid var(--border);padding:24px 16px;overflow:auto;background:var(--bg)}
+.ds-brand{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
+.ds-brand .wm{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.ds-brand .badge{font-size:9.5px;color:var(--brand);background:var(--brand-soft);padding:2px 6px;border-radius:4px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.ds-nav-section{margin-top:14px}
+.ds-nav-label{font-size:10.5px;font-weight:600;color:var(--fg-3);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px}
+.ds-nav a{display:block;padding:6px 10px;font-size:13px;color:var(--fg-2);text-decoration:none;border-radius:6px}
+.ds-nav a:hover{background:var(--surface-2);color:var(--fg)}
+.ds-nav a.on{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
+
+.ds-main{padding:48px 64px;max-width:1180px}
+.ds-hero{padding:24px 0 48px;border-bottom:1px solid var(--border);margin-bottom:48px}
+.ds-h0{font-family:var(--serif);font-size:64px;letter-spacing:-.02em;line-height:1.08;margin-bottom:6px}
+.ds-h0 em{color:var(--brand);font-style:italic}
+.ds-hero p{font-size:17px;color:var(--fg-3);max-width:620px;margin-top:18px;line-height:1.55}
+.ds-version{display:inline-flex;align-items:center;gap:8px;margin-top:18px;font-size:12px;color:var(--fg-3);font-family:"Geist Mono"}
+.ds-version .pill{background:var(--brand-soft);color:var(--brand);padding:2px 8px;border-radius:99px;font-weight:600}
+
+section{margin-bottom:64px}
+.sec-head{margin-bottom:20px}
+.sec-eyebrow{font-size:11px;font-weight:600;color:var(--brand);letter-spacing:.08em;text-transform:uppercase}
+.sec-h{font-family:var(--serif);font-size:36px;letter-spacing:-.01em;margin-top:6px;line-height:1.1}
+.sec-desc{margin-top:8px;color:var(--fg-3);font-size:14.5px;max-width:620px;line-height:1.55}
+.sub-h{font-size:13px;font-weight:600;color:var(--fg);text-transform:uppercase;letter-spacing:.04em;margin:24px 0 12px}
+.sub-h:first-child{margin-top:0}
+
+/* Color swatches */
+.swatch-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.swatch{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.swatch .chip{height:72px;border-bottom:1px solid var(--border)}
+.swatch .meta{padding:8px 10px}
+.swatch .name{font-size:12px;font-weight:500;color:var(--fg)}
+.swatch .hex{font-family:"Geist Mono";font-size:10.5px;color:var(--fg-3);margin-top:2px}
+.swatch .var{font-family:"Geist Mono";font-size:10px;color:var(--fg-4)}
+
+/* Type scale */
+.type-row{display:grid;grid-template-columns:160px 1fr;gap:24px;padding:18px 0;border-bottom:1px solid var(--border);align-items:baseline}
+.type-row:last-child{border-bottom:none}
+.type-meta{font-family:"Geist Mono";font-size:11px;color:var(--fg-3);line-height:1.5}
+.type-meta .nm{color:var(--fg);font-weight:500}
+.type-sample{color:var(--fg)}
+
+/* Spacing */
+.space-row{display:flex;align-items:center;gap:16px;padding:8px 0;font-family:"Geist Mono";font-size:12px}
+.space-bar{height:18px;background:var(--brand);border-radius:3px}
+.space-name{width:60px;color:var(--fg)}
+.space-px{width:60px;color:var(--fg-3)}
+.space-use{color:var(--fg-3);font-family:"Geist"}
+
+/* Radii */
+.radii-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.radii-card{background:var(--surface);border:1px solid var(--border);padding:14px;text-align:center}
+.radii-shape{width:60px;height:60px;background:var(--brand-soft);border:2px solid var(--brand);margin:0 auto 10px}
+.radii-name{font-size:12px;font-weight:500;color:var(--fg)}
+.radii-val{font-family:"Geist Mono";font-size:10.5px;color:var(--fg-3);margin-top:2px}
+
+/* Shadow showcase */
+.shadow-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.shadow-card{background:var(--surface);border-radius:var(--r-lg);padding:24px;text-align:center;border:1px solid var(--border)}
+.shadow-card .sn{font-size:13px;font-weight:500;margin-bottom:4px}
+.shadow-card .sv{font-family:"Geist Mono";font-size:11px;color:var(--fg-3)}
+
+/* Component samples */
+.demo{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px}
+.demo + .demo{margin-top:14px}
+.demo-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.demo-name{font-size:13px;font-weight:600;color:var(--fg)}
+.demo-tag{font-family:"Geist Mono";font-size:10.5px;color:var(--fg-3);padding:2px 6px;background:var(--surface-2);border-radius:4px}
+.demo-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.demo-row + .demo-row{margin-top:14px}
+.demo-spec{font-size:11.5px;color:var(--fg-3);font-family:"Geist Mono";margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)}
+
+/* Buttons (sourced from product) */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:13px;font-weight:500;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface);color:var(--fg);cursor:pointer;font-family:inherit}
+.btn:hover{background:var(--surface-2);border-color:var(--fg-4)}
+.btn-primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn-brand{background:var(--brand);color:white;border-color:var(--brand)}
+.btn-brand:hover{background:var(--brand-2);border-color:var(--brand-2)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn svg{width:14px;height:14px}
+.btn-sm{padding:4px 8px;font-size:12px}
+.btn-sm svg{width:12px;height:12px}
+.btn-lg{padding:10px 16px;font-size:14px}
+.btn-lg svg{width:16px;height:16px}
+.btn-danger{background:var(--red);color:white;border-color:var(--red)}
+
+/* Chips */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:500;font-family:"Geist Mono"}
+.chip-green{background:rgba(31,138,76,.10);color:var(--green)}
+.chip-amber{background:rgba(176,119,0,.10);color:var(--accent-amber)}
+.chip-violet{background:rgba(111,90,214,.10);color:var(--accent-violet)}
+.chip-brand{background:var(--brand-soft);color:var(--brand)}
+.chip-rose{background:rgba(200,64,100,.10);color:var(--accent-rose)}
+.chip-teal{background:rgba(13,138,114,.10);color:var(--accent-teal)}
+.chip-neutral{background:var(--surface-2);color:var(--fg-3)}
+.chip-red{background:rgba(204,46,61,.10);color:var(--red)}
+
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.dot.green{background:var(--green);box-shadow:0 0 0 3px rgba(31,138,76,.18)}
+.dot.amber{background:var(--accent-amber)}
+.dot.red{background:var(--red)}
+
+/* Inputs */
+.input{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border-strong);border-radius:7px;font-size:13px;width:280px}
+.input:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.input input{flex:1;background:transparent;border:none;outline:none;font-family:inherit;color:var(--fg);font-size:13px}
+.input input::placeholder{color:var(--fg-4)}
+.input svg{width:14px;height:14px;color:var(--fg-3)}
+
+.toggle{position:relative;width:32px;height:18px;background:var(--surface-3);border-radius:99px;cursor:pointer;transition:.15s}
+.toggle::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;background:var(--surface);border-radius:50%;box-shadow:var(--shadow-sm);transition:.15s}
+.toggle.on{background:var(--brand)}
+.toggle.on::after{left:16px}
+
+.kbd{font-family:"Geist Mono";font-size:11px;padding:1px 5px;background:var(--surface);border:1px solid var(--border-strong);border-radius:4px;color:var(--fg-2);box-shadow:0 1px 0 var(--border-strong)}
+
+/* Card */
+.sample-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-sm);padding:18px;width:280px}
+.sample-card .lbl{font-size:11.5px;color:var(--fg-3);letter-spacing:.04em;text-transform:uppercase;font-weight:500}
+.sample-card .v{font-family:var(--serif);font-size:38px;line-height:1.1;margin-top:6px}
+.sample-card .d{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;color:var(--green)}
+
+/* Avatar */
+.av{width:32px;height:32px;border-radius:50%;color:white;display:grid;place-items:center;font-size:11px;font-weight:600}
+.av.a1{background:linear-gradient(135deg,var(--brand),var(--accent-violet))}
+.av.a2{background:linear-gradient(135deg,var(--accent-teal),var(--accent-violet))}
+.av.a3{background:linear-gradient(135deg,var(--accent-amber),var(--brand))}
+.av.a4{background:linear-gradient(135deg,var(--accent-rose),var(--accent-amber))}
+.av.s-sm{width:24px;height:24px;font-size:9px}
+.av.s-lg{width:48px;height:48px;font-size:14px}
+
+/* Sidebar item */
+.side-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;font-size:13px;color:var(--fg-2);width:200px}
+.side-item:hover{background:var(--surface-2)}
+.side-item.on{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow-sm)}
+.side-item.on svg{color:var(--brand)}
+.side-item svg{width:14px;height:14px;color:var(--fg-3)}
+.side-item .count{margin-left:auto;font-size:11px;color:var(--fg-4);font-family:"Geist Mono"}
+
+/* Tabs */
+.nav-tabs{display:inline-flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:8px}
+.nav-tab{padding:6px 12px;font-size:13px;font-weight:500;color:var(--fg-3);border-radius:6px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit}
+.nav-tab.on{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-sm)}
+.nav-tab svg{width:14px;height:14px}
+
+/* Iconography sample */
+.icon-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+.icon-cell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);font-family:"Geist Mono";font-size:10px;color:var(--fg-3)}
+.icon-cell svg{width:18px;height:18px;color:var(--fg-2);stroke-width:1.75}
+
+/* Tone (chips/states) */
+.tone-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.tone{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.tone-h{font-size:11.5px;color:var(--fg-3);letter-spacing:.04em;text-transform:uppercase;font-weight:600;margin-bottom:10px}
+
+/* Code blocks */
+pre.tokens{background:var(--ink);color:#e8e3d4;font-family:"Geist Mono";font-size:12px;padding:18px;border-radius:var(--r-lg);overflow:auto;line-height:1.65;margin-top:14px}
+pre.tokens .k{color:#f7b572}.k2{color:#a394e8}.s{color:#8edcb1}.c{color:#76746a}
+
+/* Anatomy / patterns */
+.anatomy{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:0;overflow:hidden}
+.anatomy-row{display:grid;grid-template-columns:1fr;border-bottom:1px solid var(--border)}
+.anatomy-row:last-child{border-bottom:none}
+
+/* Logo */
+.logo-mark{display:grid;place-items:center}
+.logo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.logo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px 14px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.logo-card .lbl{font-family:"Geist Mono";font-size:10.5px;color:var(--fg-3)}
+.logo-card.dark{background:var(--ink)}
+.logo-card.dark .lbl{color:#a8a59a}
+
+/* Voice */
+.voice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.voice{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px}
+.voice.do{border-left:3px solid var(--green)}
+.voice.dont{border-left:3px solid var(--red)}
+.voice .lbl{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.voice.do .lbl{color:var(--green)}
+.voice.dont .lbl{color:var(--red)}
+.voice ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.voice li{font-size:13px;color:var(--fg-2);padding-left:18px;position:relative;line-height:1.45}
+.voice.do li::before{content:"";position:absolute;left:0;top:7px;width:8px;height:8px;border-radius:50%;background:var(--green)}
+.voice.dont li::before{content:"";position:absolute;left:2px;top:5px;width:10px;height:2px;background:var(--red);border-radius:1px}
+
+/* Dark mode card */
+.dark-card{background:#0e0d0a;color:#f0ece2;padding:24px;border-radius:var(--r-lg);border:1px solid #2a2722}
+</style>
+</head>
+<body>
+<div class="ds-shell">
+  <aside class="ds-side">
+    <div class="ds-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19" stroke="#d4502b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14.5" cy="8.5" r="1.2" fill="#1a1a17"/>
+      </svg>
+      <span class="wm">Tusk</span>
+      <span class="badge">DS v0.3</span>
+    </div>
+    <nav class="ds-nav">
+      <div class="ds-nav-section">
+        <div class="ds-nav-label">Foundations</div>
+        <a href="#principles">Principles</a>
+        <a href="#brand">Brand & logo</a>
+        <a href="#color">Color</a>
+        <a href="#type">Typography</a>
+        <a href="#spacing">Spacing</a>
+        <a href="#radii">Radii</a>
+        <a href="#shadows">Elevation</a>
+        <a href="#icons">Iconography</a>
+        <a href="#motion">Motion</a>
+      </div>
+      <div class="ds-nav-section">
+        <div class="ds-nav-label">Components</div>
+        <a href="#buttons">Buttons</a>
+        <a href="#chips">Chips & status</a>
+        <a href="#inputs">Inputs</a>
+        <a href="#nav">Navigation</a>
+        <a href="#cards">Cards</a>
+        <a href="#tables">Tables</a>
+        <a href="#avatars">Avatars</a>
+        <a href="#kbd">Keyboard</a>
+      </div>
+      <div class="ds-nav-section">
+        <div class="ds-nav-label">Patterns</div>
+        <a href="#voice">Voice & tone</a>
+        <a href="#tokens">Tokens (CSS)</a>
+        <a href="#dark">Dark mode</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="ds-main">
+
+    <header class="ds-hero">
+      <div class="ds-h0">The <em>Tusk</em> design system</div>
+      <p>A warm, editorial, calm system for a serious data product. Light-first. Built around Geist (UI), Geist Mono (data), and Instrument Serif (moments). Every value here is what ships in v3.</p>
+      <div class="ds-version">
+        <span class="pill">v0.3</span>
+        <span>Last updated · Nov 2025</span>
+        <span>·</span>
+        <span>Owned by @joel</span>
+      </div>
+    </header>
+
+    <!-- ============ PRINCIPLES ============ -->
+    <section id="principles">
+      <div class="sec-head">
+        <div class="sec-eyebrow">01 · Foundations</div>
+        <h2 class="sec-h">Principles</h2>
+        <p class="sec-desc">Five rules that should resolve 90% of design questions before you ask them.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+        <div class="demo"><div class="demo-name" style="font-family:var(--serif);font-size:22px;font-weight:400">1. Calm over clever.</div><p style="color:var(--fg-3);margin-top:8px;font-size:13.5px;line-height:1.55">Density matters but never overwhelms. Whitespace is structural. If a screen feels noisy, kill chrome before adding more.</p></div>
+        <div class="demo"><div class="demo-name" style="font-family:var(--serif);font-size:22px;font-weight:400">2. Data is the hero.</div><p style="color:var(--fg-3);margin-top:8px;font-size:13.5px;line-height:1.55">Tables, queries, and numbers get our best typography (Geist Mono). UI chrome stays small and uncolored.</p></div>
+        <div class="demo"><div class="demo-name" style="font-family:var(--serif);font-size:22px;font-weight:400">3. Warm, not corporate.</div><p style="color:var(--fg-3);margin-top:8px;font-size:13.5px;line-height:1.55">Off-white not pure white. Coral, not blue. Serif accents to break SaaS-monotony. We are a tool with personality.</p></div>
+        <div class="demo"><div class="demo-name" style="font-family:var(--serif);font-size:22px;font-weight:400">4. Color = meaning.</div><p style="color:var(--fg-3);margin-top:8px;font-size:13.5px;line-height:1.55">Brand coral signals action. Semantic accents (green, amber, rose) signal state. Never decorative gradients.</p></div>
+        <div class="demo" style="grid-column:span 2"><div class="demo-name" style="font-family:var(--serif);font-size:22px;font-weight:400">5. Keyboard-first, mouse-fluent.</div><p style="color:var(--fg-3);margin-top:8px;font-size:13.5px;line-height:1.55">Every action has a shortcut. <span class="kbd">⌘K</span> opens the world. Hover states are bonuses, not requirements.</p></div>
+      </div>
+    </section>
+
+    <!-- ============ BRAND ============ -->
+    <section id="brand">
+      <div class="sec-head">
+        <div class="sec-eyebrow">02</div>
+        <h2 class="sec-h">Brand & logo</h2>
+        <p class="sec-desc">A stylized mammoth tusk in coral with a small ink dot — direction, weight, a single mark of decision.</p>
+      </div>
+      <div class="logo-grid">
+        <div class="logo-card">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+            <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19" stroke="#d4502b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="14.5" cy="8.5" r="1.2" fill="#1a1a17"/>
+          </svg>
+          <span class="lbl">Mark · 64px</span>
+        </div>
+        <div class="logo-card">
+          <div style="display:flex;align-items:center;gap:10px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19" stroke="#d4502b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="14.5" cy="8.5" r="1.2" fill="#1a1a17"/>
+            </svg>
+            <span style="font-size:24px;font-weight:600;letter-spacing:-.02em">Tusk</span>
+          </div>
+          <span class="lbl">Lockup · default</span>
+        </div>
+        <div class="logo-card dark">
+          <div style="display:flex;align-items:center;gap:10px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19" stroke="#ff7849" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="14.5" cy="8.5" r="1.2" fill="#f0ece2"/>
+            </svg>
+            <span style="font-size:24px;font-weight:600;letter-spacing:-.02em;color:#f0ece2">Tusk</span>
+          </div>
+          <span class="lbl">Lockup · dark</span>
+        </div>
+        <div class="logo-card">
+          <div style="font-family:var(--serif);font-size:36px;letter-spacing:-.02em">Tusk</div>
+          <span class="lbl">Wordmark · serif (editorial use only)</span>
+        </div>
+      </div>
+      <div class="demo-spec" style="margin-top:18px">Clear space ≥ ½ × cap-height. Min size: mark 16px, lockup 80px wide. Don't recolor, rotate, or stretch the mark.</div>
+    </section>
+
+    <!-- ============ COLOR ============ -->
+    <section id="color">
+      <div class="sec-head">
+        <div class="sec-eyebrow">03</div>
+        <h2 class="sec-h">Color</h2>
+        <p class="sec-desc">A warm neutral foundation, one signature brand color, and four semantic accents. That's it.</p>
+      </div>
+
+      <h3 class="sub-h">Brand · coral</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:#fef0e9"></div><div class="meta"><div class="name">Brand soft</div><div class="hex">#FEF0E9</div><div class="var">--brand-soft</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#fde6dc"></div><div class="meta"><div class="name">Brand tint</div><div class="hex">#FDE6DC</div><div class="var">--brand-tint</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#d4502b"></div><div class="meta"><div class="name">Brand</div><div class="hex">#D4502B</div><div class="var">--brand</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#b73f1d"></div><div class="meta"><div class="name">Brand 2</div><div class="hex">#B73F1D</div><div class="var">--brand-2</div></div></div>
+      </div>
+
+      <h3 class="sub-h">Neutrals · warm off-white</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:#fbfaf7"></div><div class="meta"><div class="name">Bg</div><div class="hex">#FBFAF7</div><div class="var">--bg</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#ffffff;border-bottom:1px solid #e4e1d7"></div><div class="meta"><div class="name">Surface</div><div class="hex">#FFFFFF</div><div class="var">--surface</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#f5f3ee"></div><div class="meta"><div class="name">Surface 2</div><div class="hex">#F5F3EE</div><div class="var">--surface-2</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#ecebe3"></div><div class="meta"><div class="name">Surface 3</div><div class="hex">#ECEBE3</div><div class="var">--surface-3</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#e4e1d7"></div><div class="meta"><div class="name">Border</div><div class="hex">#E4E1D7</div><div class="var">--border</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#d6d2c4"></div><div class="meta"><div class="name">Border strong</div><div class="hex">#D6D2C4</div><div class="var">--border-strong</div></div></div>
+      </div>
+
+      <h3 class="sub-h">Foreground · warm ink</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:#0f0f0e"></div><div class="meta"><div class="name">Ink</div><div class="hex">#0F0F0E</div><div class="var">--ink</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#1a1a17"></div><div class="meta"><div class="name">Fg</div><div class="hex">#1A1A17</div><div class="var">--fg</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#3d3c37"></div><div class="meta"><div class="name">Fg 2</div><div class="hex">#3D3C37</div><div class="var">--fg-2</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#76746a"></div><div class="meta"><div class="name">Fg 3</div><div class="hex">#76746A</div><div class="var">--fg-3</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#a8a59a"></div><div class="meta"><div class="name">Fg 4</div><div class="hex">#A8A59A</div><div class="var">--fg-4</div></div></div>
+      </div>
+
+      <h3 class="sub-h">Semantic accents</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:#1f8a4c"></div><div class="meta"><div class="name">Green · success</div><div class="hex">#1F8A4C</div><div class="var">--green</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#b07700"></div><div class="meta"><div class="name">Amber · warn</div><div class="hex">#B07700</div><div class="var">--accent-amber</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#cc2e3d"></div><div class="meta"><div class="name">Red · destructive</div><div class="hex">#CC2E3D</div><div class="var">--red</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#c84064"></div><div class="meta"><div class="name">Rose · PII / sensitive</div><div class="hex">#C84064</div><div class="var">--accent-rose</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#6f5ad6"></div><div class="meta"><div class="name">Violet · query/ai</div><div class="hex">#6F5AD6</div><div class="var">--accent-violet</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#0d8a72"></div><div class="meta"><div class="name">Teal · geo/source</div><div class="hex">#0D8A72</div><div class="var">--accent-teal</div></div></div>
+      </div>
+
+      <div class="tone-grid" style="margin-top:24px">
+        <div class="tone"><div class="tone-h">Use brand for</div><div style="color:var(--fg-2);font-size:13px;line-height:1.6">Primary CTAs, run query, currently-selected nav, AI sparkle, key metric values in moments.</div></div>
+        <div class="tone"><div class="tone-h">Use violet for</div><div style="color:var(--fg-2);font-size:13px;line-height:1.6">SQL keywords, query state, AI copilot accent, schemas in chips.</div></div>
+        <div class="tone"><div class="tone-h">Use teal for</div><div style="color:var(--fg-2);font-size:13px;line-height:1.6">Geo features, file/parquet sources, lineage source nodes.</div></div>
+        <div class="tone"><div class="tone-h">Use rose for</div><div style="color:var(--fg-2);font-size:13px;line-height:1.6">PII tagging, locks, sensitive column markers — never decorative.</div></div>
+      </div>
+    </section>
+
+    <!-- ============ TYPOGRAPHY ============ -->
+    <section id="type">
+      <div class="sec-head">
+        <div class="sec-eyebrow">04</div>
+        <h2 class="sec-h">Typography</h2>
+        <p class="sec-desc">Three families with strict roles. Geist for UI, Geist Mono for data, Instrument Serif for editorial moments only.</p>
+      </div>
+
+      <h3 class="sub-h">Display · Instrument Serif</h3>
+      <div class="demo">
+        <div class="type-row"><div class="type-meta"><div class="nm">Display XL</div>84/82 · -3% tracking<br>Hero h1, marketing</div><div class="type-sample serif" style="font-size:84px;line-height:.97;letter-spacing:-.03em">The data platform that fits.</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Display L</div>48/52 · -2% tracking<br>Section h2</div><div class="type-sample serif" style="font-size:48px;letter-spacing:-.02em;line-height:1.08">Bring your data home.</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Display M</div>38/42 · -1% tracking<br>Page titles, greetings</div><div class="type-sample serif" style="font-size:38px;letter-spacing:-.01em">Good morning, <em style="color:var(--brand)">Joel</em>.</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Display S</div>24/30<br>Card emphasis, KPI numbers</div><div class="type-sample serif" style="font-size:24px;letter-spacing:-.01em">$2.4M revenue</div></div>
+      </div>
+
+      <h3 class="sub-h">UI · Geist Sans</h3>
+      <div class="demo">
+        <div class="type-row"><div class="type-meta"><div class="nm">Body L</div>15/24 · 400/500<br>Marketing body</div><div class="type-sample" style="font-size:15px;line-height:1.6;color:var(--fg-2)">Tusk is a single tool for querying, transforming and admining the data you already have. No SaaS lock-in.</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Body</div>14/22 · 400/500<br>App default</div><div class="type-sample">Connect a Postgres or drop a parquet file to get started. Tusk handles the rest.</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Body S</div>13/20 · 500<br>Buttons, sidebar</div><div class="type-sample" style="font-size:13px;font-weight:500">Run query · Schedule · Export</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Caption</div>12/18 · 500<br>Metadata, helper text</div><div class="type-sample" style="font-size:12px;color:var(--fg-3)">Last run 2h ago · 47 rows · 0.023s</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Eyebrow</div>11/16 · 600 · uppercase · 0.06em<br>Section labels</div><div class="type-sample" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3)">Connections</div></div>
+      </div>
+
+      <h3 class="sub-h">Data · Geist Mono</h3>
+      <div class="demo">
+        <div class="type-row"><div class="type-meta"><div class="nm">Code</div>13.5/24<br>SQL editor, code blocks</div><div class="type-sample mono" style="font-size:13.5px;line-height:1.7"><span style="color:var(--accent-violet)">SELECT</span> p.id, p.title <span style="color:var(--accent-violet)">FROM</span> <span style="color:var(--accent-teal)">properties</span> p</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Table cell</div>12.5/18<br>Result rows, schema cols</div><div class="type-sample mono" style="font-size:12.5px">$145,000.00 · POINT(-69.93 18.47) · 8a4f-3922-bc91</div></div>
+        <div class="type-row"><div class="type-meta"><div class="nm">Meta</div>11/16<br>Status bars, paths, IDs</div><div class="type-sample mono" style="font-size:11px;color:var(--fg-3)">~/.tusk/local.duckdb · 432 MB · in-process</div></div>
+      </div>
+      <div class="demo-spec">Never use serif for body or buttons. Never use mono for headings. Brand coral italic on serif (em) is the one approved expressive flourish.</div>
+    </section>
+
+    <!-- ============ SPACING ============ -->
+    <section id="spacing">
+      <div class="sec-head">
+        <div class="sec-eyebrow">05</div>
+        <h2 class="sec-h">Spacing</h2>
+        <p class="sec-desc">A 4px base scale. Use 8/12/16/24 for 90% of layouts.</p>
+      </div>
+      <div class="demo">
+        <div class="space-row"><span class="space-name">space-1</span><span class="space-px">4px</span><span class="space-bar" style="width:4px"></span><span class="space-use">Inline icon gaps</span></div>
+        <div class="space-row"><span class="space-name">space-2</span><span class="space-px">8px</span><span class="space-bar" style="width:8px"></span><span class="space-use">Tight clusters, chip padding</span></div>
+        <div class="space-row"><span class="space-name">space-3</span><span class="space-px">12px</span><span class="space-bar" style="width:12px"></span><span class="space-use">Card internal, list items</span></div>
+        <div class="space-row"><span class="space-name">space-4</span><span class="space-px">16px</span><span class="space-bar" style="width:16px"></span><span class="space-use">Card padding, section gaps</span></div>
+        <div class="space-row"><span class="space-name">space-5</span><span class="space-px">20px</span><span class="space-bar" style="width:20px"></span><span class="space-use">Card padding (large)</span></div>
+        <div class="space-row"><span class="space-name">space-6</span><span class="space-px">24px</span><span class="space-bar" style="width:24px"></span><span class="space-use">Page gutters (mobile)</span></div>
+        <div class="space-row"><span class="space-name">space-8</span><span class="space-px">32px</span><span class="space-bar" style="width:32px"></span><span class="space-use">Page gutters (desktop), section spacing</span></div>
+        <div class="space-row"><span class="space-name">space-10</span><span class="space-px">40px</span><span class="space-bar" style="width:40px"></span><span class="space-use">Hero padding, between-section</span></div>
+        <div class="space-row"><span class="space-name">space-16</span><span class="space-px">64px</span><span class="space-bar" style="width:64px"></span><span class="space-use">Major section breaks (marketing)</span></div>
+      </div>
+    </section>
+
+    <!-- ============ RADII ============ -->
+    <section id="radii">
+      <div class="sec-head">
+        <div class="sec-eyebrow">06</div>
+        <h2 class="sec-h">Radii</h2>
+        <p class="sec-desc">Soft edges. Never sharp. Default to 8px; only go larger for hero/marketing surfaces.</p>
+      </div>
+      <div class="radii-grid">
+        <div class="radii-card"><div class="radii-shape" style="border-radius:4px"></div><div class="radii-name">Tight</div><div class="radii-val">4px · chip, kbd</div></div>
+        <div class="radii-card"><div class="radii-shape" style="border-radius:6px"></div><div class="radii-name">--r-sm</div><div class="radii-val">6px · sidebar item</div></div>
+        <div class="radii-card"><div class="radii-shape" style="border-radius:8px"></div><div class="radii-name">--r</div><div class="radii-val">8px · default</div></div>
+        <div class="radii-card"><div class="radii-shape" style="border-radius:12px"></div><div class="radii-name">--r-lg</div><div class="radii-val">12px · cards</div></div>
+        <div class="radii-card"><div class="radii-shape" style="border-radius:16px"></div><div class="radii-name">--r-xl</div><div class="radii-val">16px · feature card</div></div>
+        <div class="radii-card"><div class="radii-shape" style="border-radius:20px"></div><div class="radii-name">--r-2xl</div><div class="radii-val">20px · product frame</div></div>
+      </div>
+    </section>
+
+    <!-- ============ SHADOWS ============ -->
+    <section id="shadows">
+      <div class="sec-head">
+        <div class="sec-eyebrow">07</div>
+        <h2 class="sec-h">Elevation</h2>
+        <p class="sec-desc">Two-layer warm shadows on light. Use sparingly — borders carry most of the weight.</p>
+      </div>
+      <div class="shadow-grid">
+        <div class="shadow-card" style="box-shadow:var(--shadow-sm)"><div class="sn">Shadow sm</div><div class="sv">--shadow-sm · selected items, hover</div></div>
+        <div class="shadow-card" style="box-shadow:var(--shadow)"><div class="sn">Shadow</div><div class="sv">--shadow · cards, dropdowns</div></div>
+        <div class="shadow-card" style="box-shadow:var(--shadow-lg)"><div class="sn">Shadow lg</div><div class="sv">--shadow-lg · popovers, modals</div></div>
+        <div class="shadow-card" style="box-shadow:var(--shadow-xl)"><div class="sn">Shadow xl</div><div class="sv">--shadow-xl · marketing hero frame</div></div>
+      </div>
+    </section>
+
+    <!-- ============ ICONS ============ -->
+    <section id="icons">
+      <div class="sec-head">
+        <div class="sec-eyebrow">08</div>
+        <h2 class="sec-h">Iconography</h2>
+        <p class="sec-desc">Lucide icons, stroke-width 1.75, sized 12/14/16/18px. No mixing icon sets. No filled icons except status dots.</p>
+      </div>
+      <div class="icon-grid">
+        <div class="icon-cell"><i data-lucide="terminal-square"></i><span>terminal</span></div>
+        <div class="icon-cell"><i data-lucide="database"></i><span>database</span></div>
+        <div class="icon-cell"><i data-lucide="git-branch"></i><span>git-branch</span></div>
+        <div class="icon-cell"><i data-lucide="git-merge"></i><span>git-merge</span></div>
+        <div class="icon-cell"><i data-lucide="play"></i><span>play</span></div>
+        <div class="icon-cell"><i data-lucide="sparkles"></i><span>sparkles</span></div>
+        <div class="icon-cell"><i data-lucide="filter"></i><span>filter</span></div>
+        <div class="icon-cell"><i data-lucide="map"></i><span>map</span></div>
+        <div class="icon-cell"><i data-lucide="server"></i><span>server</span></div>
+        <div class="icon-cell"><i data-lucide="shield"></i><span>shield</span></div>
+        <div class="icon-cell"><i data-lucide="key"></i><span>key</span></div>
+        <div class="icon-cell"><i data-lucide="clock"></i><span>clock</span></div>
+        <div class="icon-cell"><i data-lucide="activity"></i><span>activity</span></div>
+        <div class="icon-cell"><i data-lucide="zap"></i><span>zap</span></div>
+        <div class="icon-cell"><i data-lucide="folder"></i><span>folder</span></div>
+        <div class="icon-cell"><i data-lucide="file"></i><span>file</span></div>
+      </div>
+      <div class="demo-spec">Color icons only when paired with brand/semantic meaning (status dots, brand sparkle, geo teal). Default icon color is <code>--fg-3</code>.</div>
+    </section>
+
+    <!-- ============ MOTION ============ -->
+    <section id="motion">
+      <div class="sec-head">
+        <div class="sec-eyebrow">09</div>
+        <h2 class="sec-h">Motion</h2>
+        <p class="sec-desc">Short, calm, purposeful. Most transitions are 120–150ms. Never animate more than opacity, transform, and color.</p>
+      </div>
+      <div class="demo">
+        <div class="space-row"><span class="space-name mono">120ms</span><span class="space-use">Hover state, sidebar items, chip color shift</span></div>
+        <div class="space-row"><span class="space-name mono">150ms</span><span class="space-use">Button press, tab switch, panel open</span></div>
+        <div class="space-row"><span class="space-name mono">220ms</span><span class="space-use">Modal/drawer entrance, command palette</span></div>
+        <div class="space-row"><span class="space-name mono">2s loop</span><span class="space-use">Status dot pulse, "running" indicator</span></div>
+        <div class="demo-spec">Easing: <code>cubic-bezier(.2,.8,.2,1)</code> for entrances · linear for indicators · ease-out for exits.</div>
+      </div>
+    </section>
+
+    <!-- ============ BUTTONS ============ -->
+    <section id="buttons">
+      <div class="sec-head">
+        <div class="sec-eyebrow">10 · Components</div>
+        <h2 class="sec-h">Buttons</h2>
+        <p class="sec-desc">Six tones × three sizes. Brand for primary action on a page. Ink for marketing CTA. Default for secondary.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">Tones</span><span class="demo-tag">.btn .btn-brand .btn-primary .btn-ghost .btn-danger</span></div>
+        <div class="demo-row">
+          <button class="btn btn-brand"><i data-lucide="play"></i>Run query</button>
+          <button class="btn btn-primary"><i data-lucide="arrow-right"></i>Get started</button>
+          <button class="btn"><i data-lucide="download"></i>Export</button>
+          <button class="btn btn-ghost"><i data-lucide="more-horizontal"></i>More</button>
+          <button class="btn btn-danger"><i data-lucide="x-circle"></i>Kill query</button>
+        </div>
+        <div class="demo-row">
+          <button class="btn btn-brand btn-sm"><i data-lucide="play"></i>Run</button>
+          <button class="btn btn-sm">Cancel</button>
+          <button class="btn btn-ghost btn-sm">Skip</button>
+        </div>
+        <div class="demo-row">
+          <button class="btn btn-brand btn-lg"><i data-lucide="sparkles"></i>Try Tusk free</button>
+          <button class="btn btn-lg">Read the docs</button>
+        </div>
+        <div class="demo-spec">One brand button per surface, max. Pair brand + default ("Run · Cancel"). Ghost for tertiary actions only.</div>
+      </div>
+    </section>
+
+    <!-- ============ CHIPS ============ -->
+    <section id="chips">
+      <div class="sec-head">
+        <div class="sec-eyebrow">11</div>
+        <h2 class="sec-h">Chips & status</h2>
+        <p class="sec-desc">Mono-typed pills carry semantic meaning. Status dots carry liveness.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">Semantic chips</span><span class="demo-tag">.chip .chip-{green|amber|red|brand|violet|teal|rose|neutral}</span></div>
+        <div class="demo-row">
+          <span class="chip chip-green"><i data-lucide="check" style="width:11px;height:11px"></i>connected</span>
+          <span class="chip chip-amber"><i data-lucide="alert-triangle" style="width:11px;height:11px"></i>draining</span>
+          <span class="chip chip-red"><i data-lucide="x-circle" style="width:11px;height:11px"></i>failed</span>
+          <span class="chip chip-brand">primary</span>
+          <span class="chip chip-violet">running</span>
+          <span class="chip chip-teal">geo</span>
+          <span class="chip chip-rose">PII</span>
+          <span class="chip chip-neutral">read-only</span>
+        </div>
+        <div class="demo-row" style="gap:18px">
+          <span style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot green"></span>healthy</span>
+          <span style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot amber"></span>warning</span>
+          <span style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot red"></span>error</span>
+        </div>
+        <div class="demo-spec">Status dots have a faint glow ring on green only (suggests "live"). Never put a chip on every row — they're signals, not labels.</div>
+      </div>
+    </section>
+
+    <!-- ============ INPUTS ============ -->
+    <section id="inputs">
+      <div class="sec-head">
+        <div class="sec-eyebrow">12</div>
+        <h2 class="sec-h">Inputs</h2>
+        <p class="sec-desc">One input shape across the product. Focus ring uses brand-soft.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">Text & search</span></div>
+        <div class="demo-row">
+          <label class="input"><i data-lucide="search"></i><input placeholder="Search tables, queries, members…"></label>
+          <label class="input"><i data-lucide="key"></i><input type="password" value="••••••••••" readonly></label>
+          <label class="input" style="border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)"><i data-lucide="search"></i><input value="rnc_dgii"></label>
+        </div>
+        <div class="demo-row" style="gap:18px;margin-top:18px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="toggle on"></span>Auto-refresh</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="toggle"></span>Stream results</label>
+          <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg-3)">SSL mode <span class="kbd">required</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ NAV ============ -->
+    <section id="nav">
+      <div class="sec-head">
+        <div class="sec-eyebrow">13</div>
+        <h2 class="sec-h">Navigation</h2>
+        <p class="sec-desc">Sidebar sections + module tabs. Both share the same selected-state language: white surface, soft shadow, brand-tinted icon.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">Sidebar item</span></div>
+        <div class="demo-row" style="flex-direction:column;align-items:flex-start;gap:2px">
+          <a class="side-item on"><i data-lucide="terminal-square"></i><span>Studio</span></a>
+          <a class="side-item"><i data-lucide="database"></i><span>Connections</span><span class="count">4</span></a>
+          <a class="side-item"><i data-lucide="folder"></i><span>OSINT data</span><span class="count">1.1G</span></a>
+          <a class="side-item"><i data-lucide="git-branch"></i><span>Pipelines</span></a>
+        </div>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">Module tabs</span><span class="demo-tag">.nav-tabs</span></div>
+        <div class="demo-row">
+          <div class="nav-tabs">
+            <button class="nav-tab on"><i data-lucide="home"></i>Home</button>
+            <button class="nav-tab"><i data-lucide="terminal-square"></i>Studio</button>
+            <button class="nav-tab"><i data-lucide="git-merge"></i>Data</button>
+            <button class="nav-tab"><i data-lucide="database"></i>Admin</button>
+            <button class="nav-tab"><i data-lucide="server"></i>Cluster</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CARDS ============ -->
+    <section id="cards">
+      <div class="sec-head">
+        <div class="sec-eyebrow">14</div>
+        <h2 class="sec-h">Cards</h2>
+        <p class="sec-desc">White surface, 1px border, optional small shadow. Use serif for hero numbers inside cards.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><span class="demo-name">KPI card</span></div>
+        <div class="demo-row">
+          <div class="sample-card">
+            <div class="lbl">Active queries</div>
+            <div class="v" style="color:var(--brand)">2</div>
+            <div class="d"><i data-lucide="trending-up" style="width:12px;height:12px"></i>+1 since last hour</div>
+          </div>
+          <div class="sample-card">
+            <div class="lbl">Cache hit ratio</div>
+            <div class="v" style="color:var(--green)">99.4<span style="font-size:18px;color:var(--fg-3)">%</span></div>
+            <div class="d" style="color:var(--fg-3)"><i data-lucide="minus" style="width:12px;height:12px"></i>steady</div>
+          </div>
+          <div class="sample-card">
+            <div class="lbl">Database size</div>
+            <div class="v">245<span style="font-size:18px;color:var(--fg-3)"> MB</span></div>
+            <div class="d" style="color:var(--accent-amber)"><i data-lucide="trending-up" style="width:12px;height:12px"></i>+2.1% this week</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TABLES ============ -->
+    <section id="tables">
+      <div class="sec-head">
+        <div class="sec-eyebrow">15</div>
+        <h2 class="sec-h">Tables</h2>
+        <p class="sec-desc">Mono-typed cells, type-coded values (numbers amber-right, geo violet, IDs muted, nulls italic). Sticky headers with subtle bg.</p>
+      </div>
+      <div class="demo" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-family:'Geist Mono';font-size:12.5px">
+          <thead>
+            <tr style="background:var(--bg)">
+              <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px">id</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px">title</th>
+              <th style="text-align:right;padding:8px 12px;font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px">price</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px">sector</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:500;color:var(--fg-3);border-bottom:1px solid var(--border);font-size:11.5px">coordinates</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--fg-3)">1842</td><td style="padding:7px 12px;border-bottom:1px solid var(--border)">Apartamento en Piantini</td><td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:right;color:var(--accent-amber)">$145,000</td><td style="padding:7px 12px;border-bottom:1px solid var(--border)">Piantini</td><td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--accent-violet)">POINT(-69.93 18.47)</td></tr>
+            <tr style="background:var(--brand-soft)"><td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--fg-3)">2156</td><td style="padding:7px 12px;border-bottom:1px solid var(--border)">Casa en Naco</td><td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:right;color:var(--accent-amber)">$138,500</td><td style="padding:7px 12px;border-bottom:1px solid var(--border)">Naco</td><td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--accent-violet)">POINT(-69.94 18.46)</td></tr>
+            <tr><td style="padding:7px 12px;color:var(--fg-3)">1567</td><td style="padding:7px 12px"><span style="color:var(--fg-4);font-style:italic;font-family:'Geist'">— null</span></td><td style="padding:7px 12px;text-align:right;color:var(--accent-amber)">$125,000</td><td style="padding:7px 12px">Bella Vista</td><td style="padding:7px 12px;color:var(--accent-violet)">POINT(-69.92 18.45)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="demo-spec" style="margin-top:14px">Row height 30px (compact). Selected row uses <code>--brand-soft</code> bg. Numbers right-aligned and amber. Coordinates and other geo data violet. Nulls italic muted in serif fallback.</div>
+    </section>
+
+    <!-- ============ AVATARS ============ -->
+    <section id="avatars">
+      <div class="sec-head">
+        <div class="sec-eyebrow">16</div>
+        <h2 class="sec-h">Avatars</h2>
+        <p class="sec-desc">Two-stop gradients keyed to user initials. Never grayscale.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-row" style="gap:18px;align-items:center">
+          <div class="av s-sm a1">JD</div>
+          <div class="av a2">MR</div>
+          <div class="av a3">AC</div>
+          <div class="av s-lg a4">SP</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ KBD ============ -->
+    <section id="kbd">
+      <div class="sec-head">
+        <div class="sec-eyebrow">17</div>
+        <h2 class="sec-h">Keyboard</h2>
+        <p class="sec-desc">Every primary action gets a shortcut. Document them inline with <code>&lt;kbd&gt;</code>.</p>
+      </div>
+      <div class="demo">
+        <div class="demo-row" style="gap:24px;flex-direction:column;align-items:flex-start">
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="kbd">⌘</span><span class="kbd">K</span><span style="color:var(--fg-3)">— Command palette</span></div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="kbd">⌘</span><span class="kbd">⏎</span><span style="color:var(--fg-3)">— Run query</span></div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="kbd">⌘</span><span class="kbd">⇧</span><span class="kbd">P</span><span style="color:var(--fg-3)">— New query tab</span></div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="kbd">/</span><span style="color:var(--fg-3)">— Search schema</span></div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="kbd">esc</span><span style="color:var(--fg-3)">— Close panel / cancel</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VOICE ============ -->
+    <section id="voice">
+      <div class="sec-head">
+        <div class="sec-eyebrow">18 · Patterns</div>
+        <h2 class="sec-h">Voice & tone</h2>
+        <p class="sec-desc">Direct, technical, occasionally warm. We talk to engineers like equals.</p>
+      </div>
+      <div class="voice-grid">
+        <div class="voice do">
+          <div class="lbl">Do</div>
+          <ul>
+            <li>"47 rows · 0.023s" — facts, mono, no padding words</li>
+            <li>"Connection refused. Check your SSH tunnel." — point at the cause</li>
+            <li>"This query touches 12.4M rows. Run anyway?" — respect their time</li>
+            <li>"Good morning, Joel." — warmth in the right places</li>
+          </ul>
+        </div>
+        <div class="voice dont">
+          <div class="lbl">Don't</div>
+          <ul>
+            <li>"Oops! Something went wrong 😅" — never cute about errors</li>
+            <li>"Unleash the power of your data!" — no marketing bombast</li>
+            <li>"Please wait while we process your request" — show progress, not apologies</li>
+            <li>"Awesome! Successfully connected." — say "Connected." Move on.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TOKENS ============ -->
+    <section id="tokens">
+      <div class="sec-head">
+        <div class="sec-eyebrow">19</div>
+        <h2 class="sec-h">Tokens · CSS</h2>
+        <p class="sec-desc">Drop-in. Paste this <code>:root</code> at the top of your stylesheet.</p>
+      </div>
+      <pre class="tokens"><span class="c">/* Tusk Design Tokens · v0.3 · light */</span>
+<span class="k">:root</span> {
+  <span class="c">/* Surfaces */</span>
+  <span class="k2">--bg</span>: <span class="s">#fbfaf7</span>;
+  <span class="k2">--surface</span>: <span class="s">#ffffff</span>;
+  <span class="k2">--surface-2</span>: <span class="s">#f5f3ee</span>;
+  <span class="k2">--surface-3</span>: <span class="s">#ecebe3</span>;
+  <span class="k2">--border</span>: <span class="s">#e4e1d7</span>;
+  <span class="k2">--border-strong</span>: <span class="s">#d6d2c4</span>;
+
+  <span class="c">/* Foreground */</span>
+  <span class="k2">--ink</span>: <span class="s">#0f0f0e</span>;
+  <span class="k2">--fg</span>: <span class="s">#1a1a17</span>;
+  <span class="k2">--fg-2</span>: <span class="s">#3d3c37</span>;
+  <span class="k2">--fg-3</span>: <span class="s">#76746a</span>;
+  <span class="k2">--fg-4</span>: <span class="s">#a8a59a</span>;
+
+  <span class="c">/* Brand */</span>
+  <span class="k2">--brand</span>: <span class="s">#d4502b</span>;
+  <span class="k2">--brand-2</span>: <span class="s">#b73f1d</span>;
+  <span class="k2">--brand-soft</span>: <span class="s">#fef0e9</span>;
+  <span class="k2">--brand-tint</span>: <span class="s">#fde6dc</span>;
+
+  <span class="c">/* Semantic */</span>
+  <span class="k2">--green</span>: <span class="s">#1f8a4c</span>;
+  <span class="k2">--red</span>: <span class="s">#cc2e3d</span>;
+  <span class="k2">--accent-violet</span>: <span class="s">#6f5ad6</span>;
+  <span class="k2">--accent-teal</span>: <span class="s">#0d8a72</span>;
+  <span class="k2">--accent-amber</span>: <span class="s">#b07700</span>;
+  <span class="k2">--accent-rose</span>: <span class="s">#c84064</span>;
+
+  <span class="c">/* Radii */</span>
+  <span class="k2">--r-sm</span>: <span class="s">6px</span>;
+  <span class="k2">--r</span>:    <span class="s">8px</span>;
+  <span class="k2">--r-lg</span>: <span class="s">12px</span>;
+  <span class="k2">--r-xl</span>: <span class="s">16px</span>;
+  <span class="k2">--r-2xl</span>:<span class="s">20px</span>;
+
+  <span class="c">/* Type */</span>
+  <span class="k2">--font-sans</span>: <span class="s">"Geist", -apple-system, sans-serif</span>;
+  <span class="k2">--font-mono</span>: <span class="s">"Geist Mono", ui-monospace, monospace</span>;
+  <span class="k2">--font-serif</span>: <span class="s">"Instrument Serif", Georgia, serif</span>;
+
+  <span class="c">/* Shadows */</span>
+  <span class="k2">--shadow-sm</span>: <span class="s">0 1px 2px rgba(15,15,14,.04), 0 1px 1px rgba(15,15,14,.03)</span>;
+  <span class="k2">--shadow</span>:    <span class="s">0 1px 2px rgba(15,15,14,.04), 0 4px 12px rgba(15,15,14,.06)</span>;
+  <span class="k2">--shadow-lg</span>: <span class="s">0 4px 8px rgba(15,15,14,.04), 0 12px 32px rgba(15,15,14,.08)</span>;
+  <span class="k2">--shadow-xl</span>: <span class="s">0 8px 16px rgba(15,15,14,.06), 0 24px 64px rgba(15,15,14,.12)</span>;
+}</pre>
+    </section>
+
+    <!-- ============ DARK ============ -->
+    <section id="dark">
+      <div class="sec-head">
+        <div class="sec-eyebrow">20</div>
+        <h2 class="sec-h">Dark mode</h2>
+        <p class="sec-desc">Same warmth, inverted. Backgrounds stay slightly brown — never pure neutral. Brand brightens to <code>#ff7849</code> for legibility.</p>
+      </div>
+      <div class="dark-card">
+        <pre class="tokens" style="background:transparent;padding:0"><span class="c">/* Tusk Design Tokens · dark */</span>
+<span class="k">[data-theme="dark"]</span> {
+  <span class="k2">--bg</span>: <span class="s">#0e0d0a</span>;
+  <span class="k2">--surface</span>: <span class="s">#161410</span>;
+  <span class="k2">--surface-2</span>: <span class="s">#1c1a15</span>;
+  <span class="k2">--surface-3</span>: <span class="s">#26231d</span>;
+  <span class="k2">--border</span>: <span class="s">#2a2722</span>;
+  <span class="k2">--border-strong</span>: <span class="s">#3a3630</span>;
+  <span class="k2">--fg</span>: <span class="s">#f0ece2</span>;
+  <span class="k2">--fg-2</span>: <span class="s">#c8c2b3</span>;
+  <span class="k2">--fg-3</span>: <span class="s">#8a8478</span>;
+  <span class="k2">--fg-4</span>: <span class="s">#5a5650</span>;
+  <span class="k2">--brand</span>: <span class="s">#ff7849</span>;
+  <span class="k2">--brand-2</span>: <span class="s">#ff9466</span>;
+  <span class="k2">--green</span>: <span class="s">#5cc680</span>;
+  <span class="k2">--red</span>:   <span class="s">#ff6b7a</span>;
+  <span class="k2">--accent-violet</span>: <span class="s">#a394e8</span>;
+  <span class="k2">--accent-teal</span>:   <span class="s">#3eb89c</span>;
+  <span class="k2">--accent-amber</span>:  <span class="s">#e0a847</span>;
+  <span class="k2">--accent-rose</span>:   <span class="s">#e87490</span>;
+}</pre>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+lucide.createIcons();
+// Highlight active nav
+const links = document.querySelectorAll('.ds-nav a');
+const sections = [...document.querySelectorAll('section')];
+function setActive(){
+  const y = window.scrollY + 120;
+  let cur = sections[0]?.id;
+  for(const s of sections){ if(s.offsetTop <= y) cur = s.id; }
+  links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#'+cur));
+}
+window.addEventListener('scroll', setActive, {passive:true});
+setActive();
+</script>
+</body>
+</html>

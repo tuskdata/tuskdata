@@ -2,6 +2,51 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.0] - 2026-04-26 — Redesign Round 1: Foundations
+
+The first cut of the v0.4.x visual redesign. The shell flips to the new
+direction (warm light/dark palette, coral brand, Geist + Geist Mono +
+Instrument Serif fonts, mammoth-tusk SVG logo, pill-tab top nav). The
+body interiors stay on the v0.3.x dark visual until Round 2.
+
+See `docs/design/REDESIGN.md` for the full porting plan and
+`docs/design/{redesign-v3,design-system}.html` for the canonical
+references.
+
+### Added
+- `src/tusk/studio/static/design-tokens.css` — single CSS file with
+  every design token (colors, fonts, radii, shadows) for both
+  `:root` (light) and `[data-theme="dark"]`. Loaded before
+  `styles.css` from `base.html`.
+- Geist, Geist Mono, and Instrument Serif loaded alongside the
+  existing Inter / JetBrains Mono families. New components use the
+  new families via `var(--font-ui)`, `var(--font-mono)`,
+  `var(--font-serif)`. Existing screens still resolve to Inter /
+  JetBrains.
+
+### Changed
+- **Top navigation rebuilt.** New `.tusk-topnav` shell with
+  backdrop-blur, the SVG mammoth-tusk logo (replacing the `🦣`
+  emoji), pill-tab navigation, and a styled icon-button cluster on
+  the right (notifications, theme toggle, settings, user menu). All
+  the existing routes and the `active_page` highlighting still work.
+- **Theme toggle.** Now keys off `body[data-theme="dark"]` instead of
+  the legacy `.light` class so design-token CSS variables can flip
+  the entire palette in one step. Default stays dark for Round 1
+  (interiors aren't ported yet); switches to light by default once
+  Round 2 lands.
+- **Logo SVG** is the canonical mammoth tusk mark from the design
+  system; it picks up `--brand` so it adapts per theme.
+
+### Notes for users
+Round 1 is a foundation drop. The top nav looks different, the rest
+of the app keeps the v0.3 dark look. If you flip to light theme the
+top nav goes light but the page interiors stay dark — by design
+during the transition. Round 2 (Studio polish) flips the interior
+backgrounds to the warm light palette.
+
+---
+
 ## [0.3.7] - 2026-04-26
 
 ### Changed

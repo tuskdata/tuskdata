@@ -12,7 +12,8 @@
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.15.0/proj4.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     {% else %}
     <!-- Vendor mode (production) — run: make vendor && make css -->
     <link rel="stylesheet" href="/static/vendor/tailwind.min.css">
@@ -22,87 +23,85 @@
     <script src="/static/vendor/proj4.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/fonts.css">
     {% endif %}
+    <!-- Design tokens (v0.4 redesign foundation). Loads before styles.css
+         so per-component overrides can still win. -->
+    <link rel="stylesheet" href="/static/design-tokens.css">
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/tusk-fetch.js"></script>
     {% block head %}{% endblock %}
     {% block styles %}<style></style>{% endblock %}
 </head>
 <body class="h-screen flex flex-col">
-    <!-- Header -->
-    <header class="bg-[#161b22] border-b border-[#30363d] px-4 py-2 flex items-center justify-between">
-        <div class="flex items-center gap-6">
-            <!-- Logo -->
-            <div class="flex items-center gap-2">
-                <span class="text-2xl">&#129443;</span>
-                <span class="font-bold text-lg">Tusk</span>
-                <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded font-medium">v{{ version }}</span>
-            </div>
+    <!-- Header (v0.4 redesign — design-tokens.css carries the styles) -->
+    <header class="tusk-topnav">
+        <a href="/" class="tusk-brand">
+            <span class="mark">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19"
+                          stroke="var(--brand)" stroke-width="2.2"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="14.5" cy="8.5" r="1.2" fill="var(--ink)"/>
+                </svg>
+            </span>
+            <span class="wordmark">Tusk</span>
+            <span class="badge">v{{ version }}</span>
+        </a>
 
-            <!-- Main Navigation -->
-            <div class="flex bg-[#0d1117] rounded-lg p-0.5">
-                <a href="/" class="nav-tab {% if active_page == 'studio' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
-                    <i data-lucide="terminal-square" class="w-4 h-4"></i>
-                    Studio
-                </a>
-                <a href="/admin" class="nav-tab {% if active_page == 'admin' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
-                    <i data-lucide="database" class="w-4 h-4"></i>
-                    Admin
-                </a>
-                <a href="/data" class="nav-tab {% if active_page == 'data' %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
-                    <i data-lucide="git-branch" class="w-4 h-4"></i>
-                    Data
-                </a>
-                {% if plugin_tabs %}
-                {% for tab in plugin_tabs %}
-                <a href="{{ tab.url }}" class="nav-tab {% if active_page == tab.id %}active{% endif %} px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2">
-                    <i data-lucide="{{ tab.icon }}" class="w-4 h-4"></i>
-                    {{ tab.label }}
-                </a>
-                {% endfor %}
-                {% endif %}
-            </div>
-        </div>
+        <nav class="tusk-nav-tabs">
+            <a href="/" class="tusk-nav-tab {% if active_page == 'studio' %}active{% endif %}">
+                <i data-lucide="terminal"></i>Studio
+            </a>
+            <a href="/admin" class="tusk-nav-tab {% if active_page == 'admin' %}active{% endif %}">
+                <i data-lucide="database"></i>Admin
+            </a>
+            <a href="/data" class="tusk-nav-tab {% if active_page == 'data' %}active{% endif %}">
+                <i data-lucide="git-branch"></i>Data
+            </a>
+            {% if plugin_tabs %}
+            {% for tab in plugin_tabs %}
+            <a href="{{ tab.url }}" class="tusk-nav-tab {% if active_page == tab.id %}active{% endif %}">
+                <i data-lucide="{{ tab.icon }}"></i>{{ tab.label }}
+            </a>
+            {% endfor %}
+            {% endif %}
+        </nav>
 
-        <!-- Right side -->
-        <div class="flex items-center gap-3">
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
             {% block header_actions %}{% endblock %}
 
-            <!-- Notification Bell (polled every 30s) -->
             <div id="notification-bell"
                  hx-get="/api/notifications/badge"
                  hx-trigger="load, every 30s, refreshNotifications from:body"
                  hx-swap="innerHTML">
             </div>
 
-            <!-- Theme Toggle -->
-            <button id="theme-toggle" onclick="toggleTheme()" class="p-2 rounded-lg hover:bg-[#21262d]" title="Toggle theme">
-                <i data-lucide="sun" id="theme-icon-light" class="w-4 h-4 hidden"></i>
-                <i data-lucide="moon" id="theme-icon-dark" class="w-4 h-4"></i>
+            <button id="theme-toggle" onclick="toggleTheme()" class="tusk-icon-btn" title="Toggle theme">
+                <i data-lucide="sun" id="theme-icon-light" class="hidden"></i>
+                <i data-lucide="moon" id="theme-icon-dark"></i>
             </button>
 
-            <!-- User Menu (populated by JS when auth is enabled) -->
+            <a href="/settings" class="tusk-icon-btn" title="Settings"><i data-lucide="settings"></i></a>
+
             <div id="user-menu" class="hidden relative">
-                <button id="user-menu-btn" onclick="toggleUserMenu()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-[#21262d]">
-                    <div id="user-avatar" class="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-medium">?</div>
-                    <span id="user-name" class="text-sm font-medium">User</span>
-                    <i data-lucide="chevron-down" class="w-4 h-4 text-[#8b949e]"></i>
+                <button id="user-menu-btn" onclick="toggleUserMenu()" class="tusk-icon-btn" style="width:auto; padding:0 6px; gap:6px;">
+                    <div id="user-avatar" class="tusk-avatar" style="width:24px;height:24px;font-size:10px">?</div>
+                    <span id="user-name" style="font-size:13px; font-weight:500;">User</span>
+                    <i data-lucide="chevron-down" style="width:14px; height:14px;"></i>
                 </button>
-                <div id="user-dropdown" class="absolute right-0 top-full mt-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg py-1 w-48 hidden z-50">
-                    <div id="user-info" class="px-3 py-2 border-b border-[#30363d]">
-                        <div class="font-medium text-sm" id="dropdown-name">User</div>
-                        <div class="text-xs text-[#8b949e]" id="dropdown-username">@username</div>
+                <div id="user-dropdown" class="absolute right-0 top-full mt-1 hidden z-50"
+                     style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:4px; width:200px;">
+                    <div id="user-info" style="padding:10px 12px; border-bottom:1px solid var(--border);">
+                        <div style="font-weight:600; font-size:13px;" id="dropdown-name">User</div>
+                        <div style="font-size:11.5px; color:var(--fg-3);" id="dropdown-username">@username</div>
                     </div>
-                    <a href="/profile" class="px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2">
-                        <i data-lucide="user" class="w-4 h-4"></i>
-                        Profile
+                    <a href="/profile" class="tusk-nav-tab" style="display:flex; padding:8px 12px; border-radius:6px;">
+                        <i data-lucide="user"></i>Profile
                     </a>
-                    <a href="/users" id="users-link" class="hidden px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2">
-                        <i data-lucide="users" class="w-4 h-4"></i>
-                        User Management
+                    <a href="/users" id="users-link" class="hidden tusk-nav-tab" style="display:flex; padding:8px 12px; border-radius:6px;">
+                        <i data-lucide="users"></i>User Management
                     </a>
-                    <button onclick="logout()" class="w-full px-3 py-2 text-sm hover:bg-[#21262d] flex items-center gap-2 text-red-400">
-                        <i data-lucide="log-out" class="w-4 h-4"></i>
-                        Sign out
+                    <button onclick="logout()" class="tusk-nav-tab" style="display:flex; padding:8px 12px; border-radius:6px; color:var(--red); width:100%;">
+                        <i data-lucide="log-out"></i>Sign out
                     </button>
                 </div>
             </div>
@@ -297,21 +296,43 @@
             initTheme();
         });
 
-        // Theme management
-        function initTheme() {
-            const saved = localStorage.getItem('tusk-theme');
-            if (saved === 'light') {
+        // Theme management — v0.4 design tokens key off body[data-theme="dark"].
+        // Defaults to light; the saved preference takes priority. The legacy
+        // `.light` class is set in parallel for any old per-page CSS that
+        // still keys off it, but new components should rely on the CSS vars
+        // alone.
+        function _applyTheme(theme) {
+            const isDark = theme === 'dark';
+            if (isDark) {
+                document.body.setAttribute('data-theme', 'dark');
+                document.body.classList.remove('light');
+            } else {
+                document.body.removeAttribute('data-theme');
                 document.body.classList.add('light');
-                document.getElementById('theme-icon-light').classList.remove('hidden');
-                document.getElementById('theme-icon-dark').classList.add('hidden');
+            }
+            const lightIcon = document.getElementById('theme-icon-light');
+            const darkIcon = document.getElementById('theme-icon-dark');
+            if (lightIcon && darkIcon) {
+                lightIcon.classList.toggle('hidden', isDark);
+                darkIcon.classList.toggle('hidden', !isDark);
             }
         }
 
+        function initTheme() {
+            const saved = localStorage.getItem('tusk-theme');
+            // Round 1 still defaults to dark — the body interiors haven't
+            // been ported yet, so a light default would look broken. Once
+            // round 2 migrates the per-page backgrounds, the default
+            // flips to light.
+            const theme = saved === 'light' ? 'light' : 'dark';
+            _applyTheme(theme);
+        }
+
         function toggleTheme() {
-            const isLight = document.body.classList.toggle('light');
-            localStorage.setItem('tusk-theme', isLight ? 'light' : 'dark');
-            document.getElementById('theme-icon-light').classList.toggle('hidden', !isLight);
-            document.getElementById('theme-icon-dark').classList.toggle('hidden', isLight);
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            const next = isDark ? 'light' : 'dark';
+            _applyTheme(next);
+            localStorage.setItem('tusk-theme', next);
         }
 
         // Check auth status and setup user menu
