@@ -4,6 +4,8 @@ Modern Data Platform — SQL Client, PostgreSQL Admin, Analytics Engine, ETL Pip
 
 > **Built with Claude**: This project was developed with [Claude Code](https://claude.ai) (Anthropic's AI assistant).
 
+![Tusk Studio](docs/screenshots/studio.png)
+
 ## Features
 
 ### SQL Client (Studio)
