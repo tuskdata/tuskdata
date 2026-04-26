@@ -2,6 +2,23 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.4] - 2026-04-26
+
+### Fixed
+- **Version badge stuck at v0.2.1.** `src/tusk/__init__.py` had a
+  hardcoded `__version__ = "0.2.1"` that never moved when the
+  pyproject version did. Now it resolves from
+  `importlib.metadata.version("tuskdata")`, which makes drift between
+  the two impossible.
+- **Studio results table couldn't scroll horizontally** when the row
+  had more columns than the viewport could fit. The `<table class="w-full">`
+  was forcing the table to shrink-to-fit, masking the overflow trigger
+  on the parent `overflow-x-auto` div. Replaced with
+  `min-width: max-content` so the table grows wider than its container
+  and the parent's horizontal scrollbar takes over.
+
+---
+
 ## [0.3.3] - 2026-04-26
 
 The deployment artifacts that referenced first-party plugin repositories

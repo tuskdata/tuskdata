@@ -441,7 +441,7 @@ function renderResults() {
     tableEl.innerHTML = `
         <div class="card rounded-lg overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="text-sm" style="min-width: max-content;">
                     <thead class="bg-[#21262d] sticky top-0">
                         <tr>
                             <th class="px-2 py-2 text-left border-b border-[#30363d] w-8">
