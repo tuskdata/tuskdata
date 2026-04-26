@@ -285,6 +285,67 @@ def test_ssh_tunnel_passthrough_for_direct_connections():
     assert cfg.uses_ssh_tunnel is False
 
 
+def test_clone_to_database_carries_ssh_config(client, tmp_path):
+    """`/connections/{id}/clone` must copy ssh_* fields, not just db creds."""
+    from tusk.core import connection as conn_module
+    from tusk.core import crypto as crypto_module
+
+    saved = (
+        conn_module.TUSK_DIR, conn_module.CONN_FILE,
+        dict(conn_module._connections),
+        crypto_module.TUSK_DIR, crypto_module.KEY_FILE, crypto_module._cached,
+    )
+    sandbox = tmp_path / ".tusk"
+    sandbox.mkdir()
+    conn_module.TUSK_DIR = sandbox
+    conn_module.CONN_FILE = sandbox / "connections.toml"
+    conn_module._connections.clear()
+    crypto_module.TUSK_DIR = sandbox
+    crypto_module.KEY_FILE = sandbox / ".key"
+    crypto_module._cached = None
+
+    try:
+        cfg = conn_module.ConnectionConfig(
+            name="parent",
+            type="postgres",
+            host="localhost",
+            port=5432,
+            database="app",
+            user="alice",
+            password="dbpw",
+            ssh_host="bastion.example.com",
+            ssh_port=22,
+            ssh_user="deploy",
+            ssh_password="passphrase",
+            ssh_private_key="-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n",
+        )
+        conn_module.add_connection(cfg)
+
+        r = client.post(f"/api/connections/{cfg.id}/clone", json={"database": "other_db"})
+        assert r.status_code in (200, 201), r.text
+        new_id = r.json()["id"]
+
+        cloned = conn_module.get_connection(new_id)
+        assert cloned is not None
+        assert cloned.database == "other_db"
+        # The SSH config has to be inherited — without this the tunnel breaks
+        # the moment the user "switches database".
+        assert cloned.ssh_host == "bastion.example.com"
+        assert cloned.ssh_port == 22
+        assert cloned.ssh_user == "deploy"
+        assert cloned.ssh_password == "passphrase"
+        assert cloned.ssh_private_key.startswith("-----BEGIN OPENSSH")
+        assert cloned.uses_ssh_tunnel is True
+    finally:
+        (
+            conn_module.TUSK_DIR, conn_module.CONN_FILE,
+            conns,
+            crypto_module.TUSK_DIR, crypto_module.KEY_FILE, crypto_module._cached,
+        ) = saved
+        conn_module._connections.clear()
+        conn_module._connections.update(conns)
+
+
 def test_postgres_password_round_trips_through_encryption(tmp_path):
     """Plain-text legacy passwords decrypt passthrough; saves re-encrypt them.
 

@@ -166,7 +166,9 @@ class APIController(Controller):
                 # Already exists, just return it
                 return {"id": conn.id, "name": conn.name, "type": conn.type, "existing": True}
 
-        # Create new connection with same credentials but different database
+        # Create new connection with same credentials but different database.
+        # Carry the SSH tunnel config too — the user expects "switch database"
+        # to keep using the same bastion they configured for the parent.
         new_name = data.get("name", f"{config.host}:{config.port}/{new_database}")
         new_config = ConnectionConfig(
             name=new_name,
@@ -176,6 +178,12 @@ class APIController(Controller):
             database=new_database,
             user=config.user,
             password=config.password,
+            ssh_host=config.ssh_host,
+            ssh_port=config.ssh_port,
+            ssh_user=config.ssh_user,
+            ssh_password=config.ssh_password,
+            ssh_private_key=config.ssh_private_key,
+            ssh_known_hosts=config.ssh_known_hosts,
         )
 
         new_id = add_connection(new_config)

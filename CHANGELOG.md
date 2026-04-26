@@ -2,6 +2,20 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.6] - 2026-04-26
+
+### Fixed
+- **Clone-to-database lost the SSH tunnel.** When a connection had ssh_*
+  fields configured and the user picked "switch to another database on
+  this server", the cloned connection only inherited host/port/user/
+  password — the entire SSH config was dropped, so the new connection
+  tried to talk directly to the bastion-internal hostname. Fixed:
+  ssh_host/port/user/password/private_key/known_hosts now ride along
+  with the clone, with a regression test that fails if any of them
+  ever falls off again.
+
+---
+
 ## [0.3.5] - 2026-04-26
 
 ### Added — SSH tunneling for PostgreSQL connections
