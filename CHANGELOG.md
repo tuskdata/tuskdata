@@ -2,6 +2,51 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.2] - 2026-04-25
+
+Deploy-track release. No app behavior changes; the image build pipeline
+is rewritten so Coolify (or anything pulling the repo) can build a
+working image without committing wheel binaries first.
+
+### Build pipeline
+
+- **Plugin wheels are now built at image-build time** by cloning each
+  plugin repo at a pinned ref. The Dockerfile takes
+  `TUSK_BI_REF`/`TUSK_CI_REF`/`TUSK_SEC_REF`/`TUSK_CLUSTER_REF` build
+  args (default to current stable tags) and clones from
+  `${TUSK_PLUGINS_ORG}` (default `tuskdata`).
+- **Auth options for private repos**: pass `--secret id=gh_token,src=...`
+  for HTTPS-with-PAT, or `--ssh default` for an agent socket. Falls back
+  to public HTTPS clone when neither is supplied.
+- **`wheels/` is no longer in the build context.** The previous
+  Dockerfile expected pre-built wheels there but `.gitignore` excluded
+  them, so any fresh clone failed silently with missing plugins.
+
+### Python version
+
+- Base image bumped from `python:3.12-slim` to `python:3.13-slim`.
+- `requires-python` is now `>=3.12`. 3.11 wheels for some deps
+  (psycopg, ibis backends) are no longer pinned.
+
+### Compose
+
+- **Postgres sidecar moved behind `--profile pg`.** Default `up` runs
+  just the Studio; bring your own Postgres for everything else. Adminer
+  also profile-gated (`--profile dbtools`).
+- **`TUSK_HOST_PORT`** env var (default `7000`) controls the host-side
+  port mapping so the Coolify dashboard at `:8000` doesn't collide.
+- All build args (plugin refs + plugins org) parameterized through `.env`.
+
+### Release tooling
+
+- **`scripts/release.sh`** is a portable (bash 3+) idempotent driver
+  that walks TuskData + the four plugin repos, detects which have new
+  commits since their last tag, bumps the patch number, tags, and
+  pushes — printing the matching `TUSK_*_REF` block ready to paste into
+  Coolify or `.env`. Default is dry-run; `--apply` to actually publish.
+
+---
+
 ## [0.3.1] - 2026-04-25
 
 Hotfix round on top of v0.3.0 after an independent audit. No new features.

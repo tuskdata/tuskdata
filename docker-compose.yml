@@ -1,27 +1,22 @@
-# TuskData — full local smoke compose.
+# TuskData — Docker Compose for local smoke tests.
 #
-# Profiles let you bring up just what you need:
+# Default profile: just the Studio. No Postgres sidecar — TuskData stores
+# its own state in SQLite under /var/lib/tusk and treats Postgres as an
+# external user-managed data source. Configure connections from the UI
+# pointing at whatever PG you already run.
 #
-#   docker compose up --build                       # core: postgres + tusk
-#   docker compose --profile cluster up --build     # + scheduler + worker
-#   docker compose --profile dbtools up             # + adminer for poking PG
-#   docker compose --profile all up --build         # everything
+# Profiles:
+#   --profile cluster   adds tusk scheduler + worker
+#   --profile pg        adds a local Postgres sidecar (only for testing)
+#   --profile dbtools   adds Adminer at :8080 to poke an external PG
+#   --profile all       everything
 #
-# The first time, build wheels:
+# Usage:
+#   cp .env.example .env
+#   docker compose up --build
 #
-#   make wheels
-#
-# Override defaults via .env (see .env.example):
-#
-#   POSTGRES_PASSWORD=...
-#   TUSK_LOG_LEVEL=debug
-#   TUSK_CLUSTER_SECRET=...
-#
-# Browse:
-#   http://localhost:8000           Studio
-#   http://localhost:8000/api/health
-#   http://localhost:8000/api/metrics
-#   http://localhost:8080           Adminer (with --profile dbtools)
+#   docker compose --profile cluster up --build
+#   docker compose --profile pg --profile dbtools up
 
 x-tusk-env: &tusk-env
   TUSK_DEBUG: "${TUSK_DEBUG:-0}"
@@ -30,47 +25,33 @@ x-tusk-env: &tusk-env
   TUSK_QUERY_TIMEOUT: "${TUSK_QUERY_TIMEOUT:-300}"
   TUSK_CLUSTER_SECRET: "${TUSK_CLUSTER_SECRET:-}"
   TUSK_CLUSTER_TLS: "${TUSK_CLUSTER_TLS:-0}"
+  TUSK_PORT: "${TUSK_PORT:-8000}"
   TZ: "${TZ:-UTC}"
 
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: "${POSTGRES_USER:-tusk}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-tusk}"
-      POSTGRES_DB: "${POSTGRES_DB:-tusk}"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    # Mirrors Coolify's default behavior: only the internal Docker network
-    # sees Postgres. Uncomment the ports stanza if you want to point a
-    # local pgAdmin at it.
-    # ports:
-    #   - "5432:5432"
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tusk} -d ${POSTGRES_DB:-tusk}"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
+x-build-args: &build-args
+  TUSK_BI_REF: "${TUSK_BI_REF:-v0.2.1}"
+  TUSK_CI_REF: "${TUSK_CI_REF:-v0.2.0}"
+  TUSK_SEC_REF: "${TUSK_SEC_REF:-v0.2.0}"
+  TUSK_CLUSTER_REF: "${TUSK_CLUSTER_REF:-v0.2.1}"
+  TUSK_PLUGINS_ORG: "${TUSK_PLUGINS_ORG:-tuskdata}"
 
+services:
   tusk:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        <<: *build-args
     image: tuskdata:local
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       <<: *tusk-env
     ports:
-      - "${TUSK_PORT:-8000}:8000"
+      # Map host:container. Host port comes from .env (default 7000 to
+      # dodge typical Coolify dashboard collisions on 8000).
+      - "${TUSK_HOST_PORT:-7000}:8000"
     volumes:
       - tusk-home:/var/lib/tusk
     healthcheck:
-      # Mirrors the Dockerfile HEALTHCHECK so docker compose surfaces it.
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
       timeout: 5s
@@ -78,11 +59,7 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ---- tusk-cluster: scheduler + at least one worker -------------------
-  # Bring up with: docker compose --profile cluster up
-  # The shared secret has to match across services. Generate with:
-  #   openssl rand -hex 32
-
+  # ---- tusk-cluster: scheduler + worker --------------------------------
   scheduler:
     profiles: ["cluster", "all"]
     image: tuskdata:local
@@ -91,7 +68,7 @@ services:
         condition: service_started
     environment:
       <<: *tusk-env
-    command: ["tusk", "scheduler", "--host", "0.0.0.0", "--port", "8814"]
+    command: ["sh", "-c", "exec tusk scheduler --host 0.0.0.0 --port 8814"]
     expose:
       - "8814"
     volumes:
@@ -106,29 +83,45 @@ services:
         condition: service_started
     environment:
       <<: *tusk-env
-      TUSK_SCHEDULER_HOST: scheduler
-      TUSK_SCHEDULER_PORT: "8814"
-    command: ["tusk", "worker", "--scheduler", "scheduler:8814", "--host", "0.0.0.0", "--port", "8815"]
+    command: ["sh", "-c", "exec tusk worker --scheduler scheduler:8814 --host 0.0.0.0 --port 8815"]
     expose:
       - "8815"
     volumes:
       - tusk-home:/var/lib/tusk
     deploy:
-      replicas: 1   # bump to scale workers
+      replicas: 1
     restart: unless-stopped
 
-  # ---- Optional: lightweight Postgres admin UI -------------------------
+  # ---- Optional local Postgres (only with --profile pg) ----------------
+  # If you already have Postgres elsewhere (typical), skip this and add
+  # the connection from the Studio UI. This service is for isolated
+  # smoke tests only.
+  postgres:
+    profiles: ["pg", "all"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-tusk}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-tusk}"
+      POSTGRES_DB: "${POSTGRES_DB:-tusk}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tusk} -d ${POSTGRES_DB:-tusk}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
+  # ---- Adminer for poking an external (or local) Postgres --------------
   adminer:
     profiles: ["dbtools", "all"]
     image: adminer:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
-      - "${ADMINER_PORT:-8080}:8080"
+      - "${ADMINER_HOST_PORT:-8080}:8080"
     environment:
-      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DEFAULT_SERVER: "${ADMINER_DEFAULT_SERVER:-postgres}"
     restart: unless-stopped
 
 volumes:

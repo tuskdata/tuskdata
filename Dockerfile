@@ -1,13 +1,21 @@
+# syntax=docker/dockerfile:1.7
+#
 # TuskData — production image
 #
-# Two-stage build:
-#   builder  → install dependencies + plugin wheels with uv
-#   runtime  → slim image with just python3.12 + app code
+# Two-stage build. The builder stage clones plugin repos at the pinned refs
+# (build args) and builds wheels for them on the fly, so the deployment
+# repo only contains TuskData itself. No `make wheels` step required.
 #
-# Expects the following build context layout:
-#   Dockerfile
-#   pyproject.toml, src/, README.md, LICENSE
-#   wheels/                 # tuskdata + plugin wheels (built via `make wheels`)
+# Build secrets:
+#   --secret id=gh_token,src=/path/to/pat   (HTTPS clone for private repos)
+#   --ssh default                           (SSH clone with your agent)
+# If neither is supplied, falls back to public HTTPS clone.
+#
+# Build args (override per-deploy in Coolify):
+#   TUSK_BI_REF        e.g. v0.2.1
+#   TUSK_CI_REF        e.g. v0.2.0
+#   TUSK_SEC_REF       e.g. v0.2.0
+#   TUSK_CLUSTER_REF   e.g. v0.2.1
 #
 # Runtime env:
 #   TUSK_DEBUG              0|1
@@ -16,11 +24,19 @@
 #   TUSK_QUERY_TIMEOUT      seconds, default 300
 #   TUSK_CLUSTER_SECRET     for tusk-cluster worker auth
 #   TUSK_CLUSTER_TLS        1 to dial workers over grpc+tls
-#   HOME                    overrides where ~/.tusk lives (use a volume!)
+#   TUSK_PORT               internal listen port, default 8000
+#   HOME                    where ~/.tusk lives (use a volume!)
 #
-# Default port: 8000. Docker healthcheck hits /api/health.
+# Default port: 8000 (host port mapped via Coolify or compose).
+# Healthcheck hits /api/health — passes when status="ok".
 
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
+
+ARG TUSK_BI_REF=v0.2.1
+ARG TUSK_CI_REF=v0.2.0
+ARG TUSK_SEC_REF=v0.2.0
+ARG TUSK_CLUSTER_REF=v0.2.1
+ARG TUSK_PLUGINS_ORG=tuskdata
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -28,43 +44,72 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_SYSTEM_PYTHON=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential git curl \
+      build-essential git curl ca-certificates openssh-client \
       libpq-dev postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir uv build
 
 WORKDIR /build
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
-COPY wheels/ ./wheels/
 
-# Build the TuskData wheel itself, then install tuskdata[all] + every plugin
-# wheel from the wheels/ directory into /opt/tusk-venv. The plugin wheels
-# ship their own dependencies but reference tuskdata via `>=` so we install
-# them with --no-deps once the core is present.
-#
-# fail-fast: the install loop exits non-zero on the first failure. Earlier
-# revisions had `|| true`, which masked silent plugin breakage and only
-# surfaced when the tab didn't appear at runtime.
+# Build TuskData wheel + venv with the [all] extras in one shot.
 RUN uv venv /opt/tusk-venv \
-    && uv pip install --python /opt/tusk-venv/bin/python --no-cache \
-         "tuskdata[all] @ ." \
-    && set -e \
-    && for w in wheels/tusk_*-*.whl; do \
-         echo "[plugin install] $w"; \
-         uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps "$w"; \
-       done
+    && uv pip install --python /opt/tusk-venv/bin/python --no-cache "tuskdata[all] @ ."
+
+# Clone every plugin at its pinned ref and build a wheel for each.
+# `set -e` so a failed clone or build kills the image build instead of
+# silently shipping a tab-less Studio.
+RUN --mount=type=secret,id=gh_token \
+    --mount=type=ssh \
+    set -e ; \
+    if [ -s /run/secrets/gh_token ]; then \
+        TOKEN="$(cat /run/secrets/gh_token)"; \
+        BASE="https://x-access-token:${TOKEN}@github.com/${TUSK_PLUGINS_ORG}"; \
+        echo "[deploy] using https + gh_token" ; \
+    elif [ -d /tmp/buildkit-ssh-agent ] || [ -n "${SSH_AUTH_SOCK:-}" ]; then \
+        BASE="git@github.com:${TUSK_PLUGINS_ORG}"; \
+        mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null ; \
+        echo "[deploy] using ssh agent" ; \
+    else \
+        BASE="https://github.com/${TUSK_PLUGINS_ORG}"; \
+        echo "[deploy] using public https (no auth)" ; \
+    fi ; \
+    mkdir -p /tmp/wheels ; \
+    for spec in \
+        "tusk-bi:${TUSK_BI_REF}" \
+        "tusk-ci:${TUSK_CI_REF}" \
+        "tusk-security:${TUSK_SEC_REF}" \
+        "tusk-cluster:${TUSK_CLUSTER_REF}" ; \
+    do \
+        repo="${spec%%:*}" ; ref="${spec##*:}" ; \
+        echo "[plugin] cloning ${repo}@${ref}" ; \
+        git clone --depth 1 --branch "$ref" "${BASE}/${repo}.git" "/tmp/${repo}" ; \
+        echo "[plugin] building wheel for ${repo}" ; \
+        ( cd "/tmp/${repo}" && python -m build --wheel --outdir /tmp/wheels ) ; \
+    done \
+    && ls -la /tmp/wheels
+
+# Install plugin wheels into the venv. fail-fast if any wheel breaks.
+RUN set -e ; \
+    for w in /tmp/wheels/tusk_*.whl; do \
+        echo "[install] $w" ; \
+        uv pip install --python /opt/tusk-venv/bin/python --no-cache --no-deps "$w" ; \
+    done
 
 
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/tusk-venv/bin:${PATH}" \
-    HOME=/var/lib/tusk
+    HOME=/var/lib/tusk \
+    TUSK_PORT=8000
 
-# PostgreSQL client tools are needed at runtime for pg_dump / psql / pg_restore.
+# postgresql-client at runtime → pg_dump / psql / pg_restore for admin.
+# gosu lets the entrypoint chown the persistent volume before dropping
+# privileges to the unprivileged `tusk` user.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client libpq5 curl gosu \
     && rm -rf /var/lib/apt/lists/* \
@@ -74,20 +119,12 @@ COPY --from=builder /opt/tusk-venv /opt/tusk-venv
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod +x /usr/local/bin/docker-entrypoint
 
-# Stay as root for the entrypoint, which fixes volume ownership before
-# dropping privileges to `tusk` via gosu. Coolify and friends often mount
-# bind volumes with the host user's UID; running directly as `tusk` would
-# fail with EACCES on `~/.tusk/.key` and the chmod silencer would hide it.
 WORKDIR /var/lib/tusk
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
-  CMD curl -fsS http://127.0.0.1:8000/api/health | grep -q '"status":"ok"' || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=30s \
+  CMD curl -fsS "http://127.0.0.1:${TUSK_PORT:-8000}/api/health" | grep -q '"status":"ok"' || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
-
-# Default command: serve Studio with Granian. Override to run workers,
-# scheduler, or CLI tasks. For reverse proxies (Coolify), set
-# `--host 0.0.0.0` so the health probe on localhost still reaches us.
-CMD ["tusk", "studio", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec tusk studio --host 0.0.0.0 --port ${TUSK_PORT:-8000}"]

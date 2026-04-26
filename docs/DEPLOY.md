@@ -1,5 +1,63 @@
 # Deploying TuskData with Coolify on a local VM
 
+> **TL;DR for v0.3.2+:** plugin wheels are built inside the Docker image
+> from the plugin repos at pinned refs. No `make wheels` step. Coolify
+> only needs access to the TuskData repo — and to the plugin repos if
+> they're private (via SSH deploy key or PAT).
+
+## Quickstart
+
+1. Push your code:
+   ```bash
+   git push origin main
+   ```
+2. In Coolify: **+ New Project → + New Resource → Public/Private Repository**
+   pointing at `git@github.com:<org>/tuskdata.git`, branch `main`,
+   build pack **Dockerfile**.
+3. **Ports Mappings**: `7000:8000` (host:container) so it doesn't collide
+   with the Coolify dashboard on `:8000`. Or skip and use a domain.
+4. **Build Args** (pin plugin tags):
+   ```
+   TUSK_BI_REF=v0.2.1
+   TUSK_CI_REF=v0.2.0
+   TUSK_SEC_REF=v0.2.0
+   TUSK_CLUSTER_REF=v0.2.1
+   TUSK_PLUGINS_ORG=tuskdata
+   ```
+5. **If plugin repos are private**: Coolify **Settings → Sources** → SSH
+   deploy key, or attach a GitHub PAT as a build secret named `gh_token`.
+6. **Environment Variables** (runtime):
+   ```
+   HOME=/var/lib/tusk
+   TUSK_LOG_LEVEL=info
+   TUSK_LOG_FORMAT=json
+   TUSK_QUERY_TIMEOUT=300
+   TZ=America/Santo_Domingo
+   ```
+7. **Volume Mount**: `/var/lib/tusk` (this holds the Fernet key and all
+   state — back it up).
+8. **Deploy.** Healthcheck on `/api/health` decides green/red.
+9. (Optional) connect to your existing Postgres from the Studio UI.
+   `Studio → Connections → + New → PostgreSQL`. Don't run a Postgres
+   container alongside.
+
+## Update flow (typical day-to-day)
+
+```bash
+# On your laptop
+scripts/release.sh                 # dry-run: shows which repos changed
+scripts/release.sh --apply         # bumps patch, tags, pushes everything
+
+# Copy the printed TUSK_*_REF block into Coolify Build Args, hit Redeploy
+```
+
+If only the TuskData core changed, you don't even need to bump plugin
+refs — Coolify will rebuild against the same plugin tags.
+
+---
+
+## Full walkthrough below
+
 This walks through a full local test deploy: spin up a VM, install Coolify,
 push TuskData from a Git repo, and have it reachable at a local hostname
 with a TLS cert.
