@@ -324,60 +324,6 @@ window.formatCurrentQuery = function() {
 };
 </script>
 
-<!-- AI Copilot panel toggle — lives on the right edge, can be collapsed. -->
-<div id="copilot-panel" style="position:fixed;top:56px;right:0;bottom:0;width:360px;background:var(--surface);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:40;overflow:hidden">
-    <div style="padding:14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <div style="width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--brand),var(--accent-violet));display:grid;place-items:center;color:#fff;font-size:11px;font-weight:600">T</div>
-        <div style="flex:1">
-            <div style="font-weight:600;font-size:13.5px">Tusk Copilot</div>
-            <div style="font-size:11px;color:var(--fg-3)" id="copilot-context">Idle</div>
-        </div>
-        <button onclick="toggleCopilot()" class="icon-btn" title="Close">
-            <i data-lucide="x"></i>
-        </button>
-    </div>
-    <div style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px" id="copilot-body">
-        <div style="display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:11px;font-weight:600;color:var(--fg-3);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px">
-                <div style="width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,var(--brand),var(--accent-violet));display:grid;place-items:center;color:#fff;font-size:8px;font-weight:600">T</div>
-                Copilot
-            </div>
-            <div style="font-size:13px;line-height:1.55;color:var(--fg-2)">
-                I'll watch your queries and offer indexes, joins, and rewrites as suggestions. AI integrations land in v0.5 — for now this panel is a placeholder so the layout matches the v3 mockup.
-            </div>
-        </div>
-    </div>
-    <div style="padding:12px;border-top:1px solid var(--border);background:var(--surface)">
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
-            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="sparkles" style="color:var(--brand)"></i>Explain this query</button>
-            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="bug"></i>Why is this slow?</button>
-            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="git-merge"></i>Suggest a join</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
-            <i data-lucide="sparkles" style="width:14px;height:14px;color:var(--brand)"></i>
-            <input placeholder="Coming in v0.5…" disabled style="flex:1;background:transparent;border:none;outline:none;color:var(--fg);font-size:13px;font-family:inherit">
-            <span style="font-size:10.5px;padding:2px 6px;background:var(--brand-soft);color:var(--brand);border-radius:4px;font-weight:500;font-family:var(--font-mono)">SQL</span>
-        </div>
-    </div>
-</div>
-
-<button id="copilot-toggle" onclick="toggleCopilot()"
-        class="btn btn-sm"
-        style="position:fixed;right:14px;bottom:14px;z-index:30;background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:var(--shadow-lg)"
-        title="Toggle Copilot">
-    <i data-lucide="sparkles"></i>Copilot
-</button>
-
-<script>
-window.toggleCopilot = function() {
-    const panel = document.getElementById('copilot-panel');
-    if (!panel) return;
-    const isOpen = panel.style.display === 'flex';
-    panel.style.display = isOpen ? 'none' : 'flex';
-    document.body.style.paddingRight = isOpen ? '' : '360px';
-    if (window.lucide) lucide.createIcons();
-};
-</script>
 {% endblock %}
 
 {% block modals %}

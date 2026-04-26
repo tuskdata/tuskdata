@@ -2,6 +2,13 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc5] - 2026-04-26 — Drop the AI Copilot stub
+
+The Copilot panel that landed in rc4 was non-functional decoration —
+no AI is wired up yet, so the toggle pill and side panel just got in
+the way. Removed both. The panel returns in v0.5 once there's an
+actual integration backing it.
+
 ## [0.4.3rc4] - 2026-04-26 — Tighter mockup match
 
 Visible polish so the Studio actually looks like the v3 mockup:
