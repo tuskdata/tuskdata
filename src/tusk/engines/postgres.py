@@ -375,40 +375,76 @@ async def fetch_geometries(
             else:
                 geo_expr = f'ST_AsGeoJSON("{geo_col_name}")'
 
-            # Try to find a primary key or unique column for properties
+            # Pick interesting properties for the popup. We always include
+            # an id and any "label-ish" columns the row has (name, title,
+            # description, label, address, etc.) so clicking a feature in
+            # the map shows something more useful than just a UUID.
+            geo_col_real_name = sample_cols[geo_col_idx].name
+
             pk_col = None
-            for i, col in enumerate(sample_cols):
-                col_name_lower = col.name.lower()
-                if col_name_lower in ('id', 'gid', 'fid', 'ogc_fid', 'pk'):
-                    pk_col = col.name.replace('"', '""')
-                    break
+            label_cols: list[str] = []
+            _ID_NAMES = {"id", "gid", "fid", "ogc_fid", "pk"}
+            _LABEL_NAMES = {
+                "name", "title", "label", "description", "address",
+                "name_en", "name_es", "name_local", "name_alt",
+                "city", "country", "region", "type", "category", "kind",
+                "status", "code",
+            }
+            for col in sample_cols:
+                lname = col.name.lower()
+                if col.name == geo_col_real_name:
+                    continue
+                if pk_col is None and lname in _ID_NAMES:
+                    pk_col = col.name
+                elif lname in _LABEL_NAMES and len(label_cols) < 8:
+                    label_cols.append(col.name)
 
+            select_parts = [f'{geo_expr} AS geom']
             if pk_col:
-                geo_select = f'{geo_expr} AS geom, "{pk_col}" AS id'
+                select_parts.append(f'"{pk_col.replace(chr(34), chr(34)*2)}" AS "_tusk_id"')
             else:
-                geo_select = f'{geo_expr} AS geom, row_number() OVER () AS id'
+                select_parts.append('row_number() OVER () AS "_tusk_id"')
+            for c in label_cols:
+                escaped = c.replace('"', '""')
+                # Alias keeps the original column name verbatim — the JS popup
+                # uses these as labels.
+                select_parts.append(f'"{escaped}" AS "{escaped}"')
 
+            geo_select = ", ".join(select_parts)
             geo_sql = f"SELECT {geo_select} FROM ({sql}) AS _tusk_geo LIMIT {max_features}"
 
             async with conn.cursor() as cur:
                 await cur.execute(geo_sql, params)
+                col_names = [d.name for d in (cur.description or [])]
                 rows = await cur.fetchall()
 
-            # Build GeoJSON features
+            # Build GeoJSON features. Properties carry id + every label_col
+            # the row has, with NULL/empty values dropped so the popup stays
+            # tight.
             import json
             features = []
             for row in rows:
-                geom_str, feature_id = row
-                if geom_str:
-                    try:
-                        geom = json.loads(geom_str)
-                        features.append({
-                            "type": "Feature",
-                            "geometry": geom,
-                            "properties": {"id": feature_id},
-                        })
-                    except json.JSONDecodeError:
-                        pass
+                row_map = dict(zip(col_names, row))
+                geom_str = row_map.pop("geom", None)
+                if not geom_str:
+                    continue
+                try:
+                    geom = json.loads(geom_str)
+                except json.JSONDecodeError:
+                    continue
+
+                props: dict = {}
+                feature_id = row_map.pop("_tusk_id", None)
+                if feature_id is not None:
+                    props["id"] = feature_id
+                for k, v in row_map.items():
+                    if v is None:
+                        continue
+                    if isinstance(v, str) and not v.strip():
+                        continue
+                    props[k] = v
+
+                features.append({"type": "Feature", "geometry": geom, "properties": props})
 
             elapsed = (time.perf_counter() - start) * 1000
 

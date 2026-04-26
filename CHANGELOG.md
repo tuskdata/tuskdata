@@ -2,6 +2,22 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.3.7] - 2026-04-26
+
+### Changed
+- **Map feature popups now show human-readable fields**, not just an
+  opaque UUID. `fetch_geometries` (the `/api/query/map-data` endpoint)
+  picks up to eight "label-ish" columns (`name`, `title`, `label`,
+  `description`, `address`, `name_*`, `city`, `country`, `region`,
+  `type`, `category`, `kind`, `status`, `code`) from the source query
+  and includes them in each Feature's `properties`.
+- Popup template was redesigned: the lead field (whichever name-like
+  column has a value) renders as a bold title; the remaining fields
+  show in a key/value table ordered with leads first and `id` last.
+  Popup width capped at 320px so a stray description doesn't blow up.
+
+---
+
 ## [0.3.6] - 2026-04-26
 
 ### Fixed

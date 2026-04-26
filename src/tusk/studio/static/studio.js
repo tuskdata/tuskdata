@@ -2927,24 +2927,65 @@ function initMap() {
         // Add popup on click
         let clickPopup = null;
 
+        // Properties are emitted in arbitrary order by Postgres / MapLibre.
+        // Force human-friendly fields to the top of the popup so users see
+        // "Name" before they see "id".
+        const POPUP_LEAD_FIELDS = [
+            'name', 'title', 'label', 'description', 'address',
+            'name_en', 'name_es', 'name_local', 'name_alt',
+            'city', 'country', 'region', 'type', 'category', 'kind',
+            'status', 'code',
+        ];
+
+        function _orderProps(props) {
+            const lead = [];
+            const seen = new Set();
+            for (const key of POPUP_LEAD_FIELDS) {
+                if (key in props && props[key] !== null && props[key] !== '') {
+                    lead.push([key, props[key]]);
+                    seen.add(key);
+                }
+            }
+            const rest = [];
+            // id last; everything else in declaration order between.
+            for (const [k, v] of Object.entries(props)) {
+                if (seen.has(k) || k === 'id') continue;
+                rest.push([k, v]);
+            }
+            if ('id' in props) rest.push(['id', props.id]);
+            return [...lead, ...rest];
+        }
+
         function showClickPopup(e) {
             if (!e.features || e.features.length === 0) return;
-
-            // Remove existing popup
             if (clickPopup) clickPopup.remove();
 
-            const feature = e.features[0];
-            const props = feature.properties;
+            const props = e.features[0].properties || {};
+            const ordered = _orderProps(props);
 
-            let html = '<div class="text-xs max-w-xs max-h-48 overflow-auto">';
+            // Lead with whichever label-like field exists, big-and-bold.
+            let title = '';
+            for (const key of POPUP_LEAD_FIELDS) {
+                if (props[key]) { title = escHtml(String(props[key])); break; }
+            }
+
+            let html = '<div class="text-xs max-w-xs max-h-64 overflow-auto">';
+            if (title) {
+                html += `<div class="font-semibold text-sm text-white mb-1.5">${title}</div>`;
+            }
             html += '<table class="w-full">';
-            for (const [key, value] of Object.entries(props)) {
-                const displayVal = value === null ? '<span class="text-gray-400">NULL</span>' : escHtml(String(value).slice(0, 100));
-                html += `<tr><td class="font-bold pr-2 text-gray-300">${escHtml(key)}</td><td class="text-gray-400">${displayVal}</td></tr>`;
+            for (const [key, value] of ordered) {
+                const displayVal = (value === null || value === '')
+                    ? '<span class="text-gray-500">—</span>'
+                    : escHtml(String(value).slice(0, 200));
+                html += `<tr>
+                    <td class="font-medium pr-2 text-gray-400 align-top whitespace-nowrap">${escHtml(key)}</td>
+                    <td class="text-gray-200">${displayVal}</td>
+                </tr>`;
             }
             html += '</table></div>';
 
-            clickPopup = new maplibregl.Popup({ className: 'dark-popup' })
+            clickPopup = new maplibregl.Popup({ className: 'dark-popup', maxWidth: '320px' })
                 .setLngLat(e.lngLat)
                 .setHTML(html)
                 .addTo(map);
