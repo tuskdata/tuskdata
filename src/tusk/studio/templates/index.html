@@ -125,8 +125,14 @@
                             </span>
                         </div>
                         <div class="right">
+                            <button class="btn btn-sm btn-ghost" onclick="explainCurrentQuery()" title="EXPLAIN this query">
+                                <i data-lucide="sparkles" style="color:var(--brand)"></i>Explain
+                            </button>
+                            <button class="btn btn-sm btn-ghost" onclick="formatCurrentQuery()" title="Pretty-print the SQL">
+                                <i data-lucide="wand-2"></i>Format
+                            </button>
                             <button class="btn btn-sm btn-ghost" onclick="showSaveQueryModal()" title="Save query">
-                                <i data-lucide="bookmark"></i>Save
+                                <i data-lucide="git-branch"></i>Save
                             </button>
                             <button id="run-btn" class="btn btn-sm btn-brand" onclick="runQuery()">
                                 <i data-lucide="play"></i>Run
@@ -160,6 +166,7 @@
                             <div class="tablist" id="result-views">
                                 <button data-view="table" class="on" onclick="setResultView('table')"><i data-lucide="table"></i>Table</button>
                                 <button data-view="map" onclick="setResultView('map')" id="result-view-map" style="display:none"><i data-lucide="map"></i>Map</button>
+                                <button data-view="chart" onclick="setResultView('chart')"><i data-lucide="bar-chart-3"></i>Chart</button>
                                 <button data-view="json" onclick="setResultView('json')"><i data-lucide="braces"></i>JSON</button>
                                 <button data-view="plan" onclick="setResultView('plan')"><i data-lucide="cpu"></i>Plan</button>
                             </div>
@@ -184,25 +191,33 @@
                         <pre class="json-view" id="results-json-content"></pre>
                     </div>
 
+                    <div class="view-pane hidden" id="results-chart-view">
+                        <div class="plan-view">
+                            <div style="padding:14px;color:var(--fg-3)">
+                                <i data-lucide="bar-chart-3" style="width:18px;height:18px;color:var(--fg-4)"></i>
+                                Chart view is coming in v0.5. Pick a numeric column from the result and we'll bar-chart it here.
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="view-pane hidden" id="results-plan-view">
                         <div class="plan-view" id="results-plan-content">
-                            <div class="text-fg-3" style="padding:14px">Run the query first, then click Plan to see EXPLAIN.</div>
+                            <div style="padding:14px;color:var(--fg-3)">Run the query first, then click Plan to see EXPLAIN.</div>
                         </div>
                     </div>
 
                     <div class="results-status" id="results-status">
-                        <div class="seg" id="status-selected">0 selected</div>
-                        <div class="seg" id="status-cols">— cols</div>
-                        <div class="seg" id="status-mem">—</div>
+                        <span id="status-selected">0 selected of 0</span>
                         <div style="flex:1"></div>
-                        <div class="seg pager" id="status-pager">
+                        <span id="status-pager-info">Page 1 of 1</span>
+                        <span style="color:var(--fg-4)">·</span>
+                        <span id="status-stream">streamed</span>
+                        <div class="pager" id="status-pager" style="margin-left:8px">
                             <button id="pager-first" onclick="goToPage(1)" title="First"><i data-lucide="chevrons-left" style="width:12px;height:12px"></i></button>
                             <button id="pager-prev" onclick="pagerPrev()" title="Previous"><i data-lucide="chevron-left" style="width:12px;height:12px"></i></button>
-                            <span id="pager-info">Page 1 / 1</span>
                             <button id="pager-next" onclick="pagerNext()" title="Next"><i data-lucide="chevron-right" style="width:12px;height:12px"></i></button>
                             <button id="pager-last" onclick="pagerLast()" title="Last"><i data-lucide="chevrons-right" style="width:12px;height:12px"></i></button>
                         </div>
-                        <div class="seg">50 rows / page</div>
                     </div>
                 </div>
             </div>
@@ -280,6 +295,87 @@ window.pagerNext = function() {
 window.pagerLast = function() {
     const total = window.getTotalPages?.() || 1;
     goToPage(total);
+};
+
+// Editor toolbar action: trigger Plan view + run EXPLAIN
+window.explainCurrentQuery = function() {
+    setResultView('plan');
+};
+
+// Editor toolbar action: pretty-print SQL via a tiny client-side
+// formatter. Not a full parser, but handles the common shape:
+// uppercases keywords, breaks before each major clause.
+window.formatCurrentQuery = function() {
+    if (!window.editor) return;
+    const sql = editor.state.doc.toString();
+    if (!sql.trim()) return;
+    const KW = ['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'GROUP BY', 'ORDER BY',
+                'HAVING', 'LIMIT', 'OFFSET', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN',
+                'INNER JOIN', 'OUTER JOIN', 'ON', 'UNION', 'UNION ALL',
+                'INSERT INTO', 'UPDATE', 'DELETE FROM', 'VALUES', 'SET',
+                'RETURNING', 'WITH', 'AS'];
+    let out = sql.replace(/\s+/g, ' ').trim();
+    KW.forEach(k => {
+        const re = new RegExp('\\b' + k.replace(' ', '\\s+') + '\\b', 'gi');
+        out = out.replace(re, '\n' + k);
+    });
+    out = out.replace(/^\n/, '').replace(/\n+/g, '\n').replace(/,\s*/g, ', ');
+    editor.dispatch({changes: {from: 0, to: editor.state.doc.length, insert: out}});
+};
+</script>
+
+<!-- AI Copilot panel toggle — lives on the right edge, can be collapsed. -->
+<div id="copilot-panel" style="position:fixed;top:56px;right:0;bottom:0;width:360px;background:var(--surface);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:40;overflow:hidden">
+    <div style="padding:14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <div style="width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--brand),var(--accent-violet));display:grid;place-items:center;color:#fff;font-size:11px;font-weight:600">T</div>
+        <div style="flex:1">
+            <div style="font-weight:600;font-size:13.5px">Tusk Copilot</div>
+            <div style="font-size:11px;color:var(--fg-3)" id="copilot-context">Idle</div>
+        </div>
+        <button onclick="toggleCopilot()" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+        </button>
+    </div>
+    <div style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px" id="copilot-body">
+        <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:11px;font-weight:600;color:var(--fg-3);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px">
+                <div style="width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,var(--brand),var(--accent-violet));display:grid;place-items:center;color:#fff;font-size:8px;font-weight:600">T</div>
+                Copilot
+            </div>
+            <div style="font-size:13px;line-height:1.55;color:var(--fg-2)">
+                I'll watch your queries and offer indexes, joins, and rewrites as suggestions. AI integrations land in v0.5 — for now this panel is a placeholder so the layout matches the v3 mockup.
+            </div>
+        </div>
+    </div>
+    <div style="padding:12px;border-top:1px solid var(--border);background:var(--surface)">
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="sparkles" style="color:var(--brand)"></i>Explain this query</button>
+            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="bug"></i>Why is this slow?</button>
+            <button class="btn btn-sm" style="text-align:left;justify-content:start" disabled><i data-lucide="git-merge"></i>Suggest a join</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+            <i data-lucide="sparkles" style="width:14px;height:14px;color:var(--brand)"></i>
+            <input placeholder="Coming in v0.5…" disabled style="flex:1;background:transparent;border:none;outline:none;color:var(--fg);font-size:13px;font-family:inherit">
+            <span style="font-size:10.5px;padding:2px 6px;background:var(--brand-soft);color:var(--brand);border-radius:4px;font-weight:500;font-family:var(--font-mono)">SQL</span>
+        </div>
+    </div>
+</div>
+
+<button id="copilot-toggle" onclick="toggleCopilot()"
+        class="btn btn-sm"
+        style="position:fixed;right:14px;bottom:14px;z-index:30;background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:var(--shadow-lg)"
+        title="Toggle Copilot">
+    <i data-lucide="sparkles"></i>Copilot
+</button>
+
+<script>
+window.toggleCopilot = function() {
+    const panel = document.getElementById('copilot-panel');
+    if (!panel) return;
+    const isOpen = panel.style.display === 'flex';
+    panel.style.display = isOpen ? 'none' : 'flex';
+    document.body.style.paddingRight = isOpen ? '' : '360px';
+    if (window.lucide) lucide.createIcons();
 };
 </script>
 {% endblock %}

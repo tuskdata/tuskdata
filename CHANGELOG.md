@@ -2,6 +2,30 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc4] - 2026-04-26 — Tighter mockup match
+
+Visible polish so the Studio actually looks like the v3 mockup:
+
+- **Light theme is the global default**, not just the Studio. The
+  Tailwind-hex override layer in `styles.css` now keys off
+  `body:not([data-theme="dark"])` instead of `body.light` — i.e. it
+  applies in pure CSS without waiting for the JS init, so the Admin /
+  Data / Cluster pages get the same warm-light surface the Studio
+  has been getting.
+- **Editor toolbar gets `Explain` and `Format` ghost buttons** to the
+  left of `Save`/`Run`, matching the mockup exactly. Explain jumps to
+  the Plan view; Format runs a tiny client-side SQL beautifier
+  (no server round-trip).
+- **Chart view tab** added to the result tablist — placeholder pane
+  for v0.5 chart-from-result.
+- **Column type chips now carry a unique-count suffix** (`int4 · 47
+  unique`, etc.) when the page is small enough to count cheaply.
+- **Status bar wording** matches the mockup verbatim:
+  `1 selected of 47 …    Page 1 of 1 · streamed   « ‹ › »`
+- **AI Copilot panel** stub on the right edge (toggle via the
+  bottom-right brand pill). Placeholder content so the layout
+  matches; real AI plumbing lands in v0.5.
+
 ## [0.4.3rc3] - 2026-04-26 — Pin apscheduler<4 (hotfix)
 
 Same payload as rc2 — only the dependency pin changed. APScheduler

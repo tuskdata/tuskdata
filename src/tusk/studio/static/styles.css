@@ -385,77 +385,77 @@ header {
    v0.4 light-theme overrides
    The templates carry hard-coded Tailwind arbitrary colors
    (bg-[#0d1117], border-[#30363d], etc) from the v0.3 dark
-   palette. When `body.light` is active, remap them to
+   palette. When `body:not(\[data-theme="dark"\])` is active, remap them to
    their warm-light equivalents. This is the bridge until the
    redesign Round 2/3/4 ports each page off Tailwind hex onto
    design-token vars.
    ============================================ */
-body.light {
+body:not(\[data-theme="dark"\]) {
     background: var(--bg);
     color: var(--fg);
 }
 
 /* Backgrounds */
-body.light .bg-\[\#0d1117\],
-body.light .bg-\[\#0d1117\]\/30,
-body.light .bg-\[\#0d1117\]\/60 { background-color: var(--bg) !important; }
-body.light .bg-\[\#0d1117\]\/30 { background-color: rgba(245, 243, 238, 0.5) !important; }
-body.light .bg-\[\#0d1117\]\/60 { background-color: rgba(245, 243, 238, 0.7) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#0d1117\],
+body:not(\[data-theme="dark"\]) .bg-\[\#0d1117\]\/30,
+body:not(\[data-theme="dark"\]) .bg-\[\#0d1117\]\/60 { background-color: var(--bg) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#0d1117\]\/30 { background-color: rgba(245, 243, 238, 0.5) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#0d1117\]\/60 { background-color: rgba(245, 243, 238, 0.7) !important; }
 
-body.light .bg-\[\#161b22\] { background-color: var(--surface) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#161b22\] { background-color: var(--surface) !important; }
 
-body.light .bg-\[\#21262d\],
-body.light .bg-\[\#21262d\]\/50,
-body.light .bg-\[\#21262d\]\/60 { background-color: var(--surface-2) !important; }
-body.light .bg-\[\#21262d\]\/50 { background-color: rgba(245, 243, 238, 0.6) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#21262d\],
+body:not(\[data-theme="dark"\]) .bg-\[\#21262d\]\/50,
+body:not(\[data-theme="dark"\]) .bg-\[\#21262d\]\/60 { background-color: var(--surface-2) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#21262d\]\/50 { background-color: rgba(245, 243, 238, 0.6) !important; }
 
-body.light .bg-\[\#30363d\] { background-color: var(--surface-3) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#30363d\] { background-color: var(--surface-3) !important; }
 
-body.light .hover\:bg-\[\#21262d\]:hover { background-color: var(--surface-2) !important; }
-body.light .hover\:bg-\[\#30363d\]:hover { background-color: var(--surface-3) !important; }
+body:not(\[data-theme="dark"\]) .hover\:bg-\[\#21262d\]:hover { background-color: var(--surface-2) !important; }
+body:not(\[data-theme="dark"\]) .hover\:bg-\[\#30363d\]:hover { background-color: var(--surface-3) !important; }
 
 /* Borders */
-body.light .border-\[\#30363d\],
-body.light .border-\[\#30363d\]\/40,
-body.light .border-\[\#30363d\]\/50,
-body.light .border-b-\[\#30363d\] { border-color: var(--border) !important; }
-body.light .divide-\[\#30363d\] > * + * { border-color: var(--border) !important; }
+body:not(\[data-theme="dark"\]) .border-\[\#30363d\],
+body:not(\[data-theme="dark"\]) .border-\[\#30363d\]\/40,
+body:not(\[data-theme="dark"\]) .border-\[\#30363d\]\/50,
+body:not(\[data-theme="dark"\]) .border-b-\[\#30363d\] { border-color: var(--border) !important; }
+body:not(\[data-theme="dark"\]) .divide-\[\#30363d\] > * + * { border-color: var(--border) !important; }
 
-body.light .focus\:border-indigo-500:focus { border-color: var(--brand) !important; }
+body:not(\[data-theme="dark"\]) .focus\:border-indigo-500:focus { border-color: var(--brand) !important; }
 
 /* Text */
-body.light .text-\[\#8b949e\] { color: var(--fg-3) !important; }
-body.light .text-gray-300 { color: var(--fg-2) !important; }
-body.light .text-gray-400 { color: var(--fg-3) !important; }
-body.light .text-gray-500 { color: var(--fg-3) !important; }
-body.light .text-gray-600 { color: var(--fg-4) !important; }
-body.light .text-white { color: var(--fg) !important; }
+body:not(\[data-theme="dark"\]) .text-\[\#8b949e\] { color: var(--fg-3) !important; }
+body:not(\[data-theme="dark"\]) .text-gray-300 { color: var(--fg-2) !important; }
+body:not(\[data-theme="dark"\]) .text-gray-400 { color: var(--fg-3) !important; }
+body:not(\[data-theme="dark"\]) .text-gray-500 { color: var(--fg-3) !important; }
+body:not(\[data-theme="dark"\]) .text-gray-600 { color: var(--fg-4) !important; }
+body:not(\[data-theme="dark"\]) .text-white { color: var(--fg) !important; }
 
-body.light .hover\:text-white:hover { color: var(--fg) !important; }
+body:not(\[data-theme="dark"\]) .hover\:text-white:hover { color: var(--fg) !important; }
 
 /* Brand button — keep coral, not indigo */
-body.light .bg-indigo-600 { background-color: var(--brand) !important; }
-body.light .bg-indigo-600.hover\:bg-indigo-700:hover,
-body.light .hover\:bg-indigo-700:hover { background-color: var(--brand-2) !important; }
-body.light .text-indigo-400 { color: var(--brand) !important; }
-body.light .text-indigo-300 { color: var(--brand-2) !important; }
-body.light .border-indigo-500 { border-color: var(--brand) !important; }
-body.light .accent-indigo-500 { accent-color: var(--brand) !important; }
-body.light .ring-indigo-500\/50 { --tw-ring-color: rgba(212, 80, 43, 0.5) !important; }
+body:not(\[data-theme="dark"\]) .bg-indigo-600 { background-color: var(--brand) !important; }
+body:not(\[data-theme="dark"\]) .bg-indigo-600.hover\:bg-indigo-700:hover,
+body:not(\[data-theme="dark"\]) .hover\:bg-indigo-700:hover { background-color: var(--brand-2) !important; }
+body:not(\[data-theme="dark"\]) .text-indigo-400 { color: var(--brand) !important; }
+body:not(\[data-theme="dark"\]) .text-indigo-300 { color: var(--brand-2) !important; }
+body:not(\[data-theme="dark"\]) .border-indigo-500 { border-color: var(--brand) !important; }
+body:not(\[data-theme="dark"\]) .accent-indigo-500 { accent-color: var(--brand) !important; }
+body:not(\[data-theme="dark"\]) .ring-indigo-500\/50 { --tw-ring-color: rgba(212, 80, 43, 0.5) !important; }
 
 /* Card / sidebar — use the design-token surfaces in light mode */
-body.light .card,
-body.light .stat-card {
+body:not(\[data-theme="dark"\]) .card,
+body:not(\[data-theme="dark"\]) .stat-card {
     background: var(--surface) !important;
     border-color: var(--border) !important;
     color: var(--fg);
 }
-body.light .sidebar {
+body:not(\[data-theme="dark"\]) .sidebar {
     background: var(--surface);
     border-color: var(--border);
 }
-body.light .sidebar-item.active,
-body.light .nav-tab.active {
+body:not(\[data-theme="dark"\]) .sidebar-item.active,
+body:not(\[data-theme="dark"\]) .nav-tab.active {
     background: var(--surface-2);
     color: var(--fg);
 }
@@ -463,67 +463,67 @@ body.light .nav-tab.active {
 /* Top nav already uses design tokens via .tusk-topnav */
 
 /* Tab pills (legacy .nav-tab/.query-tab) */
-body.light .query-tab { color: var(--fg-3); }
-body.light .query-tab.active { color: var(--fg); background: var(--surface-2); }
-body.light .query-tab:hover { color: var(--fg); }
+body:not(\[data-theme="dark"\]) .query-tab { color: var(--fg-3); }
+body:not(\[data-theme="dark"\]) .query-tab.active { color: var(--fg); background: var(--surface-2); }
+body:not(\[data-theme="dark"\]) .query-tab:hover { color: var(--fg); }
 
 /* Inputs */
-body.light input,
-body.light select,
-body.light textarea {
+body:not(\[data-theme="dark"\]) input,
+body:not(\[data-theme="dark"\]) select,
+body:not(\[data-theme="dark"\]) textarea {
     background: var(--surface) !important;
     color: var(--fg) !important;
     border-color: var(--border) !important;
 }
-body.light input::placeholder,
-body.light textarea::placeholder { color: var(--fg-4) !important; }
+body:not(\[data-theme="dark"\]) input::placeholder,
+body:not(\[data-theme="dark"\]) textarea::placeholder { color: var(--fg-4) !important; }
 
 /* Code/kbd surfaces */
-body.light kbd,
-body.light code {
+body:not(\[data-theme="dark"\]) kbd,
+body:not(\[data-theme="dark"\]) code {
     background: var(--surface-2);
     color: var(--fg);
     border-color: var(--border);
 }
 
 /* Tables */
-body.light table thead { background: var(--surface-2); color: var(--fg-3); }
-body.light table tbody tr:hover { background: var(--surface-2); }
+body:not(\[data-theme="dark"\]) table thead { background: var(--surface-2); color: var(--fg-3); }
+body:not(\[data-theme="dark"\]) table tbody tr:hover { background: var(--surface-2); }
 
 /* CodeMirror — switch the editor theme away from oneDark in light mode.
    The oneDark theme paints over everything; we can't easily disable it,
    but we can soften the worst clashes with the surrounding chrome. */
-body.light .cm-editor { background: var(--surface) !important; }
-body.light .cm-editor .cm-content { color: var(--fg); }
-body.light .cm-editor .cm-gutters { background: var(--surface-2); border-color: var(--border); color: var(--fg-3); }
-body.light .cm-editor .cm-activeLine { background: var(--surface-2) !important; }
-body.light .cm-editor .cm-activeLineGutter { background: var(--surface-3) !important; }
+body:not(\[data-theme="dark"\]) .cm-editor { background: var(--surface) !important; }
+body:not(\[data-theme="dark"\]) .cm-editor .cm-content { color: var(--fg); }
+body:not(\[data-theme="dark"\]) .cm-editor .cm-gutters { background: var(--surface-2); border-color: var(--border); color: var(--fg-3); }
+body:not(\[data-theme="dark"\]) .cm-editor .cm-activeLine { background: var(--surface-2) !important; }
+body:not(\[data-theme="dark"\]) .cm-editor .cm-activeLineGutter { background: var(--surface-3) !important; }
 
 /* Engine/chip pills — lift contrast in light */
-body.light .engine-btn { color: var(--fg-3); }
-body.light .engine-btn.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
+body:not(\[data-theme="dark"\]) .engine-btn { color: var(--fg-3); }
+body:not(\[data-theme="dark"\]) .engine-btn.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
 
 /* Make the "ring" indicator on selected connection visible */
-body.light .ring-1.ring-indigo-500\/50 { box-shadow: 0 0 0 1px rgba(212, 80, 43, 0.4) !important; }
+body:not(\[data-theme="dark"\]) .ring-1.ring-indigo-500\/50 { box-shadow: 0 0 0 1px rgba(212, 80, 43, 0.4) !important; }
 
 /* Modal backdrop a touch lighter so light-mode modals don't look pitch */
-body.light .bg-black\/50,
-body.light .bg-black\/60 { background-color: rgba(40, 35, 25, 0.4) !important; }
-body.light .bg-black\/80 { background-color: rgba(40, 35, 25, 0.55) !important; }
+body:not(\[data-theme="dark"\]) .bg-black\/50,
+body:not(\[data-theme="dark"\]) .bg-black\/60 { background-color: rgba(40, 35, 25, 0.4) !important; }
+body:not(\[data-theme="dark"\]) .bg-black\/80 { background-color: rgba(40, 35, 25, 0.55) !important; }
 
 /* HTMX query-tab styles (loaded later in studio.js renderTabs) */
-body.light .query-tab .close-btn:hover { background: var(--surface-3); }
+body:not(\[data-theme="dark"\]) .query-tab .close-btn:hover { background: var(--surface-3); }
 
 /* Map CRS warning bar — keep amber but on a light background */
-body.light .bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
+body:not(\[data-theme="dark"\]) .bg-\[\#f0883e\]\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
 
 /* Fallback for any remaining dark-only buttons */
-body.light .text-amber-400 { color: var(--accent-amber) !important; }
-body.light .text-yellow-400 { color: var(--accent-amber) !important; }
-body.light .text-red-400 { color: var(--red) !important; }
-body.light .text-green-400 { color: var(--green) !important; }
-body.light .bg-red-500\/20 { background-color: rgba(204, 46, 61, 0.12) !important; }
-body.light .bg-green-500\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
-body.light .bg-yellow-500\/20 { background-color: rgba(176, 119, 0, 0.12) !important; }
-body.light .bg-amber-500\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
-body.light .border-amber-500\/30 { border-color: rgba(176, 119, 0, 0.30) !important; }
+body:not(\[data-theme="dark"\]) .text-amber-400 { color: var(--accent-amber) !important; }
+body:not(\[data-theme="dark"\]) .text-yellow-400 { color: var(--accent-amber) !important; }
+body:not(\[data-theme="dark"\]) .text-red-400 { color: var(--red) !important; }
+body:not(\[data-theme="dark"\]) .text-green-400 { color: var(--green) !important; }
+body:not(\[data-theme="dark"\]) .bg-red-500\/20 { background-color: rgba(204, 46, 61, 0.12) !important; }
+body:not(\[data-theme="dark"\]) .bg-green-500\/20 { background-color: rgba(31, 138, 76, 0.12) !important; }
+body:not(\[data-theme="dark"\]) .bg-yellow-500\/20 { background-color: rgba(176, 119, 0, 0.12) !important; }
+body:not(\[data-theme="dark"\]) .bg-amber-500\/10 { background-color: rgba(176, 119, 0, 0.10) !important; }
+body:not(\[data-theme="dark"\]) .border-amber-500\/30 { border-color: rgba(176, 119, 0, 0.30) !important; }

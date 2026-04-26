@@ -454,28 +454,24 @@ function _updateResultChips(rowCount, execMs, isPaginated, hasGeo) {
     if (parquet) parquet.style.display = (currentEngine === 'duckdb') ? '' : 'none';
 }
 
-// Render the bottom status bar (selected count, cols, mem, pager)
+// Render the bottom status bar — mirrors the mockup:
+//   "1 selected of 47          Page 1 of 1 · streamed   « ‹ › »"
 function _updateStatusBar(opts) {
     const sel = document.getElementById('status-selected');
-    const cols = document.getElementById('status-cols');
-    const mem = document.getElementById('status-mem');
-    const pager = document.getElementById('pager-info');
+    const pagerInfo = document.getElementById('status-pager-info');
+    const stream = document.getElementById('status-stream');
     const first = document.getElementById('pager-first');
     const prev = document.getElementById('pager-prev');
     const next = document.getElementById('pager-next');
     const last = document.getElementById('pager-last');
 
-    if (sel) sel.textContent = `${selectedRows.size} selected${opts.total ? ' of ' + opts.total.toLocaleString() : ''}`;
-    if (cols) cols.textContent = opts.cols ? `${opts.cols} cols` : '— cols';
-    if (mem) {
-        if (opts.bytes) {
-            const mb = opts.bytes / 1024 / 1024;
-            mem.textContent = `Mem ${mb >= 1 ? mb.toFixed(1) + 'MB' : (opts.bytes / 1024).toFixed(0) + 'KB'}`;
-        } else {
-            mem.textContent = '—';
-        }
+    const total = opts.total || 0;
+    if (sel) sel.textContent = `${selectedRows.size} selected of ${total.toLocaleString()}`;
+    if (pagerInfo) pagerInfo.textContent = `Page ${opts.page} of ${opts.totalPages || 1}`;
+    if (stream) {
+        const isServer = serverPagination && currentResults?.total_count !== undefined;
+        stream.textContent = isServer ? 'streamed via server pagination' : 'in-memory result';
     }
-    if (pager) pager.textContent = `Page ${opts.page} / ${opts.totalPages || 1}`;
     if (first) first.disabled = opts.page <= 1;
     if (prev) prev.disabled = opts.page <= 1;
     if (next) next.disabled = opts.page >= (opts.totalPages || 1);
@@ -571,8 +567,19 @@ function renderResults() {
         pageRows = processedRows.slice(startIdx, endIdx);
     }
 
-    // Pre-compute type categories per column
+    // Pre-compute type categories per column + unique counts (cheap on
+    // a single page; skip when the page is huge to keep render fast).
     const categories = currentResults.columns.map(c => _typeCategory(c.type));
+    const uniqueCounts = (pageRows.length <= 500)
+        ? currentResults.columns.map((_, j) => {
+            const set = new Set();
+            for (const r of pageRows) {
+                const v = r[j];
+                set.add(v === null || v === undefined ? '\x00' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+            }
+            return set.size;
+        })
+        : currentResults.columns.map(() => null);
 
     // Header chips above the table
     _updateResultChips(totalCount, currentResults.execution_time_ms || 0, isServerPaginated, hasGeoColumn());
@@ -629,6 +636,10 @@ function renderResults() {
                     </th>
                     ${currentResults.columns.map((c, i) => {
                         const cat = categories[i];
+                        const u = uniqueCounts[i];
+                        const uniqueLabel = (u !== null && pageRows.length > 0)
+                            ? `· ${u} unique`
+                            : '';
                         return `
                         <th onclick="sortByColumn(${i})" title="${c.name} · ${c.type || ''}">
                             <div style="display:flex;align-items:center;gap:6px">
@@ -637,6 +648,7 @@ function renderResults() {
                             </div>
                             <div class="col-stat">
                                 <span class="type-chip ${cat}">${_typeShort(c.type)}</span>
+                                ${uniqueLabel ? `<span style="opacity:.85">${uniqueLabel}</span>` : ''}
                             </div>
                         </th>`;
                     }).join('')}
@@ -1068,6 +1080,7 @@ function initEditor(schema = {}, connType = 'postgres') {
         state,
         parent: editorEl
     });
+    window.editor = editor;
 }
 
 // Initialize with empty schema
