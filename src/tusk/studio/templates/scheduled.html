@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk · Scheduled jobs{% endblock %}
+
+{% block content %}
+<main class="sched-page" x-data="scheduledPage()" x-init="init()">
+    <div class="dash-head">
+        <div>
+            <div class="dash-title">Scheduled jobs</div>
+            <div class="dash-desc">
+                Queries, pipelines, backups and alerts that run on a schedule.
+                <span x-show="jobs.length" x-cloak>
+                    <span x-text="activeCount"></span> active ·
+                    <span x-text="pausedCount"></span> paused.
+                </span>
+            </div>
+        </div>
+        <button class="btn btn-brand" @click="openNewModal()">
+            <i data-lucide="plus"></i>New schedule
+        </button>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" x-cloak class="sched-row" style="justify-content:center;color:var(--fg-3)">
+        Loading scheduled jobs…
+    </div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && jobs.length === 0" x-cloak
+         class="card" style="padding:48px;text-align:center">
+        <i data-lucide="clock" style="width:36px;height:36px;color:var(--fg-4)"></i>
+        <div style="font-family:var(--serif);font-size:22px;color:var(--fg);margin-top:14px">
+            No scheduled jobs yet
+        </div>
+        <div style="font-size:13px;color:var(--fg-3);margin-top:6px;max-width:420px;margin-left:auto;margin-right:auto">
+            Schedule a SQL query, a saved Data pipeline, a backup, or any
+            plugin-registered job to run on a cron, interval, or one-shot trigger.
+        </div>
+        <button class="btn btn-brand" style="margin-top:18px" @click="openNewModal()">
+            <i data-lucide="plus"></i>Create your first schedule
+        </button>
+    </div>
+
+    <!-- Job rows -->
+    <template x-for="job in jobs" :key="job.id">
+        <div class="sched-row" :style="job.enabled ? '' : 'opacity:.55'">
+            <div>
+                <div class="sched-name" x-text="job.name"></div>
+                <div class="sched-cron">
+                    <span x-text="formatTrigger(job.trigger)"></span>
+                    · <span x-text="job.kind"></span>
+                </div>
+            </div>
+            <span class="chip"
+                  :class="statusChipClass(job)"
+                  x-text="statusChipText(job)"></span>
+            <div class="sched-runs" :title="runsTooltip(job)">
+                <template x-for="run in runBars(job)" :key="run.idx">
+                    <span :class="run.className" :style="'height:' + run.height + 'px'"></span>
+                </template>
+            </div>
+            <span class="text-xs text-fg-3 mono" x-text="nextRunLabel(job)"></span>
+            <button class="icon-btn" @click="runNow(job.id)" title="Run now">
+                <i data-lucide="play"></i>
+            </button>
+            <div x-data="{ open: false }" style="position:relative">
+                <button class="icon-btn" @click="open = !open" @click.outside="open = false" title="More">
+                    <i data-lucide="more-horizontal"></i>
+                </button>
+                <div x-show="open" x-cloak
+                     style="position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);padding:4px;min-width:160px;z-index:10">
+                    <button class="sched-menu-item" @click="togglePause(job); open=false">
+                        <i :data-lucide="job.enabled ? 'pause' : 'play'"></i>
+                        <span x-text="job.enabled ? 'Pause' : 'Resume'"></span>
+                    </button>
+                    <button class="sched-menu-item" @click="deleteJob(job); open=false">
+                        <i data-lucide="trash-2"></i>Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- New schedule modal -->
+    <div x-show="newModalOpen" x-cloak
+         x-on:keydown.escape.window="newModalOpen = false"
+         class="cmdk-mask" :class="newModalOpen ? 'open' : ''"
+         style="display:flex;align-items:center;justify-content:center;padding:0">
+        <div class="cmdk" style="width:520px" @click.stop>
+            <div class="cmdk-input">
+                <i data-lucide="clock"></i>
+                <span style="font-weight:600">New scheduled job</span>
+                <button class="icon-btn" style="margin-left:auto" @click="newModalOpen = false">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div style="padding:18px">
+                <!-- Step 1: pick kind -->
+                <div x-show="step === 'kind'">
+                    <div style="font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:8px">Kind</div>
+                    <div class="sched-kind-grid">
+                        <template x-for="k in kindOptions" :key="k.id">
+                            <button class="sched-kind-card" @click="selectKind(k.id)">
+                                <i :data-lucide="k.icon"></i>
+                                <div>
+                                    <div class="sched-kind-name" x-text="k.label"></div>
+                                    <div class="sched-kind-desc" x-text="k.desc"></div>
+                                </div>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Step 2: kind-specific form -->
+                <div x-show="step === 'form'">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+                        <button class="icon-btn" @click="step = 'kind'"><i data-lucide="arrow-left"></i></button>
+                        <span style="font-weight:500" x-text="kindLabel(form.kind)"></span>
+                    </div>
+
+                    <label class="sched-label">Name</label>
+                    <input class="sched-input" type="text" x-model="form.name" placeholder="My nightly job">
+
+                    <template x-if="['backup', 'vacuum', 'analyze', 'query'].includes(form.kind)">
+                        <div>
+                            <label class="sched-label">Connection</label>
+                            <select class="sched-input" x-model="form.connection_id">
+                                <option value="">Select connection…</option>
+                                {% for c in connections %}
+                                <option value="{{ c.id }}">{{ c.name }} ({{ c.type }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </template>
+
+                    <template x-if="form.kind === 'query'">
+                        <div>
+                            <label class="sched-label">SQL</label>
+                            <textarea class="sched-input" rows="5" x-model="form.sql"
+                                      placeholder="SELECT count(*) FROM events"></textarea>
+                            <label class="sched-label">Save results as (optional)</label>
+                            <input class="sched-input" type="text" x-model="form.save_results_as"
+                                   placeholder="daily_event_count">
+                        </div>
+                    </template>
+
+                    <template x-if="form.kind === 'pipeline'">
+                        <div>
+                            <label class="sched-label">Pipeline ID (dataset id from Data tab)</label>
+                            <input class="sched-input" type="text" x-model="form.pipeline_id"
+                                   placeholder="ds-abc123">
+                            <label class="sched-label">Workspace</label>
+                            <input class="sched-input" type="text" x-model="form.workspace"
+                                   placeholder="default">
+                        </div>
+                    </template>
+
+                    <template x-if="form.kind === 'plugin'">
+                        <div>
+                            <label class="sched-label">Plugin ID</label>
+                            <input class="sched-input" type="text" x-model="form.plugin_id"
+                                   placeholder="tusk-ci">
+                            <label class="sched-label">Plugin job kind</label>
+                            <input class="sched-input" type="text" x-model="form.plugin_kind"
+                                   placeholder="ci.deploy">
+                            <label class="sched-label">Payload (JSON)</label>
+                            <textarea class="sched-input" rows="4" x-model="form.plugin_payload"
+                                      placeholder='{"target": "prod"}'></textarea>
+                        </div>
+                    </template>
+
+                    <button class="btn btn-sm" style="margin-top:16px" @click="step = 'trigger'"
+                            :disabled="!canProceedToTrigger()">
+                        Next: trigger <i data-lucide="arrow-right"></i>
+                    </button>
+                </div>
+
+                <!-- Step 3: pick trigger -->
+                <div x-show="step === 'trigger'">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+                        <button class="icon-btn" @click="step = 'form'"><i data-lucide="arrow-left"></i></button>
+                        <span style="font-weight:500">Trigger</span>
+                    </div>
+
+                    <label class="sched-label">Type</label>
+                    <select class="sched-input" x-model="form.trigger_type">
+                        <option value="cron">Cron</option>
+                        <option value="interval">Interval</option>
+                        <option value="date">One-time</option>
+                    </select>
+
+                    <template x-if="form.trigger_type === 'cron'">
+                        <div>
+                            <label class="sched-label">Cron expression (5 fields: m h dom mon dow)</label>
+                            <input class="sched-input mono" type="text" x-model="form.cron"
+                                   placeholder="0 2 * * *">
+                            <div style="font-size:11.5px;color:var(--fg-3);margin-top:4px">
+                                Example: <code>0 2 * * *</code> = every day at 02:00 UTC
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="form.trigger_type === 'interval'">
+                        <div style="display:flex;gap:8px">
+                            <div style="flex:1">
+                                <label class="sched-label">Hours</label>
+                                <input class="sched-input" type="number" min="0" x-model.number="form.interval_hours">
+                            </div>
+                            <div style="flex:1">
+                                <label class="sched-label">Minutes</label>
+                                <input class="sched-input" type="number" min="0" x-model.number="form.interval_minutes">
+                            </div>
+                            <div style="flex:1">
+                                <label class="sched-label">Seconds</label>
+                                <input class="sched-input" type="number" min="0" x-model.number="form.interval_seconds">
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="form.trigger_type === 'date'">
+                        <div>
+                            <label class="sched-label">Run at</label>
+                            <input class="sched-input" type="datetime-local" x-model="form.run_date">
+                        </div>
+                    </template>
+
+                    <div style="display:flex;gap:14px;margin-top:14px;font-size:13px">
+                        <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                            <input type="checkbox" x-model="form.notify_on_success">Notify on success
+                        </label>
+                        <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                            <input type="checkbox" x-model="form.notify_on_failure">Notify on failure
+                        </label>
+                    </div>
+
+                    <div style="display:flex;gap:8px;margin-top:18px">
+                        <button class="btn" @click="newModalOpen = false">Cancel</button>
+                        <button class="btn btn-brand" @click="submit()" :disabled="submitting" style="margin-left:auto">
+                            <i data-lucide="check"></i>
+                            <span x-text="submitting ? 'Creating…' : 'Create schedule'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/scheduled.js"></script>
+{% endblock %}

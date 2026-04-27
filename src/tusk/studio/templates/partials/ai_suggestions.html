@@ -1,0 +1,22 @@
+{% if suggestions %}
+  {% for s in suggestions %}
+  <div class="suggestion">
+    <i data-lucide="{{ s.icon or 'lightbulb' }}"></i>
+    <div>
+      <div>{{ s.message | safe }}</div>
+      {% if s.action_url %}
+      <div class="actions">
+        <a href="{{ s.action_url }}">{{ s.action_label or 'Open' }} →</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  <script>lucide.createIcons();</script>
+{% else %}
+  <div class="home-suggestion-loading">
+    <i data-lucide="check"></i>
+    Nothing to suggest right now — keep querying.
+  </div>
+  <script>lucide.createIcons();</script>
+{% endif %}

@@ -387,12 +387,42 @@ async def download_file(
     if source.last_etag:
         headers["If-None-Match"] = source.last_etag
 
+    # SSRF guard: refuse private/loopback/reserved hosts up-front and on
+    # every redirect hop. (`follow_redirects=False` plus a manual hop loop.)
+    from tusk.core.url_guard import validate_outbound_url, UnsafeURL
+
+    try:
+        validate_outbound_url(source.url)
+    except UnsafeURL as e:
+        run.status = "failed"
+        run.error = f"unsafe URL: {e}"
+        source.last_status = "failed"
+        save_sources()
+        run.completed_at = _now_iso()
+        _save_run(run)
+        log.error("Download rejected (unsafe URL)", source=source.name, error=str(e))
+        return run
+
+    async def _follow(client: httpx.AsyncClient, url: str, hop: int = 0):
+        if hop > 5:
+            raise RuntimeError("too many redirects")
+        validate_outbound_url(url)
+        req = client.build_request("GET", url, headers=headers)
+        resp = await client.send(req, stream=True, follow_redirects=False)
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location")
+            await resp.aclose()
+            if not location:
+                raise RuntimeError("redirect without Location header")
+            return await _follow(client, location, hop + 1)
+        return resp
+
     try:
         async with httpx.AsyncClient(
-            follow_redirects=True,
             timeout=httpx.Timeout(300, connect=30),
         ) as client:
-            async with client.stream("GET", source.url, headers=headers) as resp:
+            resp = await _follow(client, source.url)
+            async with resp:
                 if resp.status_code == 304:
                     run.status = "skipped"
                     run.completed_at = _now_iso()

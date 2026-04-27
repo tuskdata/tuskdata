@@ -6,11 +6,12 @@ from tusk.studio.routes.api import APIController, health_check, metrics
 from tusk.studio.routes.admin import AdminController
 from tusk.studio.routes.settings import SettingsController
 from tusk.studio.routes.files import FilesController, DuckDBController
-from tusk.studio.routes.data import DataController
+from tusk.studio.routes.data import DataController, ExploreController
 from tusk.studio.routes.auth import AuthController, UsersController, GroupsController, AuthSetupController, ProfileController, AuditLogController
 from tusk.studio.routes.scheduler import SchedulerController
 from tusk.studio.routes.downloads import DownloadsController
 from tusk.studio.routes.notifications import NotificationPageController, NotificationAPIController
+from tusk.studio.routes.ai import AICopilotController, AISettingsPageController
 
 __all__ = [
     # Base
@@ -26,6 +27,7 @@ __all__ = [
     "FilesController",
     "DuckDBController",
     "DataController",
+    "ExploreController",
     "AuthController",
     "UsersController",
     "GroupsController",
@@ -36,4 +38,6 @@ __all__ = [
     "DownloadsController",
     "NotificationPageController",
     "NotificationAPIController",
+    "AICopilotController",
+    "AISettingsPageController",
 ]

@@ -11,6 +11,9 @@ from litestar.config.compression import CompressionConfig
 from litestar.types import ASGIApp, Receive, Scope, Send
 
 from litestar.contrib.minijinja import MiniJinjaTemplateEngine
+from litestar.openapi import OpenAPIConfig
+
+import tusk
 
 import os
 
@@ -22,6 +25,7 @@ from tusk.studio.routes import (
     FilesController,
     DuckDBController,
     DataController,
+    ExploreController,
     AuthController,
     UsersController,
     GroupsController,
@@ -32,6 +36,8 @@ from tusk.studio.routes import (
     DownloadsController,
     NotificationPageController,
     NotificationAPIController,
+    AICopilotController,
+    AISettingsPageController,
     health_check,
     metrics,
 )
@@ -56,9 +62,31 @@ STATIC_DIR = STUDIO_DIR / "static"
 
 CSRF_COOKIE = "tusk_csrf"
 CSRF_HEADER = "x-csrf-token"
+SESSION_COOKIE = "tusk_session"
 # Paths exempt from CSRF (login needs to work without a token, health, static, etc.)
 _CSRF_EXEMPT_PREFIXES = ("/static/", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/auth/config", "/health", "/api/ci/webhook", "/api/ci/sse/", "/bi/public/", "/embed/", "/api/embed/")
 _STATE_CHANGING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+# Paths that don't require a session in multi-user mode.
+# Anything outside this list is gated by SessionRequiredMiddleware.
+_PUBLIC_PREFIXES = (
+    "/static/",
+    "/login",
+    "/health",
+    "/metrics",
+    "/favicon.ico",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/status",
+    "/api/auth/config",
+    "/api/auth/setup",
+    # External integrations carry their own auth (HMAC, signed token, etc.)
+    "/api/ci/webhook",
+    "/api/ci/sse/",
+    "/bi/public/",
+    "/embed/",
+    "/api/embed/",
+)
 
 
 class CSRFMiddleware(AbstractMiddleware):
@@ -109,6 +137,81 @@ class CSRFMiddleware(AbstractMiddleware):
         await self.app(scope, receive, send_with_csrf)
 
 
+class SessionRequiredMiddleware(AbstractMiddleware):
+    """Require a valid session cookie in multi-user mode.
+
+    Single-user mode is a no-op (anyone with network access is already
+    trusted). In multi-user mode, every request outside the public
+    allowlist must carry a `tusk_session` cookie matching a live
+    session row, otherwise:
+
+    - HTML/HTMX navigations are redirected to `/login?redirect=…`
+    - JSON / API requests get a 401
+
+    This was the v0.3.0 release-blocker: only `AdminController` and
+    `ClusterController` had per-controller guards, so an unauthenticated
+    request could still hit `/api/query`, `/api/scheduler/*`, file
+    uploads, notification webhooks, etc.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Single-user mode → no auth gate.
+        from tusk.core.config import get_config
+        if get_config().auth_mode != "multi":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
+        path = request.url.path
+
+        if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+
+        # Validate session.
+        from tusk.core.auth import get_session, get_user_by_id
+        session_id = request.cookies.get(SESSION_COOKIE)
+        valid = False
+        if session_id:
+            session = get_session(session_id)
+            if session:
+                user = get_user_by_id(session.user_id)
+                if user and user.is_active:
+                    valid = True
+
+        if valid:
+            await self.app(scope, receive, send)
+            return
+
+        # Reject. HTMX boost / fetch get JSON; full nav gets a redirect.
+        accept = request.headers.get("accept", "")
+        is_html = "text/html" in accept and "application/json" not in accept
+        is_htmx = request.headers.get("hx-request") == "true"
+
+        if is_htmx:
+            response = Response(
+                content="",
+                status_code=401,
+                headers={"HX-Redirect": f"/login?redirect={path}"},
+            )
+        elif is_html and request.method == "GET":
+            response = Response(
+                content="",
+                status_code=303,
+                headers={"Location": f"/login?redirect={path}"},
+            )
+        else:
+            response = Response(
+                content={"error": "Authentication required"},
+                status_code=401,
+            )
+        await response(scope, receive, send)
+
+
 def get_route_handlers() -> list:
     """Collect all route handlers including plugins"""
     # Core handlers
@@ -120,6 +223,7 @@ def get_route_handlers() -> list:
         FilesController,
         DuckDBController,
         DataController,
+        ExploreController,
         AuthController,
         UsersController,
         GroupsController,
@@ -130,6 +234,8 @@ def get_route_handlers() -> list:
         DownloadsController,
         NotificationPageController,
         NotificationAPIController,
+        AICopilotController,
+        AISettingsPageController,
         health_check,
         metrics,
     ]
@@ -344,7 +450,15 @@ app = Litestar(
         backend="zstd",
         minimum_size=500,  # Compress responses larger than 500 bytes
     ),
-    middleware=[CSRFMiddleware],
+    middleware=[SessionRequiredMiddleware, CSRFMiddleware],
+    # Litestar's default OpenAPI controller registers at `/schema`, which
+    # collides with our user-facing Schema viewer page. Move it under
+    # `/api/openapi` so `/schema` is free for the application UI.
+    openapi_config=OpenAPIConfig(
+        title="Tusk API",
+        version=tusk.__version__,
+        path="/api/openapi",
+    ),
     on_startup=[on_startup],
     on_shutdown=[on_shutdown],
     debug=os.environ.get("TUSK_DEBUG", "").lower() in ("1", "true", "yes"),

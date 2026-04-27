@@ -481,8 +481,35 @@ async def fetch_geometries(
         return {"error": str(e), "features": [], "total_count": 0, "truncated": False}
 
 
+# In-process schema cache. The /api/connections/{id}/schema endpoint runs
+# three information_schema queries; clients hit it on every connection switch
+# and tab refresh. A short TTL keeps the UI snappy without staling DDL changes
+# for long. invalidate_schema_cache() is wired into connection mutations and
+# DDL execution to keep the cache fresh after writes.
+_schema_cache: dict[str, tuple[float, dict]] = {}
+_SCHEMA_TTL = 30.0
+
+
+def invalidate_schema_cache(connection_id: str | None = None) -> None:
+    """Drop a cached schema. Pass None to clear everything."""
+    if connection_id is None:
+        _schema_cache.clear()
+    else:
+        _schema_cache.pop(connection_id, None)
+
+
 async def get_schema(config: ConnectionConfig) -> dict:
-    """Get database schema (tables and columns with PK/FK info)"""
+    """Get database schema (tables and columns with PK/FK info).
+
+    Cached in-process for `_SCHEMA_TTL` seconds keyed by connection id.
+    Errors are not cached — they bubble through and the next call retries.
+    """
+    cache_key = config.id
+    now = time.monotonic()
+    cached = _schema_cache.get(cache_key)
+    if cached and (now - cached[0]) < _SCHEMA_TTL:
+        return cached[1]
+
     # Main columns query
     sql = """
         SELECT
@@ -568,6 +595,7 @@ async def get_schema(config: ConnectionConfig) -> dict:
 
         schema[schema_name][table_name].append(col_info)
 
+    _schema_cache[cache_key] = (now, schema)
     return schema
 
 

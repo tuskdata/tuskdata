@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from litestar import Controller, get, post, delete
 from litestar.params import Body
+from litestar.response import Response
 import duckdb
 
 from tusk.core.history import get_history
@@ -15,10 +16,16 @@ from tusk.core.files import (
     remove_folder,
     get_file_icon,
     format_rows,
+    validate_user_path,
     SUPPORTED_EXTENSIONS,
 )
 from tusk.core.connection import get_connection
 from tusk.engines.duckdb_engine import get_duckdb_engine
+
+
+def _path_denied() -> Response:
+    """Standard 403 response when a user-supplied path escapes the allowlist."""
+    return Response({"error": "path outside allowed roots"}, status_code=403)
 
 
 class FilesController(Controller):
@@ -56,18 +63,23 @@ class FilesController(Controller):
         return {"folders": result}
 
     @post("/folders")
-    async def add_folder_path(self, data: dict = Body()) -> dict:
+    async def add_folder_path(self, data: dict = Body()) -> dict | Response:
         """Add a folder to monitor"""
         path = data.get("path", "")
         if not path:
             return {"success": False, "error": "No path provided"}
 
-        expanded = str(Path(path).expanduser().resolve())
+        try:
+            resolved = validate_user_path(path)
+        except PermissionError:
+            return _path_denied()
 
-        if not Path(expanded).exists():
+        expanded = str(resolved)
+
+        if not resolved.exists():
             return {"success": False, "error": f"Path does not exist: {path}"}
 
-        if not Path(expanded).is_dir():
+        if not resolved.is_dir():
             return {"success": False, "error": f"Path is not a directory: {path}"}
 
         if add_folder(expanded):
@@ -84,9 +96,13 @@ class FilesController(Controller):
         return {"success": False, "error": "Folder not found"}
 
     @get("/scan")
-    async def scan_folder(self, path: str) -> dict:
+    async def scan_folder(self, path: str) -> dict | Response:
         """Scan a specific folder for files"""
-        files = scan_directory(path)
+        try:
+            resolved = validate_user_path(path)
+        except PermissionError:
+            return _path_denied()
+        files = scan_directory(str(resolved))
         return {
             "path": path,
             "files": [
@@ -104,9 +120,12 @@ class FilesController(Controller):
         }
 
     @get("/browse")
-    async def browse_directory(self, path: str = "~") -> dict:
+    async def browse_directory(self, path: str = "~") -> dict | Response:
         """Browse a directory - list all files and subdirectories"""
-        p = Path(path).expanduser().resolve()
+        try:
+            p = validate_user_path(path)
+        except PermissionError:
+            return _path_denied()
 
         if not p.exists():
             return {"error": f"Path does not exist: {path}"}
@@ -198,10 +217,13 @@ class FilesController(Controller):
             return {"success": False, "error": str(e)}
 
     @get("/info")
-    async def get_file_info(self, path: str) -> dict:
+    async def get_file_info(self, path: str) -> dict | Response:
         """Get detailed info about a file (row count, schema)"""
         engine = get_duckdb_engine()
-        p = Path(path).expanduser()
+        try:
+            p = validate_user_path(path)
+        except PermissionError:
+            return _path_denied()
 
         if not p.exists():
             return {"error": f"File not found: {path}"}
@@ -250,10 +272,13 @@ class FilesController(Controller):
             return {"error": f"Unsupported file type: {ext}"}
 
     @get("/preview")
-    async def preview_file(self, path: str, table: str | None = None) -> dict:
+    async def preview_file(self, path: str, table: str | None = None) -> dict | Response:
         """Preview file contents (first 100 rows)"""
         engine = get_duckdb_engine()
-        p = Path(path).expanduser()
+        try:
+            p = validate_user_path(path)
+        except PermissionError:
+            return _path_denied()
 
         if not p.exists():
             return {"error": f"File not found: {path}"}

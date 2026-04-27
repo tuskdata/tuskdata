@@ -2,6 +2,120 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.4] - 2026-04-27 — Homepage, AI Copilot, Schema/Explore/Scheduled, Security II
+
+The first version where the redesign actually *does things*. New
+top-level pages, real wired data, and a release-blocker pile of
+security findings closed.
+
+### New pages (all wired to live data — no decorative stubs)
+
+- **Homepage** at `/` (and `/home`) with greeting hero, three stat
+  cards (Queries this week, Avg latency, Active connections —
+  each driven by SQLite-backed history + the live connection
+  pool), recent queries that link back into Studio, an
+  AI-suggestions panel that runs heuristics today and plugs into
+  whatever provider the deployer configures, and team activity
+  in multi-user mode.
+- **Schema viewer** at `/schema`. Real ER diagram from
+  `pg_constraint` + `information_schema`, draggable entities
+  with FK lines drawn as cubic-bezier paths, layout persisted
+  per-connection to `~/.tusk/schema_layouts/{conn_id}.json`,
+  pan/zoom with anchored wheel-zoom, click-to-highlight related
+  neighbors.
+- **Explore** at `/explore`. Per-column data profile (dtype, null
+  bar, distinct count, top-10 histogram, numeric min/max/mean)
+  computed by Polars from a `LIMIT 10000` sample. Click a column
+  for a full-distribution drill-down.
+- **Scheduled jobs** at `/scheduled`. Now driven by a *generic*
+  scheduler — the existing `backup` / `vacuum` / `analyze` are
+  three of N kinds; new ones: `query` (run SQL on a connection
+  and notify), `pipeline` (run a saved Data tab pipeline), and
+  `plugin` (plugins register their own kinds via
+  `register_plugin_handler`). Sparkline of last-10 runs from a
+  new `job_runs` table.
+
+### AI Copilot
+
+- New `tusk.core.ai` module with a provider abstraction. Built-in
+  providers: **Ollama** (local, default), **OpenAI**,
+  **Anthropic**, **custom** (any OpenAI-compatible endpoint —
+  OpenRouter, LM Studio, vLLM, …). API keys are encrypted with
+  the same fernet keychain as connection passwords.
+- New endpoints: `/api/ai/{status,config,test,models,sql,explain,suggest}`.
+  `/api/ai/sql` accepts a prompt + optional connection_id and
+  returns generated SQL with a one-line explanation. `/api/ai/explain`
+  takes a SQL block and returns a 2–4 sentence walk-through.
+- Settings page at `/settings/ai` to wire it up: pick a provider,
+  enter a base URL (defaults flip per provider), pick a model
+  (dropdown populated from the provider's `/models` endpoint),
+  test the round-trip before saving.
+- Compose ships a `--profile ai` Ollama service with a healthcheck
+  and a persistent `ollama-data` volume. README walks the user
+  through `docker compose --profile ai up` and
+  `docker compose exec ollama ollama pull qwen2.5-coder:3b`. If
+  Ollama is already running on the host, point Tusk at it via
+  `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+- Homepage AI suggestions: cheap heuristics today (queries run ≥4
+  times in a day → "save as scheduled?", missing-AI-provider hint
+  on first run). The AI-generated insights ride on the same
+  endpoint with `?ai=1` so they only fire when a provider is
+  configured.
+
+### Top nav + cmdk search
+
+- Added Home / Schema / Explore / Scheduled tabs.
+- ⌘K / Ctrl+K opens a command palette over connections, saved
+  queries, history, scheduled jobs, and pages — index is fetched
+  once on first open, cached for 60s. Free-text queries that don't
+  match anything offer "Ask AI: \"…\"" as the first option.
+
+### Security Round 2 (audit follow-ups — release blockers)
+
+- **CRITICAL**: global `SessionRequiredMiddleware`. In multi-user
+  mode every request outside a tight public allowlist
+  (`/login`, `/api/auth/*`, `/static`, `/health`, public
+  embeds) requires a valid `tusk_session` cookie. Before this,
+  only `AdminController` and `ClusterController` had per-controller
+  guards, so an unauthenticated request could reach `/api/query`,
+  `/api/scheduler/*`, file uploads, notification webhooks, etc.
+  Single-user mode is unchanged.
+- **CRITICAL**: SSRF guard (`tusk.core.url_guard`). Outbound HTTP
+  from notification channels (Slack/Discord/webhook) and the
+  downloads module now refuses private/loopback/link-local/
+  reserved IPs and re-validates on every redirect hop. Set
+  `TUSK_ALLOW_PRIVATE_WEBHOOKS=1` to opt out (dev only).
+- **HIGH**: `SchedulerController` now admin-gated.
+- **HIGH**: XSS escape sweep in `studio.js` — connection name /
+  type / id are no longer interpolated raw into `innerHTML` /
+  `onclick` strings.
+- **HIGH**: `files.py` now constrains user-supplied paths to a
+  shared allowlist (home, /tmp, optional `TUSK_FILES_ROOT`) — no
+  more enumerating `/etc` or `/root` from a remote auth'd user.
+
+### Performance Round 1 (audit follow-ups)
+
+- `pg_stat_activity` capped at `LIMIT 200` and `LEFT(query, 500)`
+  — admin page polled every 5s no longer drags hundreds of rows
+  per tick.
+- `kill_queries_by_user` / `kill_queries_by_database` collapsed
+  from N+1 round-trips into a single statement.
+- Sync Polars / Ibis / DuckDB calls in async handlers wrapped
+  with `asyncio.to_thread` so the Granian event loop doesn't
+  block during pipelines.
+- `/api/connections/{id}/schema` cached 30s per connection
+  (`engines.postgres._schema_cache`); invalidated on connection
+  edits.
+- File upload now streams to disk in chunks instead of loading
+  the full body into memory.
+
+### Litestar plumbing
+
+- Moved Litestar's built-in OpenAPI controller off the default
+  `/schema` path to `/api/openapi` so the application's
+  user-facing Schema viewer page can own `/schema`. The doc
+  itself is unchanged — just relocated.
+
 ## [0.4.3] - 2026-04-27 — Redesign closure release
 
 Same payload as `rc15`. Cut as the official `0.4.3` after the user

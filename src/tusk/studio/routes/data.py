@@ -26,6 +26,7 @@ from tusk.engines.polars_engine import (
 )
 from tusk.engines.duckdb_engine import DuckDBEngine
 from tusk.core.connection import list_connections
+from tusk.core.files import validate_user_path
 from tusk.studio.htmx import is_htmx
 
 log = structlog.get_logger()
@@ -106,23 +107,16 @@ def _build_cache(file_path: Path, file_type: str, engine: DuckDBEngine) -> Path 
 
 
 def _validate_file_path(path: str) -> Path:
-    """Validate that a file path is safe (no traversal attacks)"""
-    p = Path(path).expanduser().resolve()
+    """Back-compat wrapper around the shared path guard.
 
-    # Allow home directory and subdirectories
-    home = Path.home().resolve()
-    # Allow /tmp
-    tmp = Path("/tmp").resolve()
-
-    if not (str(p).startswith(str(home)) or str(p).startswith(str(tmp))):
-        raise ValueError(f"Access denied: path must be under home directory or /tmp")
-
-    # Block hidden directories (except common ones)
-    for part in p.parts:
-        if part.startswith(".") and part not in {".", "..", ".local", ".config"}:
-            raise ValueError(f"Access denied: hidden path component '{part}'")
-
-    return p
+    Existing callers in this module raise ``ValueError`` on rejection; we
+    translate ``PermissionError`` from the shared guard into ``ValueError``
+    so their error-handling stays unchanged.
+    """
+    try:
+        return validate_user_path(path)
+    except PermissionError as e:
+        raise ValueError(f"Access denied: {e}") from e
 
 
 # Shared DuckDB engine for previews
@@ -154,7 +148,7 @@ class DataController(Controller):
         if engine == "duckdb" and suffix not in (".pbf",):
             file_type = {".csv": "csv", ".tsv": "tsv", ".parquet": "parquet", ".json": "json"}.get(suffix)
             if file_type:
-                result = _duckdb_engine.preview_file(str(p), file_type, 1)
+                result = await asyncio.to_thread(_duckdb_engine.preview_file, str(p), file_type, 1)
                 if not result.error:
                     return {
                         "columns": [{"name": c.name, "type": c.type} for c in result.columns],
@@ -162,7 +156,7 @@ class DataController(Controller):
                     }
 
         # Default: Polars schema (or auto for OSM)
-        schema = get_schema(str(p), osm_layer)
+        schema = await asyncio.to_thread(get_schema, str(p), osm_layer)
         schema["engine_used"] = "polars"
         return schema
 
@@ -180,7 +174,7 @@ class DataController(Controller):
 
         # OSM files always use Polars (DuckDB Spatial handles this differently)
         if suffix == ".pbf" or str(p).endswith(".osm.pbf"):
-            result = polars_preview_file(str(p), limit, osm_layer)
+            result = await asyncio.to_thread(polars_preview_file, str(p), limit, osm_layer)
             elapsed = round((time.perf_counter() - start) * 1000, 2)
             result["engine_used"] = "polars"
             result["elapsed_ms"] = elapsed
@@ -195,7 +189,7 @@ class DataController(Controller):
         use_duckdb = engine in ("auto", "duckdb")
 
         if use_polars:
-            result = polars_preview_file(str(p), limit, osm_layer)
+            result = await asyncio.to_thread(polars_preview_file, str(p), limit, osm_layer)
             elapsed = round((time.perf_counter() - start) * 1000, 2)
             result["engine_used"] = "polars"
             result["elapsed_ms"] = elapsed
@@ -208,14 +202,14 @@ class DataController(Controller):
         read_type = "parquet" if cached else file_type
 
         # DuckDB path (auto or explicit duckdb)
-        result = _duckdb_engine.preview_file(read_path, read_type, limit)
+        result = await asyncio.to_thread(_duckdb_engine.preview_file, read_path, read_type, limit)
         elapsed = round((time.perf_counter() - start) * 1000, 2)
 
         if result.error:
             if engine == "duckdb":
                 return {"error": result.error, "engine_used": "duckdb", "elapsed_ms": elapsed}
             log.warning("DuckDB preview failed, falling back to Polars", error=result.error)
-            fallback = polars_preview_file(str(p), limit, osm_layer)
+            fallback = await asyncio.to_thread(polars_preview_file, str(p), limit, osm_layer)
             elapsed = round((time.perf_counter() - start) * 1000, 2)
             fallback["engine_used"] = "polars"
             fallback["engine_fallback"] = True
@@ -374,7 +368,7 @@ class DataController(Controller):
             return {"error": "Pipeline not found"}
 
         limit = data.get("limit", 100)
-        return execute_pipeline(pipeline, limit)
+        return await asyncio.to_thread(execute_pipeline, pipeline, limit)
 
     @post("/pipelines/{pipeline_id:str}/code")
     async def get_pipeline_code(self, pipeline_id: str) -> dict:
@@ -436,25 +430,25 @@ class DataController(Controller):
             from tusk.engines.ibis_engine import execute_pipeline as ibis_execute, HAS_IBIS
             if not HAS_IBIS:
                 log.warning("ibis_unavailable_fallback_to_polars")
-                result = execute_pipeline(pipeline, limit)
+                result = await asyncio.to_thread(execute_pipeline, pipeline, limit)
                 if isinstance(result, dict):
                     result.setdefault("engine_used", "polars")
                     result["fallback"] = "ibis_missing"
                 return result
             backend = "polars" if engine.endswith("polars") else "duckdb"
             try:
-                df = ibis_execute(pipeline, backend=backend, limit=limit)
+                df = await asyncio.to_thread(ibis_execute, pipeline, backend=backend, limit=limit)
                 return _polars_df_to_dict(df, engine_used=f"ibis+{backend}")
             except Exception as e:
                 log.error("ibis_execute_failed", error=str(e), falling_back="polars")
-                result = execute_pipeline(pipeline, limit)
+                result = await asyncio.to_thread(execute_pipeline, pipeline, limit)
                 if isinstance(result, dict):
                     result.setdefault("engine_used", "polars")
                     result["fallback"] = f"ibis_error: {e}"
                 return result
 
         # Explicit polars or unknown engine → legacy Polars executor
-        result = execute_pipeline(pipeline, limit)
+        result = await asyncio.to_thread(execute_pipeline, pipeline, limit)
         if isinstance(result, dict):
             result.setdefault("engine_used", "polars")
         return result
@@ -499,7 +493,7 @@ class DataController(Controller):
             output_source_id=data.get("output_source_id", sources[0].id),
         )
         try:
-            return ibis_profile(pipeline, sample_limit=data.get("sample_limit", 10_000))
+            return await asyncio.to_thread(ibis_profile, pipeline, sample_limit=data.get("sample_limit", 10_000))
         except Exception as e:
             log.error("ibis_profile_failed", error=str(e))
             return {"error": str(e)}
@@ -846,17 +840,24 @@ class DataController(Controller):
 
     @post("/upload")
     async def upload_file(self, request: Request, data: UploadFile) -> dict:
-        """Upload a data file for processing"""
+        """Upload a data file for processing.
+
+        Streams the upload to disk in 1 MiB chunks instead of buffering the
+        whole body in memory. Hard-stops + cleans up the partial file the
+        moment we cross MAX_UPLOAD_SIZE.
+        """
         from tusk.core import rate_limit
 
         ALLOWED_EXTENSIONS = {".csv", ".tsv", ".json", ".parquet", ".xlsx", ".xls",
                               ".geojson", ".gpkg", ".pbf", ".shp", ".zip", ".gz", ".tar"}
         MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
+        CHUNK_SIZE = 1024 * 1024  # 1 MiB
 
         client_ip = request.client.host if request.client else "unknown"
         if not rate_limit.check_and_record("upload", client_ip, max_attempts=10, window_seconds=60):
             return {"error": "Too many uploads. Please wait a minute."}
 
+        file_path: Path | None = None
         try:
             uploads_dir = Path(tempfile.gettempdir()) / "tusk_uploads"
             uploads_dir.mkdir(exist_ok=True)
@@ -876,21 +877,42 @@ class DataController(Controller):
             unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
             file_path = uploads_dir / unique_name
 
-            # Save the uploaded file with size limit check
-            content = await data.read()
-            if len(content) > MAX_UPLOAD_SIZE:
-                return {"error": f"File too large ({len(content) / 1048576:.0f} MB). Maximum: {MAX_UPLOAD_SIZE / 1048576:.0f} MB"}
-
-            with open(file_path, "wb") as f:
-                f.write(content)
+            # Stream to disk. We do the actual write in a worker thread so
+            # the event loop doesn't block on syscalls for big uploads.
+            total = 0
+            f = await asyncio.to_thread(open, file_path, "wb")
+            try:
+                while True:
+                    chunk = await data.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_UPLOAD_SIZE:
+                        await asyncio.to_thread(f.close)
+                        try:
+                            file_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                        return {
+                            "error": f"File too large. Maximum: {MAX_UPLOAD_SIZE / 1048576:.0f} MB"
+                        }
+                    await asyncio.to_thread(f.write, chunk)
+            finally:
+                await asyncio.to_thread(f.close)
 
             return {
                 "success": True,
                 "path": str(file_path),
                 "filename": filename,
-                "size": len(content)
+                "size": total
             }
         except Exception as e:
+            # Cleanup partial file on any error
+            if file_path is not None:
+                try:
+                    file_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
             return {"error": str(e)}
 
     # =========================================================================
@@ -1163,3 +1185,200 @@ def _polars_df_to_dict(df, engine_used: str = "polars") -> dict:
         }
     except Exception as e:
         return {"error": f"Failed to serialize result: {e}"}
+
+
+# ─── Explore (per-column profile) ─────────────────────────────────
+import re as _re
+
+_IDENT_RE = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _coerce_scalar(v):
+    """Make a Polars scalar JSON-safe."""
+    if v is None:
+        return None
+    if isinstance(v, (bool, int, float, str)):
+        return v
+    # datetimes, decimals, etc.
+    try:
+        return v.isoformat()
+    except AttributeError:
+        return str(v)
+
+
+def _compute_profile(columns: list[str], rows: list[tuple]) -> list[dict]:
+    """Compute per-column profile from raw Postgres rows using Polars.
+
+    Returns one dict per column with: name, dtype, null_pct, distinct_count,
+    distinct_pct, min, max, mean, std, top_values.
+    """
+    import polars as pl
+
+    n = len(rows)
+    if n == 0:
+        return [
+            {
+                "name": c, "dtype": "unknown", "null_pct": 0.0,
+                "distinct_count": 0, "distinct_pct": 0.0,
+                "min": None, "max": None, "mean": None, "std": None,
+                "top_values": [],
+            }
+            for c in columns
+        ]
+
+    # Build column-major dict — coerce non-trivial Python objects to strings so
+    # Polars can pick a stable dtype (geometries, dicts, lists, etc.).
+    col_data: dict[str, list] = {}
+    for i, name in enumerate(columns):
+        series = []
+        for row in rows:
+            v = row[i] if i < len(row) else None
+            if v is None or isinstance(v, (bool, int, float, str)):
+                series.append(v)
+            else:
+                # datetimes are fine — Polars handles them; everything else → str
+                try:
+                    if hasattr(v, "isoformat"):
+                        series.append(v)
+                    else:
+                        series.append(str(v))
+                except Exception:
+                    series.append(None)
+        col_data[name] = series
+
+    try:
+        df = pl.DataFrame(col_data, strict=False)
+    except Exception:
+        # Fallback: stringify everything
+        df = pl.DataFrame({k: [None if x is None else str(x) for x in v] for k, v in col_data.items()})
+
+    out: list[dict] = []
+    for name in columns:
+        s = df[name]
+        dtype = str(s.dtype)
+        null_count = int(s.null_count())
+        null_pct = round(null_count / n * 100, 2) if n else 0.0
+        distinct = int(s.n_unique())
+        distinct_pct = round(distinct / n * 100, 2) if n else 0.0
+
+        col_stats: dict = {
+            "name": name,
+            "dtype": dtype,
+            "null_pct": null_pct,
+            "null_count": null_count,
+            "distinct_count": distinct,
+            "distinct_pct": distinct_pct,
+            "min": None,
+            "max": None,
+            "mean": None,
+            "std": None,
+            "top_values": [],
+        }
+
+        is_numeric = s.dtype.is_numeric()
+
+        if is_numeric:
+            try:
+                col_stats["min"] = _coerce_scalar(s.min())
+                col_stats["max"] = _coerce_scalar(s.max())
+                mean_v = s.mean()
+                col_stats["mean"] = round(float(mean_v), 4) if mean_v is not None else None
+                std_v = s.std()
+                col_stats["std"] = round(float(std_v), 4) if std_v is not None else None
+            except Exception:
+                pass
+        else:
+            # Min/max for dates/strings is still useful
+            try:
+                col_stats["min"] = _coerce_scalar(s.min())
+                col_stats["max"] = _coerce_scalar(s.max())
+            except Exception:
+                pass
+
+        # Top 10 values by frequency (skip nulls).
+        try:
+            vc = s.drop_nulls().value_counts(sort=True).head(10)
+            top: list[dict] = []
+            # value_counts produces a 2-col frame: [name, "count"]
+            for row in vc.iter_rows():
+                value, count = row[0], row[1]
+                top.append({"value": _coerce_scalar(value), "count": int(count)})
+            col_stats["top_values"] = top
+        except Exception:
+            col_stats["top_values"] = []
+
+        out.append(col_stats)
+
+    return out
+
+
+class ExploreController(Controller):
+    """Per-column data profiling for a real Postgres table."""
+
+    path = "/api/explore"
+
+    @post("/profile")
+    async def explore_profile(self, data: dict = Body()) -> dict:
+        """Profile a real Postgres table.
+
+        Body: `{connection_id, schema, table, sample_size?}`.
+        Runs `SELECT * FROM "schema"."table" LIMIT N` against the connection
+        and returns per-column stats computed by Polars.
+        """
+        from tusk.engines import postgres
+        from tusk.core.connection import get_connection
+
+        connection_id = data.get("connection_id")
+        schema_name = data.get("schema")
+        table_name = data.get("table")
+        sample_size = data.get("sample_size") or 10_000
+
+        if not connection_id or not schema_name or not table_name:
+            return {"error": "connection_id, schema and table are required"}
+
+        try:
+            sample_size = int(sample_size)
+        except (TypeError, ValueError):
+            sample_size = 10_000
+        sample_size = max(100, min(sample_size, 1_000_000))
+
+        # Identifier whitelist — psycopg won't parametrize identifiers.
+        if not _IDENT_RE.match(schema_name) or not _IDENT_RE.match(table_name):
+            return {"error": "Invalid schema or table identifier"}
+
+        config = get_connection(connection_id)
+        if not config:
+            return {"error": f"Connection '{connection_id}' not found"}
+        if config.type != "postgres":
+            return {"error": "Profile only supports Postgres connections"}
+
+        sql = f'SELECT * FROM "{schema_name}"."{table_name}" LIMIT {sample_size}'
+        try:
+            result = await postgres.execute_query(config, sql)
+        except Exception as e:
+            log.error("explore_profile_query_failed", error=str(e))
+            return {"error": str(e)}
+
+        result_dict = result.to_dict()
+        if result_dict.get("error"):
+            return {"error": result_dict["error"]}
+
+        columns = [c["name"] for c in result_dict.get("columns", [])]
+        rows = result_dict.get("rows", [])
+
+        if not columns:
+            return {"error": "Table has no columns"}
+
+        try:
+            stats = await asyncio.to_thread(_compute_profile, columns, rows)
+        except Exception as e:
+            log.error("explore_profile_compute_failed", error=str(e))
+            return {"error": f"Profile computation failed: {e}"}
+
+        return {
+            "schema": schema_name,
+            "table": table_name,
+            "sampled_rows": len(rows),
+            "sample_size": sample_size,
+            "columns": stats,
+        }

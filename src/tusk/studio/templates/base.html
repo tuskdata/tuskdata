@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/studio-redesign.css">
     <script src="/static/tusk-fetch.js"></script>
+    <script defer src="/static/cmdk.js"></script>
     {% block head %}{% endblock %}
     {% block styles %}<style></style>{% endblock %}
 </head>
@@ -54,14 +55,26 @@
         </a>
 
         <nav class="tusk-nav-tabs">
-            <a href="/" class="tusk-nav-tab {% if active_page == 'studio' %}active{% endif %}">
+            <a href="/home" class="tusk-nav-tab {% if active_page == 'home' %}active{% endif %}">
+                <i data-lucide="home"></i>Home
+            </a>
+            <a href="/studio" class="tusk-nav-tab {% if active_page == 'studio' %}active{% endif %}">
                 <i data-lucide="terminal"></i>Studio
             </a>
-            <a href="/admin" class="tusk-nav-tab {% if active_page == 'admin' %}active{% endif %}">
-                <i data-lucide="database"></i>Admin
+            <a href="/schema" class="tusk-nav-tab {% if active_page == 'schema' %}active{% endif %}">
+                <i data-lucide="git-graph"></i>Schema
+            </a>
+            <a href="/explore" class="tusk-nav-tab {% if active_page == 'explore' %}active{% endif %}">
+                <i data-lucide="bar-chart-3"></i>Explore
+            </a>
+            <a href="/scheduled" class="tusk-nav-tab {% if active_page == 'scheduled' %}active{% endif %}">
+                <i data-lucide="clock"></i>Scheduled
             </a>
             <a href="/data" class="tusk-nav-tab {% if active_page == 'data' %}active{% endif %}">
                 <i data-lucide="git-branch"></i>Data
+            </a>
+            <a href="/admin" class="tusk-nav-tab {% if active_page == 'admin' %}active{% endif %}">
+                <i data-lucide="database"></i>Admin
             </a>
             {% if plugin_tabs %}
             {% for tab in plugin_tabs %}
@@ -74,6 +87,14 @@
 
         <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
             {% block header_actions %}{% endblock %}
+
+            <button class="kbd-search" type="button"
+                    @click="$dispatch('tusk-cmdk-open')"
+                    title="Search (⌘K)">
+                <i data-lucide="search"></i>
+                <span class="grow">Search or jump to…</span>
+                <span class="kbd">⌘K</span>
+            </button>
 
             <div id="notification-bell"
                  hx-get="/api/notifications/badge"
@@ -151,6 +172,43 @@
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
+
+    <!-- Command palette (⌘K). Single global instance from base.html — every
+         page inherits it without wiring. -->
+    <div x-data="cmdkPalette()" x-init="init()" x-cloak>
+        <div class="cmdk-mask" :class="open ? 'open' : ''" @click="close()">
+            <div class="cmdk" @click.stop>
+                <div class="cmdk-input">
+                    <i data-lucide="search"></i>
+                    <input type="text"
+                           x-ref="input"
+                           x-model="query"
+                           @input="onInput()"
+                           @keydown="onKey($event)"
+                           placeholder="Search connections, queries, schedules — or ask AI">
+                    <span class="kbd">ESC</span>
+                </div>
+                <div class="cmdk-list">
+                    <template x-for="(item, i) in items" :key="i">
+                        <div class="cmdk-item"
+                             :class="i === activeIndex ? 'on' : ''"
+                             @mouseenter="activeIndex = i"
+                             @click="run(item)">
+                            <div class="ico"><i :data-lucide="iconFor(item)"></i></div>
+                            <div class="t">
+                                <div x-text="item.title"></div>
+                                <div class="sub" x-show="item.subtitle" x-text="item.subtitle"></div>
+                            </div>
+                            <span class="sub" x-text="item.kind"></span>
+                        </div>
+                    </template>
+                    <div class="cmdk-item" x-show="!items.length" style="opacity:.6;cursor:default">
+                        <span>No matches.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // ─── GeoJSON CRS detection & reprojection ────────────────────

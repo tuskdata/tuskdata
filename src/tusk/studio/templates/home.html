@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Home — Tusk{% endblock %}
+
+{% block content %}
+<div class="home" x-data="homePage()">
+  <div class="home-hero">
+    <div>
+      <div class="greeting">
+        {{ greeting }}, {{ user_name }} —
+        <em>
+          {% if stats.errors_today == 0 and stats.pipelines_today > 0 %}your data is healthy.{% endif %}
+          {% if stats.errors_today == 0 and stats.pipelines_today == 0 %}let's run some queries.{% endif %}
+          {% if stats.errors_today > 0 %}{{ stats.errors_today }} {% if stats.errors_today == 1 %}query{% else %}queries{% endif %} failed today.{% endif %}
+        </em>
+      </div>
+      <div class="greeting-sub">
+        {% if stats.pipelines_today > 0 %}
+          {{ stats.pipelines_today }} {% if stats.pipelines_today == 1 %}query{% else %}queries{% endif %} in the last 24h, {{ stats.errors_today }} {% if stats.errors_today == 1 %}error{% else %}errors{% endif %}.
+        {% else %}
+          No activity in the last 24h yet.
+        {% endif %}
+      </div>
+    </div>
+    <div class="quick-actions">
+      <a href="/studio" class="btn"><i data-lucide="plus"></i>New query</a>
+      <button class="btn btn-brand" @click="askAI()"><i data-lucide="sparkles"></i>Ask AI</button>
+    </div>
+  </div>
+
+  <div class="home-grid">
+    <div class="home-stat">
+      <div class="lbl">Queries this week</div>
+      <div class="val">{{ stats.queries_week }}</div>
+      <div class="delta" style="color:var(--fg-3)">
+        <i data-lucide="activity" style="width:12px;height:12px"></i>
+        {{ stats.queries_by_day | sum }} in the last 7 days
+      </div>
+      <svg class="spark" viewBox="0 0 200 36" preserveAspectRatio="none">
+        {% set max_q = stats.queries_by_day | max %}
+        {% set max_q_safe = max_q if max_q > 0 else 1 %}
+        <path d="M
+          {%- for v in stats.queries_by_day -%}
+          {{ loop.index0 * 33 }} {{ 32 - (v / max_q_safe) * 28 }}{% if not loop.last %} L {% endif %}
+          {%- endfor -%}"
+          stroke="var(--brand)" stroke-width="1.5" fill="none"/>
+      </svg>
+    </div>
+
+    <div class="home-stat">
+      <div class="lbl">Avg query latency</div>
+      <div class="val">{{ stats.avg_latency_ms }}<span style="font-size:18px;color:var(--fg-3)">ms</span></div>
+      <div class="delta" style="color:var(--fg-3)">
+        <i data-lucide="zap" style="width:12px;height:12px"></i>
+        across last 24h
+      </div>
+      <svg class="spark" viewBox="0 0 200 36" preserveAspectRatio="none">
+        {% set max_l = stats.latency_by_hour | max %}
+        {% set max_l_safe = max_l if max_l > 0 else 1 %}
+        <path d="M
+          {%- for v in stats.latency_by_hour -%}
+          {{ loop.index0 * 8.6 }} {{ 32 - (v / max_l_safe) * 28 }}{% if not loop.last %} L {% endif %}
+          {%- endfor -%}"
+          stroke="var(--accent-teal)" stroke-width="1.5" fill="none"/>
+      </svg>
+    </div>
+
+    <div class="home-stat">
+      <div class="lbl">Active connections</div>
+      <div class="val">{{ stats.active_connections }}<span style="font-size:18px;color:var(--fg-3)"> / {{ stats.max_connections }}</span></div>
+      <div class="delta" style="color:var(--fg-3)">
+        <i data-lucide="database" style="width:12px;height:12px"></i>
+        {{ stats.by_type_label }}
+      </div>
+      <svg class="spark" viewBox="0 0 200 36" preserveAspectRatio="none">
+        {% set total = stats.active_connections %}
+        {% if total == 0 %}
+        <rect x="2" y="30" width="196" height="4" rx="2" fill="var(--surface-2)"/>
+        {% else %}
+        {% set step = 200 // total %}
+        {% for i in range(total) %}
+        <rect x="{{ i * step + 2 }}" y="6" width="{{ step - 4 }}" height="28" rx="2" fill="var(--accent-violet)"/>
+        {% endfor %}
+        {% endif %}
+      </svg>
+    </div>
+  </div>
+
+  <div class="home-row">
+    <div>
+      <div class="section-title"><i data-lucide="clock"></i>Recent queries</div>
+      <div class="recent-list">
+        {% if recent_queries %}
+          {% for q in recent_queries %}
+          <a class="recent-item" href="/studio?history={{ q.id }}">
+            <div class="recent-icon" style="background:var(--brand-soft);color:var(--brand)">
+              <i data-lucide="{% if q.status == 'error' %}alert-triangle{% else %}terminal{% endif %}"></i>
+            </div>
+            <div>
+              <div class="recent-title">{{ q.connection_name }}</div>
+              <div class="recent-meta mono">{{ q.sql_preview }}{% if q.sql|length > 120 %}…{% endif %}</div>
+            </div>
+            <span class="chip {% if q.status == 'error' %}chip-rose{% elif q.execution_time_ms < 100 %}chip-green{% else %}chip-violet{% endif %}">
+              {% if q.row_count is not none %}{{ q.row_count }} rows · {% endif %}{{ q.execution_time_ms }}ms
+            </span>
+            <span class="recent-time" data-iso="{{ q.executed_at }}"></span>
+          </a>
+          {% endfor %}
+        {% else %}
+          <div class="recent-empty">
+            <i data-lucide="terminal-square"></i>
+            <div>No queries yet — head to <a href="/studio">Studio</a> to run one.</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title"><i data-lucide="sparkles"></i>AI suggestions</div>
+      <div id="ai-suggestions"
+           class="card home-suggestions"
+           hx-get="/api/ai/suggest"
+           hx-trigger="load"
+           hx-swap="innerHTML"
+           hx-target="#ai-suggestions">
+        <div class="home-suggestion-loading">
+          <i data-lucide="loader-2" class="spin"></i>
+          Loading suggestions…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/home.js"></script>
+{% endblock %}

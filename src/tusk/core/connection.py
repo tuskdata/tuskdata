@@ -135,11 +135,25 @@ def list_connections() -> list[ConnectionConfig]:
     return list(_connections.values())
 
 
+def _drop_schema_cache(conn_id: str | None = None) -> None:
+    """Best-effort: clear the postgres engine's in-process schema cache.
+
+    Imported lazily to avoid a circular import (engines.postgres imports
+    ConnectionConfig from this module).
+    """
+    try:
+        from tusk.engines.postgres import invalidate_schema_cache
+        invalidate_schema_cache(conn_id)
+    except Exception:
+        pass
+
+
 def delete_connection(conn_id: str) -> bool:
     """Delete a connection and save to disk"""
     if conn_id in _connections:
         del _connections[conn_id]
         save_connections_to_file()
+        _drop_schema_cache(conn_id)
         return True
     return False
 
@@ -172,6 +186,7 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
 
     _connections[conn_id] = new_config
     save_connections_to_file()
+    _drop_schema_cache(conn_id)
     return new_config
 
 

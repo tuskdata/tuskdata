@@ -111,10 +111,12 @@ def _send_email(config: dict, subject: str, body: str) -> None:
 def _send_slack(config: dict, subject: str, body: str) -> None:
     """Send notification via Slack incoming webhook."""
     import httpx
+    from tusk.core.url_guard import validate_outbound_url
 
     url = config.get("webhook_url", "")
     if not url:
         raise ValueError("Slack webhook_url not configured")
+    validate_outbound_url(url)
 
     payload = {
         "text": f"*{subject}*\n{body}",
@@ -126,10 +128,12 @@ def _send_slack(config: dict, subject: str, body: str) -> None:
 def _send_discord(config: dict, subject: str, body: str) -> None:
     """Send notification via Discord webhook."""
     import httpx
+    from tusk.core.url_guard import validate_outbound_url
 
     url = config.get("webhook_url", "")
     if not url:
         raise ValueError("Discord webhook_url not configured")
+    validate_outbound_url(url)
 
     payload = {
         "embeds": [{
@@ -164,10 +168,12 @@ def _send_telegram(config: dict, subject: str, body: str) -> None:
 def _send_webhook(config: dict, subject: str, body: str) -> None:
     """Send notification via custom webhook."""
     import httpx
+    from tusk.core.url_guard import validate_outbound_url
 
     url = config.get("url", "")
     if not url:
         raise ValueError("Webhook url not configured")
+    validate_outbound_url(url)
 
     headers = config.get("headers", {})
     payload = {

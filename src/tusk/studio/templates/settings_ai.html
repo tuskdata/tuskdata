@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}AI Copilot · Settings — Tusk{% endblock %}
+
+{% block content %}
+<div class="settings-page" x-data="aiSettings()">
+  <div class="settings-head">
+    <div>
+      <h1 class="settings-title">AI Copilot</h1>
+      <p class="settings-sub">Plug in a local model (Ollama) or an API key. Used for SQL generation, query explanations, and homepage suggestions.</p>
+    </div>
+    <a href="/notifications/settings" class="btn btn-ghost"><i data-lucide="arrow-left"></i>Back to settings</a>
+  </div>
+
+  <div class="settings-card">
+    <label class="settings-row">
+      <span class="settings-label">Enable AI Copilot</span>
+      <input type="checkbox" x-model="form.enabled">
+    </label>
+
+    <div class="settings-row">
+      <span class="settings-label">Provider</span>
+      <select x-model="form.provider" @change="onProviderChange()" class="settings-select">
+        <option value="ollama">Ollama (local)</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="custom">Custom (OpenAI-compatible)</option>
+      </select>
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-label">Base URL</span>
+      <input type="text" x-model="form.base_url" class="settings-input mono"
+             placeholder="http://localhost:11434">
+    </div>
+
+    <div class="settings-row" x-show="form.provider !== 'ollama'">
+      <span class="settings-label">API Key</span>
+      <input type="password" x-model="form.api_key" class="settings-input mono"
+             :placeholder="ai_config.has_api_key ? '•••••••• (saved — type to replace)' : 'sk-...'">
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-label">Model</span>
+      <div class="settings-model-row">
+        <input type="text" x-model="form.model" class="settings-input mono"
+               placeholder="qwen2.5-coder:3b" list="ai-model-list">
+        <datalist id="ai-model-list">
+          <template x-for="m in availableModels"><option :value="m"></option></template>
+        </datalist>
+        <button type="button" class="btn btn-sm" @click="loadModels()" :disabled="loadingModels">
+          <i data-lucide="refresh-cw"></i>
+          <span x-text="loadingModels ? 'Loading…' : 'Refresh'"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <button type="button" class="btn" @click="testProvider()" :disabled="testing">
+        <i data-lucide="zap"></i>
+        <span x-text="testing ? 'Testing…' : 'Test connection'"></span>
+      </button>
+      <button type="button" class="btn btn-brand" @click="saveConfig()" :disabled="saving">
+        <i data-lucide="check"></i>
+        <span x-text="saving ? 'Saving…' : 'Save'"></span>
+      </button>
+    </div>
+
+    <div x-show="testResult" x-cloak class="settings-test-result"
+         :class="testResult && testResult.ok ? 'ok' : 'err'">
+      <template x-if="testResult && testResult.ok">
+        <div><i data-lucide="check-circle"></i> Connected. Response: <code x-text="testResult.response"></code></div>
+      </template>
+      <template x-if="testResult && !testResult.ok">
+        <div><i data-lucide="alert-circle"></i> <span x-text="testResult.error"></span></div>
+      </template>
+    </div>
+  </div>
+
+  <div class="settings-card settings-card-info">
+    <div class="settings-card-title"><i data-lucide="info"></i>Self-hosted with Ollama</div>
+    <p>If you're running Tusk in Docker and Ollama on the same host, set the base URL to:</p>
+    <pre class="mono">http://host.docker.internal:11434</pre>
+    <p>To bundle Ollama with Tusk's compose stack:</p>
+    <pre class="mono">docker compose --profile ai up
+docker compose exec ollama ollama pull qwen2.5-coder:3b</pre>
+    <p>Recommended models by size:</p>
+    <ul>
+      <li><b>qwen2.5-coder:1.5b</b> (~1 GB) — fastest, decent SQL</li>
+      <li><b>qwen2.5-coder:3b</b> (~2 GB) — sweet spot, default</li>
+      <li><b>phi3.5:3.8b</b> (~2.3 GB) — broader chat, weaker SQL</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.AI_CONFIG = {{ ai_config | tojson if ai_config else '{}' | safe }};
+window.AI_PROVIDER_DEFAULTS = {{ provider_defaults | tojson if provider_defaults else '{}' | safe }};
+</script>
+<script src="/static/settings-ai.js"></script>
+{% endblock %}

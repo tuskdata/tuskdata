@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk · Schema{% endblock %}
+
+{% block content %}
+<div id="schema-page"
+     class="schema-canvas w-full"
+     data-conn-id="{{ pg_connections[0].id if pg_connections else '' }}">
+
+    <!-- Toolbar (top-left) -->
+    <div class="schema-toolbar">
+        <div class="card flex aic gap-2" style="padding:6px 10px">
+            <i data-lucide="database" style="width:14px;height:14px;color:var(--brand)"></i>
+            <select id="schema-conn-picker"
+                    class="schema-conn-select"
+                    aria-label="PostgreSQL connection">
+                {% if not pg_connections %}
+                <option value="">No PostgreSQL connections</option>
+                {% endif %}
+                {% for c in pg_connections %}
+                <option value="{{ c.id }}">{{ c.name }}{% if c.database %} · {{ c.database }}{% endif %}</option>
+                {% endfor %}
+            </select>
+            <span id="schema-summary" class="chip chip-neutral">—</span>
+        </div>
+        <button id="schema-autolayout" class="btn btn-sm" title="Recompute deterministic grid layout">
+            <i data-lucide="layout-grid"></i>Auto-layout
+        </button>
+        <button id="schema-fit" class="btn btn-sm" title="Fit diagram to viewport">
+            <i data-lucide="maximize-2"></i>Fit
+        </button>
+    </div>
+
+    <!-- Zoom + pan controls (top-right) -->
+    <div class="schema-controls">
+        <div class="card flex" style="padding:4px;gap:2px">
+            <button id="schema-zoom-in" class="icon-btn" title="Zoom in"><i data-lucide="zoom-in"></i></button>
+            <button id="schema-zoom-out" class="icon-btn" title="Zoom out"><i data-lucide="zoom-out"></i></button>
+            <button id="schema-reset" class="icon-btn" title="Reset view"><i data-lucide="rotate-ccw"></i></button>
+        </div>
+        <span id="schema-zoom-label" class="chip chip-neutral">100%</span>
+    </div>
+
+    <!-- Pan/zoom transform wrapper. Entities + relations are children so
+         a single transform on this layer drives both. -->
+    <div id="schema-viewport" class="schema-viewport">
+        <div class="relations">
+            <svg id="schema-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div id="schema-entities"></div>
+    </div>
+
+    <!-- Empty state (no connections) -->
+    {% if not pg_connections %}
+    <div class="schema-empty">
+        <i data-lucide="database-zap" style="width:32px;height:32px;color:var(--fg-3)"></i>
+        <div class="schema-empty-title">No PostgreSQL connections</div>
+        <div class="schema-empty-sub">Add a Postgres connection from the Studio to view its schema.</div>
+        <a href="/" class="btn btn-sm btn-brand"><i data-lucide="plus"></i>Open Studio</a>
+    </div>
+    {% endif %}
+
+    <!-- Status pill (bottom-left) -->
+    <div class="schema-status card" id="schema-status">
+        <span id="schema-status-text">Loading…</span>
+    </div>
+
+    <!-- Legend (bottom-right) -->
+    <div class="schema-legend card">
+        <span><span class="pk">●</span> PK</span>
+        <span><span class="fk">●</span> FK</span>
+        <span class="schema-legend-hint">drag to move · wheel to zoom · space-drag to pan</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/schema.js"></script>
+{% endblock %}

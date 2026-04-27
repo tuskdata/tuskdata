@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Tusk · Explore{% endblock %}
+
+{% block content %}
+<div id="explore-page"
+     class="w-full overflow-auto"
+     style="padding:20px;background:var(--bg)"
+     x-data="exploreApp()"
+     x-init="init()">
+
+    <!-- Empty state — no Postgres connections -->
+    {% if not pg_connections %}
+    <div class="card flex" style="flex-direction:column;align-items:center;gap:8px;padding:48px;text-align:center;max-width:420px;margin:80px auto">
+        <i data-lucide="database-zap" style="width:32px;height:32px;color:var(--fg-3)"></i>
+        <div style="font-size:16px;font-weight:600;color:var(--fg)">No PostgreSQL connections</div>
+        <div style="font-size:13px;color:var(--fg-3)">Add a Postgres connection from the Studio to profile its tables.</div>
+        <a href="/" class="btn btn-sm btn-brand"><i data-lucide="plus"></i>Open Studio</a>
+    </div>
+    {% else %}
+
+    <!-- Toolbar -->
+    <div class="card flex" style="padding:10px 12px;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="flex aic gap-2">
+            <i data-lucide="database" style="width:14px;height:14px;color:var(--brand)"></i>
+            <select x-model="selectedConn"
+                    @change="onConnChange()"
+                    class="explore-select"
+                    aria-label="PostgreSQL connection">
+                <option value="">Pick a connection…</option>
+                {% for c in pg_connections %}
+                <option value="{{ c.id }}">{{ c.name }}{% if c.database %} · {{ c.database }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="flex aic gap-2">
+            <i data-lucide="table" style="width:14px;height:14px;color:var(--fg-3)"></i>
+            <select x-model="selectedTable"
+                    @change="onTableChange()"
+                    class="explore-select"
+                    aria-label="Table"
+                    :disabled="!tables.length">
+                <option value=""
+                        x-text="!selectedConn ? 'Pick a connection first' : (loadingTables ? 'Loading tables…' : (tables.length ? 'Pick a table…' : 'No tables found'))">
+                </option>
+                <template x-for="t in tables" :key="t.qualified">
+                    <option :value="t.qualified" x-text="t.qualified"></option>
+                </template>
+            </select>
+        </div>
+
+        <div class="flex aic gap-2">
+            <span style="font-size:12px;color:var(--fg-3)">Sample:</span>
+            <select x-model.number="sampleSize" class="explore-select" aria-label="Sample size">
+                <option :value="1000">1k rows</option>
+                <option :value="10000">10k rows</option>
+                <option :value="100000">100k rows</option>
+            </select>
+        </div>
+
+        <button class="btn btn-sm btn-brand"
+                @click="runProfile()"
+                :disabled="!canProfile() || loading">
+            <i data-lucide="sparkles"></i>
+            <span x-text="loading ? 'Profiling…' : 'Auto-explore'"></span>
+        </button>
+
+        <span class="chip chip-neutral explore-status" x-show="profile" x-cloak>
+            <span x-text="profile?.sampled_rows?.toLocaleString() || 0"></span> rows ·
+            <span x-text="profile?.columns?.length || 0"></span> cols
+        </span>
+    </div>
+
+    <!-- Loading state -->
+    <div x-show="loading" x-cloak class="card flex" style="align-items:center;justify-content:center;padding:48px;color:var(--fg-3)">
+        <i data-lucide="loader-2" style="width:18px;height:18px;animation:spin 1s linear infinite"></i>
+        <span style="margin-left:8px">Sampling and computing column stats…</span>
+    </div>
+
+    <!-- Error state -->
+    <div x-show="error" x-cloak class="card explore-error">
+        <i data-lucide="alert-triangle" style="width:16px;height:16px;color:var(--red)"></i>
+        <span x-text="error"></span>
+    </div>
+
+    <!-- Empty hint when nothing picked yet -->
+    <div x-show="!profile && !loading && !error" x-cloak class="card flex"
+         style="flex-direction:column;align-items:center;gap:8px;padding:48px;text-align:center;color:var(--fg-3)">
+        <i data-lucide="bar-chart-3" style="width:28px;height:28px"></i>
+        <div style="font-size:14px;font-weight:500;color:var(--fg-2)">Pick a connection and table, then run Auto-explore.</div>
+        <div style="font-size:12px">Tusk samples the first N rows and profiles each column with Polars.</div>
+    </div>
+
+    <!-- Profile result -->
+    <div x-show="profile" x-cloak>
+        <div class="profile-stats" x-show="profile">
+            <div class="profile-stat">
+                <div class="lbl">Rows sampled</div>
+                <div class="val" x-text="(profile?.sampled_rows || 0).toLocaleString()"></div>
+            </div>
+            <div class="profile-stat">
+                <div class="lbl">Columns</div>
+                <div class="val" x-text="profile?.columns?.length || 0"></div>
+            </div>
+            <div class="profile-stat">
+                <div class="lbl">Sample size</div>
+                <div class="val" x-text="(profile?.sample_size || 0).toLocaleString()"></div>
+            </div>
+            <div class="profile-stat">
+                <div class="lbl">Table</div>
+                <div class="val" style="font-size:13px" x-text="(profile?.schema || '') + '.' + (profile?.table || '')"></div>
+            </div>
+        </div>
+
+        <div class="col-cards">
+            <template x-for="col in (profile?.columns || [])" :key="col.name">
+                <div class="col-card explore-clickable" @click="openDrill(col)">
+                    <div class="col-card-head">
+                        <i :data-lucide="iconForDtype(col.dtype)"
+                           style="width:14px;height:14px"
+                           :style="`color: ${colorForDtype(col.dtype)}`"></i>
+                        <span class="name" x-text="col.name"></span>
+                        <span class="type" x-text="shortDtype(col.dtype)"></span>
+                        <div class="quality">
+                            <span class="chip"
+                                  :class="qualityChip(col.null_pct)"
+                                  style="font-size:9.5px"
+                                  x-text="qualityLabel(col)"></span>
+                        </div>
+                    </div>
+
+                    <!-- Null bar over track -->
+                    <div class="explore-null">
+                        <div class="explore-null-track">
+                            <div class="explore-null-fill" :style="`width: ${col.null_pct}%`"></div>
+                        </div>
+                        <span class="explore-null-label">
+                            <span x-text="col.null_pct"></span>% null
+                        </span>
+                        <span class="chip chip-neutral" style="font-size:9.5px">
+                            <span x-text="col.distinct_count.toLocaleString()"></span> distinct
+                        </span>
+                    </div>
+
+                    <!-- Numeric stats -->
+                    <template x-if="isNumeric(col)">
+                        <div class="col-stats-grid">
+                            <div class="col-stat-mini"><span class="l">Min</span><span class="v" x-text="fmtNum(col.min)"></span></div>
+                            <div class="col-stat-mini"><span class="l">Max</span><span class="v" x-text="fmtNum(col.max)"></span></div>
+                            <div class="col-stat-mini"><span class="l">Mean</span><span class="v" x-text="fmtNum(col.mean)"></span></div>
+                            <div class="col-stat-mini"><span class="l">σ</span><span class="v" x-text="fmtNum(col.std)"></span></div>
+                        </div>
+                    </template>
+
+                    <!-- Top-10 histogram -->
+                    <template x-if="col.top_values && col.top_values.length">
+                        <div class="value-list">
+                            <template x-for="(tv, i) in col.top_values" :key="i">
+                                <div class="value-row">
+                                    <div class="vbar">
+                                        <div class="vbar-fill" :style="`width: ${pctOfMax(tv.count, col.top_values)}%`"></div>
+                                        <span class="vbar-text" x-text="fmtVal(tv.value)"></span>
+                                    </div>
+                                    <span class="vcount" x-text="tv.count.toLocaleString()"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="!col.top_values || !col.top_values.length">
+                        <div class="explore-empty-hint">No frequent values (all distinct or all null)</div>
+                    </template>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    {% endif %}
+
+    <!-- Drill modal -->
+    <div x-show="drill" x-cloak
+         class="explore-modal-overlay"
+         @click="drill = null"
+         @keydown.escape.window="drill = null">
+        <div class="card explore-modal" @click.stop>
+            <div class="explore-modal-head">
+                <i :data-lucide="drill ? iconForDtype(drill.dtype) : 'columns'"
+                   style="width:16px;height:16px;color:var(--brand)"></i>
+                <span class="explore-modal-title" x-text="drill?.name || ''"></span>
+                <span class="chip chip-neutral" x-text="drill ? shortDtype(drill.dtype) : ''"></span>
+                <button class="icon-btn" @click="drill = null" title="Close (Esc)" style="margin-left:auto">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="explore-modal-body" x-show="drill">
+                <div class="col-stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+                    <div class="col-stat-mini"><span class="l">Nulls</span><span class="v"><span x-text="drill?.null_pct"></span>%</span></div>
+                    <div class="col-stat-mini"><span class="l">Distinct</span><span class="v" x-text="drill?.distinct_count?.toLocaleString()"></span></div>
+                    <div class="col-stat-mini"><span class="l">Distinct %</span><span class="v"><span x-text="drill?.distinct_pct"></span>%</span></div>
+                    <div class="col-stat-mini"><span class="l">Null count</span><span class="v" x-text="drill?.null_count?.toLocaleString()"></span></div>
+                </div>
+
+                <template x-if="drill && isNumeric(drill)">
+                    <div class="col-stats-grid" style="margin-bottom:14px">
+                        <div class="col-stat-mini"><span class="l">Min</span><span class="v" x-text="fmtNum(drill.min)"></span></div>
+                        <div class="col-stat-mini"><span class="l">Max</span><span class="v" x-text="fmtNum(drill.max)"></span></div>
+                        <div class="col-stat-mini"><span class="l">Mean</span><span class="v" x-text="fmtNum(drill.mean)"></span></div>
+                        <div class="col-stat-mini"><span class="l">σ</span><span class="v" x-text="fmtNum(drill.std)"></span></div>
+                    </div>
+                </template>
+
+                <div style="font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">
+                    Full distribution (top 10 in sample)
+                </div>
+                <div class="value-list" x-show="drill?.top_values?.length">
+                    <template x-for="(tv, i) in (drill?.top_values || [])" :key="i">
+                        <div class="value-row">
+                            <div class="vbar">
+                                <div class="vbar-fill" :style="`width: ${pctOfMax(tv.count, drill.top_values)}%`"></div>
+                                <span class="vbar-text" x-text="fmtVal(tv.value)"></span>
+                            </div>
+                            <span class="vcount" x-text="tv.count.toLocaleString()"></span>
+                        </div>
+                    </template>
+                </div>
+                <div x-show="!drill?.top_values?.length" class="explore-empty-hint">
+                    No frequent values to display.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/explore.js"></script>
+{% endblock %}

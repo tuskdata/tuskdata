@@ -1,5 +1,7 @@
 """Page routes for Tusk Studio"""
 
+from datetime import datetime, timedelta, timezone
+
 from litestar import get, Request
 from litestar.response import Template, Response
 
@@ -11,14 +13,172 @@ from tusk.studio.routes.base import TuskController
 SESSION_COOKIE = "tusk_session"
 
 
+def _greeting_for(hour: int) -> str:
+    """Server-time-of-day greeting. Used by the homepage hero so the
+    text is right at first paint without a JS dance."""
+    if hour < 12:
+        return "Good morning"
+    if hour < 18:
+        return "Good afternoon"
+    return "Good evening"
+
+
+def _resolve_user_name(request: Request) -> str:
+    """Best-effort display name. Falls back to 'there' so the greeting
+    still reads naturally in single-user mode."""
+    config = get_config()
+    if config.auth_mode != "multi":
+        return "there"
+    session_id = request.cookies.get(SESSION_COOKIE)
+    if not session_id:
+        return "there"
+    session = get_session(session_id)
+    if not session:
+        return "there"
+    user = get_user_by_id(session.user_id)
+    if not user:
+        return "there"
+    return user.display_name or user.username
+
+
+def _compute_home_stats() -> dict:
+    """Aggregate the numbers the homepage cards need.
+
+    Cheap enough to run inline (single sqlite read + an in-process
+    bucket loop). If history grows above ~100k rows we'll want to
+    promote this to a background snapshot, but for now the v0.4.4
+    homepage is the only caller and it's keyed off the request.
+    """
+    from tusk.core.history import get_history
+
+    h = get_history()
+    # Pull a generous window once and bucket in Python — one round-trip
+    # beats five separate aggregate queries on a small SQLite db.
+    recent = h.get_recent(limit=2000)
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    day_ago = now - timedelta(hours=24)
+
+    queries_week = 0
+    latencies_24h: list[float] = []
+    # 7 buckets, oldest → newest, indexed by days-ago.
+    by_day = [0] * 7
+    # 24 buckets, oldest → newest, indexed by hours-ago.
+    by_hour = [0.0] * 24
+    by_hour_count = [0] * 24
+
+    pipelines_today = 0
+    errors_today = 0
+
+    for e in recent:
+        try:
+            dt = datetime.fromisoformat(e.executed_at.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        if dt > week_ago:
+            queries_week += 1
+            days_ago = (now - dt).days
+            if 0 <= days_ago < 7:
+                by_day[6 - days_ago] += 1
+
+        if dt > day_ago:
+            if e.execution_time_ms:
+                latencies_24h.append(e.execution_time_ms)
+            hours_ago = int((now - dt).total_seconds() // 3600)
+            if 0 <= hours_ago < 24 and e.execution_time_ms:
+                by_hour[23 - hours_ago] += e.execution_time_ms
+                by_hour_count[23 - hours_ago] += 1
+            if e.status == "error":
+                errors_today += 1
+            else:
+                pipelines_today += 1
+
+    avg_latency = round(sum(latencies_24h) / len(latencies_24h)) if latencies_24h else 0
+    # Average per-bucket so the latency sparkline reflects shape, not volume.
+    latency_buckets = [
+        round(by_hour[i] / by_hour_count[i]) if by_hour_count[i] else 0
+        for i in range(24)
+    ]
+
+    conns = list_connections()
+    by_type: dict[str, int] = {}
+    for c in conns:
+        by_type[c.type] = by_type.get(c.type, 0) + 1
+    # Pre-render the connection breakdown — MiniJinja can't .append() inside
+    # a `{% for %}`, so we hand the template a finished string.
+    by_type_label = " · ".join(f"{v} {k}" for k, v in sorted(by_type.items())) or "no connections yet"
+
+    return {
+        "queries_week": queries_week,
+        "queries_by_day": by_day,
+        "avg_latency_ms": avg_latency,
+        "latency_by_hour": latency_buckets,
+        "active_connections": len(conns),
+        "max_connections": max(10, len(conns)),
+        "connections_by_type": by_type,
+        "by_type_label": by_type_label,
+        "pipelines_today": pipelines_today,
+        "errors_today": errors_today,
+    }
+
+
 class PageController(TuskController):
     """Serves HTML pages"""
 
     path = "/"
 
+    def _render_home(self, request: Request) -> Template:
+        """Shared homepage render path used by `/` and `/home`."""
+        from tusk.core.history import get_history
+
+        stats = _compute_home_stats()
+        recent = [
+            {
+                "id": e.id,
+                "connection_name": e.connection_name,
+                "sql": e.sql,
+                "sql_preview": (e.sql or "").strip().replace("\n", " ")[:120],
+                "executed_at": e.executed_at,
+                "execution_time_ms": round(e.execution_time_ms, 1) if e.execution_time_ms else 0,
+                "row_count": e.row_count,
+                "status": e.status,
+            }
+            for e in get_history().get_recent(limit=4)
+        ]
+        now = datetime.now(timezone.utc).astimezone()
+        return self.render(
+            "home.html",
+            active_page="home",
+            greeting=_greeting_for(now.hour),
+            user_name=_resolve_user_name(request),
+            stats=stats,
+            recent_queries=recent,
+        )
+
     @get("/")
-    async def index(self) -> Template:
-        """Main studio page"""
+    async def index(self, request: Request) -> Template:
+        """Root: homepage when the user has any data on disk, else
+        the Studio so the first-run experience is immediate."""
+        from tusk.core.history import get_history
+
+        any_history = bool(get_history().get_recent(limit=1))
+        any_connections = bool(list_connections())
+        if any_history or any_connections:
+            return self._render_home(request)
+        return self.render("index.html", active_page="studio")
+
+    @get("/home")
+    async def home(self, request: Request) -> Template:
+        """Greeting + stat cards + recent + AI suggestions panel."""
+        return self._render_home(request)
+
+    @get("/studio")
+    async def studio(self) -> Template:
+        """Explicit Studio route — `/` may redirect away from it once
+        the user has data."""
         return self.render("index.html", active_page="studio")
 
     @get("/admin")
@@ -35,6 +195,48 @@ class PageController(TuskController):
     async def data(self) -> Template:
         """Data/ETL pipeline builder page"""
         return self.render("data.html", active_page="data")
+
+    @get("/schema")
+    async def schema(self) -> Template:
+        """Schema viewer (ER diagram) — Postgres only."""
+        conns = list_connections()
+        pg_conns = [
+            {"id": c.id, "name": c.name, "database": c.database}
+            for c in conns if c.type == "postgres"
+        ]
+        return self.render(
+            "schema.html",
+            active_page="schema",
+            pg_connections=pg_conns,
+        )
+
+    @get("/explore")
+    async def explore(self) -> Template:
+        """Data explorer / per-column profile page — Postgres only."""
+        conns = list_connections()
+        pg_conns = [
+            {"id": c.id, "name": c.name, "database": c.database}
+            for c in conns if c.type == "postgres"
+        ]
+        return self.render(
+            "explore.html",
+            active_page="explore",
+            pg_connections=pg_conns,
+        )
+
+    @get("/scheduled")
+    async def scheduled(self) -> Template:
+        """Scheduled jobs page (cron / interval / one-shot)."""
+        conns = list_connections()
+        connections = [
+            {"id": c.id, "name": c.name, "type": c.type}
+            for c in conns
+        ]
+        return self.render(
+            "scheduled.html",
+            active_page="scheduled",
+            connections=connections,
+        )
 
     @get("/login")
     async def login(self) -> Template:

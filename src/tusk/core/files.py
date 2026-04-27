@@ -6,6 +6,55 @@ from typing import Literal
 import msgspec
 
 
+def _allowed_roots() -> list[Path]:
+    """Roots that user-supplied paths are allowed to resolve into.
+
+    Always allowed: the user's home directory and ``/tmp``.
+
+    Optional: if the ``TUSK_FILES_ROOT`` environment variable is set, that
+    path becomes an additional allowed root. This lets a deployer (e.g. a
+    Coolify or Docker mount) expose, say, ``/data`` to the app without
+    widening the default allowlist.
+    """
+    roots = [Path.home().resolve(), Path("/tmp").resolve()]
+    extra = os.environ.get("TUSK_FILES_ROOT")
+    if extra:
+        try:
+            roots.append(Path(extra).expanduser().resolve())
+        except Exception:
+            pass
+    return roots
+
+
+def validate_user_path(p: str | Path) -> Path:
+    """Resolve a user-supplied filesystem path and confirm it sits inside
+    one of the allowed roots (home, /tmp, or ``$TUSK_FILES_ROOT``).
+
+    Raises ``PermissionError`` if the resolved path escapes the allowlist or
+    contains a non-whitelisted hidden component (preventing access to
+    things like ``~/.ssh`` or ``~/.aws``).
+
+    Used as a single chokepoint by every route that accepts a path from
+    the client (browse, scan, file info/preview, folder add, etc.).
+    """
+    resolved = Path(p).expanduser().resolve()
+
+    if not any(
+        resolved == root or resolved.is_relative_to(root)
+        for root in _allowed_roots()
+    ):
+        raise PermissionError("path outside allowed roots")
+
+    # Block hidden components (defense in depth: keeps ~/.ssh, ~/.aws,
+    # etc. out of reach even though they live under home).
+    allowed_hidden = {".", "..", ".local", ".config", ".tusk"}
+    for part in resolved.parts:
+        if part.startswith(".") and part not in allowed_hidden:
+            raise PermissionError(f"hidden path component not allowed: {part}")
+
+    return resolved
+
+
 class DataFile(msgspec.Struct):
     """Information about a data file"""
     path: str

@@ -36,20 +36,26 @@ class ActiveQuery(msgspec.Struct):
 
 
 async def get_active_queries(config: ConnectionConfig) -> list[ActiveQuery] | dict:
-    """Get list of active queries from pg_stat_activity"""
+    """Get list of active queries from pg_stat_activity.
+
+    Bounded by LIMIT 200 and truncates query text to 500 chars — this endpoint
+    is polled every 5s by the admin panel, unbounded reads are wasteful.
+    """
     sql = """
     SELECT
         pid,
         COALESCE(usename, 'unknown') as user,
         COALESCE(datname, 'unknown') as database,
         COALESCE(state, 'unknown') as state,
-        COALESCE(query, '') as query,
+        COALESCE(LEFT(query, 500), '') as query,
         COALESCE(EXTRACT(EPOCH FROM (now() - query_start))::int, 0) as duration_seconds
     FROM pg_stat_activity
     WHERE pid != pg_backend_pid()
+      AND state IS NOT NULL
       AND query IS NOT NULL
       AND query != ''
     ORDER BY query_start DESC NULLS LAST
+    LIMIT 200
     """
 
     result = await postgres.execute_query(config, sql)
@@ -91,12 +97,14 @@ async def kill_query(config: ConnectionConfig, pid: int) -> tuple[bool, str]:
 async def kill_queries_by_user(config: ConnectionConfig, username: str) -> tuple[int, list[str]]:
     """Terminate all active queries belonging to a user (excludes self).
 
-    Returns (killed_count, errors).
+    Returns (killed_count, errors). Single round-trip — pg_terminate_backend
+    is invoked inside the SELECT projection so we don't pay N round-trips.
     """
     sql = """
-    SELECT pid FROM pg_stat_activity
+    SELECT pg_terminate_backend(pid) AS terminated, pid
+    FROM pg_stat_activity
     WHERE usename = %s
-      AND pid != pg_backend_pid()
+      AND pid <> pg_backend_pid()
       AND state = 'active'
     """
     result = await postgres.execute_query(config, sql, params=(username,))
@@ -106,20 +114,24 @@ async def kill_queries_by_user(config: ConnectionConfig, username: str) -> tuple
     killed = 0
     errors: list[str] = []
     for row in result.rows:
-        ok, msg = await kill_query(config, row[0])
-        if ok:
+        terminated, pid = row[0], row[1]
+        if terminated:
             killed += 1
         else:
-            errors.append(f"pid {row[0]}: {msg}")
+            errors.append(f"pid {pid}: could not terminate")
     return killed, errors
 
 
 async def kill_queries_by_database(config: ConnectionConfig, database: str) -> tuple[int, list[str]]:
-    """Terminate all active queries on a specific database (excludes self)."""
+    """Terminate all active queries on a specific database (excludes self).
+
+    Single round-trip — see kill_queries_by_user.
+    """
     sql = """
-    SELECT pid FROM pg_stat_activity
+    SELECT pg_terminate_backend(pid) AS terminated, pid
+    FROM pg_stat_activity
     WHERE datname = %s
-      AND pid != pg_backend_pid()
+      AND pid <> pg_backend_pid()
       AND state = 'active'
     """
     result = await postgres.execute_query(config, sql, params=(database,))
@@ -129,11 +141,11 @@ async def kill_queries_by_database(config: ConnectionConfig, database: str) -> t
     killed = 0
     errors: list[str] = []
     for row in result.rows:
-        ok, msg = await kill_query(config, row[0])
-        if ok:
+        terminated, pid = row[0], row[1]
+        if terminated:
             killed += 1
         else:
-            errors.append(f"pid {row[0]}: {msg}")
+            errors.append(f"pid {pid}: could not terminate")
     return killed, errors
 
 

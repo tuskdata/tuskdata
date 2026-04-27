@@ -1,7 +1,12 @@
 """API routes for Tusk Studio"""
 
+import json
+import math
+import re
 import time
 import uuid
+from pathlib import Path
+
 import msgspec
 from litestar import Controller, Request, get, post, put, delete
 from litestar.params import Body
@@ -21,6 +26,24 @@ from tusk.core.geo import detect_geometry_columns, rows_to_geojson, to_dict as g
 from tusk.core import query_tracker
 from tusk.engines import postgres, sqlite
 from tusk.engines import duckdb_engine
+
+
+# Keywords that change schema/structure — used to drop the schema cache after
+# successful run. Comments/strings inside SQL aren't stripped on purpose: a
+# user-typed comment with the word "CREATE" only triggers a single redundant
+# fetch on the next schema poll, which is cheap.
+_DDL_RE = re.compile(r"(?im)^\s*(create|drop|alter|truncate|rename|comment)\b")
+
+
+def _maybe_invalidate_schema(conn_id: str | None, sql: str) -> None:
+    """Drop the schema cache if `sql` looks like DDL."""
+    if not conn_id or not sql:
+        return
+    if _DDL_RE.search(sql):
+        try:
+            postgres.invalidate_schema_cache(conn_id)
+        except Exception:
+            pass
 
 
 class APIController(Controller):
@@ -257,6 +280,196 @@ class APIController(Controller):
         else:
             return sqlite.get_schema(config)
 
+    @get("/connections/{conn_id:str}/schema-graph")
+    async def get_schema_graph(self, conn_id: str) -> dict:
+        """Return a graph-shaped schema (tables, columns, FKs) plus a layout.
+
+        Layout is loaded from ~/.tusk/schema_layouts/{conn_id}.json if present;
+        otherwise we compute a deterministic grid keyed off FK count so the
+        diagram doesn't reshuffle on every load.
+        """
+        config = get_connection(conn_id)
+        if not config:
+            return {"error": "Connection not found"}
+        if config.type != "postgres":
+            return {"error": "Schema graph is only available for PostgreSQL connections"}
+
+        # Tables + columns (single trip)
+        tables_sql = """
+            SELECT
+                c.table_schema,
+                c.table_name,
+                c.column_name,
+                c.data_type,
+                c.ordinal_position
+            FROM information_schema.columns c
+            JOIN information_schema.tables t
+                ON t.table_schema = c.table_schema
+                AND t.table_name = c.table_name
+            WHERE c.table_schema NOT IN ('pg_catalog', 'information_schema')
+              AND t.table_type = 'BASE TABLE'
+            ORDER BY c.table_schema, c.table_name, c.ordinal_position
+        """
+        cols_result = await postgres.execute_query(config, tables_sql)
+        if cols_result.error:
+            return {"error": cols_result.error}
+
+        # Primary keys
+        pk_sql = """
+            SELECT
+                tc.table_schema,
+                tc.table_name,
+                kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+              AND tc.table_schema NOT IN ('pg_catalog', 'information_schema')
+        """
+        pk_result = await postgres.execute_query(config, pk_sql)
+        primary_keys: set[tuple[str, str, str]] = set()
+        if not pk_result.error:
+            for row in pk_result.rows:
+                primary_keys.add((row[0], row[1], row[2]))
+
+        # Foreign keys — pg_constraint is the most reliable source
+        fk_sql = """
+            SELECT
+                ns.nspname            AS from_schema,
+                cl.relname            AS from_table,
+                att.attname           AS from_column,
+                fns.nspname           AS to_schema,
+                fcl.relname           AS to_table,
+                fatt.attname          AS to_column
+            FROM pg_constraint con
+            JOIN pg_class       cl   ON cl.oid = con.conrelid
+            JOIN pg_namespace   ns   ON ns.oid = cl.relnamespace
+            JOIN pg_class       fcl  ON fcl.oid = con.confrelid
+            JOIN pg_namespace   fns  ON fns.oid = fcl.relnamespace
+            JOIN unnest(con.conkey)  WITH ORDINALITY AS k(attnum, ord)  ON TRUE
+            JOIN unnest(con.confkey) WITH ORDINALITY AS fk(attnum, ord) ON fk.ord = k.ord
+            JOIN pg_attribute att  ON att.attrelid  = cl.oid  AND att.attnum  = k.attnum
+            JOIN pg_attribute fatt ON fatt.attrelid = fcl.oid AND fatt.attnum = fk.attnum
+            WHERE con.contype = 'f'
+              AND ns.nspname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY ns.nspname, cl.relname, k.ord
+        """
+        fk_result = await postgres.execute_query(config, fk_sql)
+        fks: list[dict] = []
+        fk_columns: set[tuple[str, str, str]] = set()
+        if not fk_result.error:
+            for row in fk_result.rows:
+                from_schema, from_table, from_col, to_schema, to_table, to_col = row
+                fks.append({
+                    "from_schema": from_schema,
+                    "from_table": from_table,
+                    "from_column": from_col,
+                    "to_schema": to_schema,
+                    "to_table": to_table,
+                    "to_column": to_col,
+                })
+                fk_columns.add((from_schema, from_table, from_col))
+
+        # Row counts (from pg_stat_user_tables)
+        try:
+            row_counts_raw = await postgres.get_row_counts(config)
+        except Exception:
+            row_counts_raw = {}
+
+        # Build table dict
+        tables_map: dict[tuple[str, str], dict] = {}
+        for row in cols_result.rows:
+            schema_name, table_name, col_name, col_type, _ = row
+            key = (schema_name, table_name)
+            if key not in tables_map:
+                full_name = f"{schema_name}.{table_name}"
+                tables_map[key] = {
+                    "name": table_name,
+                    "schema": schema_name,
+                    "row_count": int(row_counts_raw.get(full_name, 0) or 0),
+                    "columns": [],
+                }
+            tables_map[key]["columns"].append({
+                "name": col_name,
+                "type": col_type,
+                "is_pk": (schema_name, table_name, col_name) in primary_keys,
+                "is_fk": (schema_name, table_name, col_name) in fk_columns,
+            })
+
+        tables = list(tables_map.values())
+
+        # Layout — load saved, else deterministic grid sorted by FK count desc.
+        layout_dir = Path.home() / ".tusk" / "schema_layouts"
+        layout_dir.mkdir(parents=True, exist_ok=True)
+        layout_path = layout_dir / f"{conn_id}.json"
+        layout: dict[str, dict[str, float]] = {}
+        if layout_path.is_file():
+            try:
+                layout = json.loads(layout_path.read_text())
+            except Exception:
+                layout = {}
+
+        # Build deterministic grid for any tables not in saved layout. Sorting
+        # by FK count then name gives a stable "popular tables in the middle"
+        # feel without needing a real graph layout lib.
+        fk_count_per_table: dict[str, int] = {}
+        for fk in fks:
+            fk_count_per_table[fk["from_table"]] = fk_count_per_table.get(fk["from_table"], 0) + 1
+            fk_count_per_table[fk["to_table"]] = fk_count_per_table.get(fk["to_table"], 0) + 1
+
+        sorted_tables = sorted(
+            tables,
+            key=lambda t: (-fk_count_per_table.get(t["name"], 0), t["name"]),
+        )
+        cols_per_row = max(1, int(math.ceil(math.sqrt(max(1, len(sorted_tables))))))
+        cell_w, cell_h = 280, 240
+        margin_x, margin_y = 80, 80
+        for idx, t in enumerate(sorted_tables):
+            if t["name"] in layout:
+                continue
+            r = idx // cols_per_row
+            c = idx % cols_per_row
+            layout[t["name"]] = {
+                "x": margin_x + c * cell_w,
+                "y": margin_y + r * cell_h,
+            }
+
+        return {
+            "tables": tables,
+            "fks": fks,
+            "layout": layout,
+        }
+
+    @post("/connections/{conn_id:str}/schema-layout")
+    async def save_schema_layout(self, conn_id: str, data: dict = Body()) -> dict:
+        """Persist the user's drag-positioned layout to ~/.tusk/schema_layouts/{conn_id}.json."""
+        config = get_connection(conn_id)
+        if not config:
+            return {"error": "Connection not found"}
+
+        layout = data.get("layout") or {}
+        if not isinstance(layout, dict):
+            return {"error": "layout must be an object"}
+
+        # Coerce + sanitize: only keep {table_name: {x: float, y: float}} entries.
+        clean: dict[str, dict[str, float]] = {}
+        for name, pos in layout.items():
+            if not isinstance(name, str) or not isinstance(pos, dict):
+                continue
+            try:
+                x = float(pos.get("x", 0))
+                y = float(pos.get("y", 0))
+            except (TypeError, ValueError):
+                continue
+            clean[name] = {"x": x, "y": y}
+
+        layout_dir = Path.home() / ".tusk" / "schema_layouts"
+        layout_dir.mkdir(parents=True, exist_ok=True)
+        layout_path = layout_dir / f"{conn_id}.json"
+        layout_path.write_text(json.dumps(clean, indent=2))
+        return {"saved": True, "tables": len(clean)}
+
     @get("/connections/{conn_id:str}/row-counts")
     async def get_row_counts(self, conn_id: str) -> dict:
         """Get row counts for all tables in a connection"""
@@ -348,6 +561,13 @@ class APIController(Controller):
             execution_time_ms = (time.time() - start_time) * 1000
             result_dict = result.to_dict()
             result_dict["request_id"] = request_id
+
+            # If this looks like DDL on a Postgres connection, drop the schema
+            # cache so the next /schema call sees the new structure. Cheap
+            # keyword check — false positives just cause a re-fetch on the
+            # next schema poll.
+            if config.type == "postgres" and not result_dict.get("error"):
+                _maybe_invalidate_schema(conn_id, sql)
 
             history = get_history()
             history.add(

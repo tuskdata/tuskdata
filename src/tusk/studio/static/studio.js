@@ -11,6 +11,22 @@ import {searchKeymap, highlightSelectionMatches, selectNextOccurrence} from "htt
 import {closeBrackets, closeBracketsKeymap, completionKeymap} from "https://esm.sh/@codemirror/autocomplete@6"
 import {toggleLineComment} from "https://esm.sh/@codemirror/commands@6"
 
+// ─── HTML escape helper (XSS guard for innerHTML / attribute interpolation) ─
+// Used to safely interpolate user-controlled strings (connection names,
+// saved query names, history snippets, file paths) into innerHTML and
+// HTML attributes. Without this, a connection named `'); alert(1); //`
+// would execute as JS via the inline onclick handlers we generate.
+function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+window.escapeHtml = escapeHtml;
+
 // ─── Error highlight extension ──────────────────────────────────
 // `setQueryError` effect adds a line decoration with an underline on the
 // SQL line that the server flagged. `clearQueryError` clears it.
@@ -284,12 +300,13 @@ function renderTabs() {
     if (!container) return;
     container.innerHTML = tabs.map(tab => `
         <div class="qtab ${tab.id === activeTabId ? 'active' : ''} ${tab.dirty ? 'dirty' : ''}"
-             onclick="switchTab('${tab.id}')"
-             ondblclick="renameTab('${tab.id}')"
+             data-tab-id="${escapeHtml(tab.id)}"
+             onclick="switchTab(this.dataset.tabId)"
+             ondblclick="renameTab(this.dataset.tabId)"
              title="Double-click to rename">
             <i data-lucide="file-text"></i>
-            <span>${tab.name}</span>
-            <span class="x" onclick="closeTab('${tab.id}', event)" title="Close tab">
+            <span>${escapeHtml(tab.name)}</span>
+            <span class="x" onclick="event.stopPropagation(); closeTab(this.parentElement.dataset.tabId, event)" title="Close tab">
                 <i data-lucide="x"></i>
             </span>
         </div>
@@ -500,7 +517,7 @@ function _updateConnMeta() {
     }
     const typeLabel = {postgres: 'PostgreSQL', sqlite: 'SQLite', duckdb: 'DuckDB'}[currentConnection.type] || currentConnection.type;
     if (meta) {
-        meta.innerHTML = `<span class="dot green"></span><span>${currentConnection.name}</span><span style="color:var(--fg-4)">·</span><span>${typeLabel}</span>`;
+        meta.innerHTML = `<span class="dot green"></span><span>${escapeHtml(currentConnection.name)}</span><span style="color:var(--fg-4)">·</span><span>${escapeHtml(typeLabel)}</span>`;
     }
     if (chip && chipLabel) {
         chip.style.display = '';
@@ -540,7 +557,7 @@ function renderResults() {
 
     if (currentResults.error) {
         if (headerEl) headerEl.innerHTML = '';
-        if (tableEl) tableEl.innerHTML = `<div class="inline-error" style="margin:14px"><i data-lucide="alert-circle" style="width:14px;height:14px;flex-shrink:0;margin-top:1px"></i><pre style="margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">${currentResults.error}</pre></div>`;
+        if (tableEl) tableEl.innerHTML = `<div class="inline-error" style="margin:14px"><i data-lucide="alert-circle" style="width:14px;height:14px;flex-shrink:0;margin-top:1px"></i><pre style="margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">${escapeHtml(currentResults.error)}</pre></div>`;
         _updateResultChips(null, 0, false, false);
         _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
         if (window.lucide) lucide.createIcons();
@@ -651,14 +668,14 @@ function renderResults() {
                             ? `· ${u} unique`
                             : '';
                         return `
-                        <th onclick="sortByColumn(${i})" title="${c.name} · ${c.type || ''}">
+                        <th onclick="sortByColumn(${i})" title="${escapeHtml(c.name)} · ${escapeHtml(c.type || '')}">
                             <div style="display:flex;align-items:center;gap:6px">
-                                <span style="font-weight:500;color:var(--fg);font-size:12.5px;font-family:var(--font-ui);text-transform:none;letter-spacing:0">${c.name}</span>
+                                <span style="font-weight:500;color:var(--fg);font-size:12.5px;font-family:var(--font-ui);text-transform:none;letter-spacing:0">${escapeHtml(c.name)}</span>
                                 ${sortColumn === i ? `<span class="sort-arrow">${sortDirection === 'asc' ? '↑' : '↓'}</span>` : ''}
                             </div>
                             <div class="col-stat">
-                                <span class="type-chip ${cat}">${_typeShort(c.type)}</span>
-                                ${uniqueLabel ? `<span style="opacity:.85">${uniqueLabel}</span>` : ''}
+                                <span class="type-chip ${cat}">${escapeHtml(_typeShort(c.type))}</span>
+                                ${uniqueLabel ? `<span style="opacity:.85">${escapeHtml(uniqueLabel)}</span>` : ''}
                             </div>
                         </th>`;
                     }).join('')}
@@ -672,9 +689,10 @@ function renderResults() {
                     return `
                     <tr ${checked ? 'class="sel"' : ''}
                         data-row-index="${i}"
+                        data-row-key="${escapeHtml(rowKey)}"
                         onclick="openRowDetail(${i}, event)">
                         <td class="sticky-check" onclick="event.stopPropagation()">
-                            <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow('${rowKey}', event)">
+                            <input type="checkbox" ${checked ? 'checked' : ''} onclick="toggleRow(this.closest('tr').dataset.rowKey, event)">
                         </td>
                         ${row.map((cell, j) => {
                             const cls = _cellClass(cell, categories[j]);
@@ -1140,8 +1158,11 @@ loadConnections().then(() => {
         const lastConn = localStorage.getItem('tusk_last_connection');
         if (lastConn && !currentConnection) {
             const conn = JSON.parse(lastConn);
-            // Verify connection still exists by checking the list
-            const connEl = document.querySelector(`[onclick*="selectConnection('${conn.id}'"]`);
+            // Verify connection still exists by checking the list (data-conn-id
+            // attribute, set in the connections render).
+            const connEl = document.querySelector(
+                `[data-conn-id="${(window.CSS && CSS.escape) ? CSS.escape(conn.id) : conn.id}"]`
+            );
             if (connEl) {
                 selectConnection(conn.id, conn.name, conn.type);
             }
@@ -1173,28 +1194,32 @@ async function loadConnections() {
         const statusTitle = status === true ? 'Online'
             : status === false ? 'Offline'
             : 'Unknown';
+        const idAttr = escapeHtml(c.id);
+        const nameAttr = escapeHtml(c.name);
+        const typeAttr = escapeHtml(c.type);
         return `
         <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
-             onclick="selectConnection('${c.id}', '${c.name}', '${c.type}')">
+             data-conn-id="${idAttr}" data-conn-name="${nameAttr}" data-conn-type="${typeAttr}"
+             onclick="selectConnection(this.dataset.connId, this.dataset.connName, this.dataset.connType)">
             <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
             <span>${icon}</span>
-            <span class="text-sm flex-1 truncate" title="${c.name}">${c.name}</span>
+            <span class="text-sm flex-1 truncate" title="${nameAttr}">${escapeHtml(c.name)}</span>
             <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1">
                 ${c.type === 'postgres' ? `
-                    <button onclick="event.stopPropagation(); showDatabasesModal('${c.id}')"
+                    <button onclick="event.stopPropagation(); showDatabasesModal(this.closest('[data-conn-id]').dataset.connId)"
                             class="text-gray-500 hover:text-indigo-400 transition-colors text-xs" title="Browse databases">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
                         </svg>
                     </button>
                 ` : ''}
-                <button onclick="event.stopPropagation(); showEditConnModal('${c.id}')"
+                <button onclick="event.stopPropagation(); showEditConnModal(this.closest('[data-conn-id]').dataset.connId)"
                         class="text-gray-500 hover:text-blue-400 transition-colors text-xs" title="Edit connection">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
                     </svg>
                 </button>
-                <button onclick="event.stopPropagation(); deleteConnection('${c.id}')"
+                <button onclick="event.stopPropagation(); deleteConnection(this.closest('[data-conn-id]').dataset.connId)"
                         class="text-gray-500 hover:text-red-400 transition-colors">×</button>
             </div>
         </div>
@@ -1226,28 +1251,32 @@ async function checkConnectionStatuses(conns) {
                 : status === false ? 'bg-red-500'
                 : 'bg-gray-500';
             const statusTitle = status === true ? 'Online' : status === false ? 'Offline' : 'Unknown';
+            const idAttr = escapeHtml(c.id);
+            const nameAttr = escapeHtml(c.name);
+            const typeAttr = escapeHtml(c.type);
             return `
             <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
-                 onclick="selectConnection('${c.id}', '${c.name}', '${c.type}')">
+                 data-conn-id="${idAttr}" data-conn-name="${nameAttr}" data-conn-type="${typeAttr}"
+                 onclick="selectConnection(this.dataset.connId, this.dataset.connName, this.dataset.connType)">
                 <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
                 <span>${icon}</span>
-                <span class="text-sm flex-1 truncate" title="${c.name}">${c.name}</span>
+                <span class="text-sm flex-1 truncate" title="${nameAttr}">${escapeHtml(c.name)}</span>
                 <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1">
                     ${c.type === 'postgres' ? `
-                        <button onclick="event.stopPropagation(); showDatabasesModal('${c.id}')"
+                        <button onclick="event.stopPropagation(); showDatabasesModal(this.closest('[data-conn-id]').dataset.connId)"
                                 class="text-gray-500 hover:text-indigo-400 transition-colors text-xs" title="Browse databases">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
                             </svg>
                         </button>
                     ` : ''}
-                    <button onclick="event.stopPropagation(); showEditConnModal('${c.id}')"
+                    <button onclick="event.stopPropagation(); showEditConnModal(this.closest('[data-conn-id]').dataset.connId)"
                             class="text-gray-500 hover:text-blue-400 transition-colors text-xs" title="Edit connection">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
                         </svg>
                     </button>
-                    <button onclick="event.stopPropagation(); deleteConnection('${c.id}')"
+                    <button onclick="event.stopPropagation(); deleteConnection(this.closest('[data-conn-id]').dataset.connId)"
                             class="text-gray-500 hover:text-red-400 transition-colors">×</button>
                 </div>
             </div>
@@ -1290,7 +1319,7 @@ window.selectConnection = async function(id, name, type) {
     const schema = await res.json();
 
     if (schema.error) {
-        document.getElementById('schema-tree').innerHTML = `<div class="text-red-400 py-2">${schema.error}</div>`;
+        document.getElementById('schema-tree').innerHTML = `<div class="text-red-400 py-2">${escapeHtml(schema.error)}</div>`;
         return;
     }
 
@@ -1321,43 +1350,50 @@ function renderSchemaTree(schema, filter = '') {
 
         if (filteredTables.length === 0) return '';
 
+        const schemaNameEsc = escapeHtml(schemaName);
         return `
         <details open class="mt-1">
-            <summary class="cursor-pointer text-gray-400 hover:text-white py-1">📁 ${schemaName}</summary>
+            <summary class="cursor-pointer text-gray-400 hover:text-white py-1">📁 ${schemaNameEsc}</summary>
             <div class="ml-3">
                 ${filteredTables.map(([tableName, cols]) => {
                     const rowCount = tableRowCounts[`${schemaName}.${tableName}`];
                     const rowCountStr = rowCount !== undefined ? `<span class="text-indigo-400/70">${formatRowCount(rowCount)}</span>` : '';
+                    const tableNameEsc = escapeHtml(tableName);
                     return `
-                    <details class="mt-0.5">
+                    <details class="mt-0.5"
+                             data-schema="${schemaNameEsc}" data-table="${tableNameEsc}">
                         <summary class="cursor-pointer hover:text-white py-0.5 flex items-center gap-1 group"
-                                 ondblclick="event.stopPropagation(); insertTable('${tableName}')"
+                                 ondblclick="event.stopPropagation(); insertTable(this.closest('details').dataset.table)"
                                  title="Double-click to insert table name">
-                            <span>📋</span> ${tableName}
+                            <span>📋</span> ${tableNameEsc}
                             <span class="text-xs text-gray-600">(${cols.length})</span>
                             ${rowCountStr}
                             <span class="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1">
                                 <button class="text-[10px] px-1 rounded bg-[#21262d] hover:bg-indigo-600 text-gray-300 hover:text-white"
-                                        onclick="event.stopPropagation(); insertTableTemplate('${schemaName}', '${tableName}')"
+                                        onclick="event.stopPropagation(); insertTableTemplate(this.closest('details').dataset.schema, this.closest('details').dataset.table)"
                                         title="Open INSERT template in a new tab">INSERT</button>
                             </span>
                         </summary>
                         <div class="ml-4 text-xs text-gray-500">
                             ${cols.map(c => {
+                                const refsEsc = escapeHtml(c.references || '');
                                 let icon = '<span class="text-gray-600">⋮</span>';
                                 let tooltip = '';
                                 if (c.is_primary_key && c.is_foreign_key) {
-                                    icon = '<span class="text-yellow-500" title="Primary Key">🔑</span><span class="text-blue-400" title="FK: ' + (c.references || '') + '">🔗</span>';
+                                    icon = '<span class="text-yellow-500" title="Primary Key">🔑</span><span class="text-blue-400" title="FK: ' + refsEsc + '">🔗</span>';
                                 } else if (c.is_primary_key) {
                                     icon = '<span class="text-yellow-500" title="Primary Key">🔑</span>';
                                 } else if (c.is_foreign_key) {
-                                    icon = '<span class="text-blue-400" title="FK: ' + (c.references || '') + '">🔗</span>';
-                                    tooltip = ' → ' + (c.references || '').split('.').pop();
+                                    icon = '<span class="text-blue-400" title="FK: ' + refsEsc + '">🔗</span>';
+                                    tooltip = ' → ' + escapeHtml((c.references || '').split('.').pop());
                                 }
                                 return `
-                                <div class="py-0.5 hover:text-gray-300 cursor-pointer flex items-center gap-1" onclick="insertColumn('${c.name}')" title="${c.references || ''}">
+                                <div class="py-0.5 hover:text-gray-300 cursor-pointer flex items-center gap-1"
+                                     data-col-name="${escapeHtml(c.name)}"
+                                     onclick="insertColumn(this.dataset.colName)"
+                                     title="${refsEsc}">
                                     ${icon}
-                                    ${c.name} <span class="text-gray-600">${c.type}</span>${tooltip ? '<span class="text-blue-400/60 text-[10px]">' + tooltip + '</span>' : ''}
+                                    ${escapeHtml(c.name)} <span class="text-gray-600">${escapeHtml(c.type)}</span>${tooltip ? '<span class="text-blue-400/60 text-[10px]">' + tooltip + '</span>' : ''}
                                 </div>
                             `}).join('')}
                         </div>
@@ -1875,15 +1911,19 @@ async function loadPgPaths() {
         return;
     }
 
-    list.innerHTML = data.available.map(p => `
-        <div class="flex items-center justify-between p-2 rounded-lg bg-[#0d1117] border border-[#30363d] ${data.current === p.path || (!data.current && data.detected.startsWith(p.path)) ? 'ring-1 ring-indigo-500' : ''}">
+    list.innerHTML = data.available.map(p => {
+        const pathAttr = escapeHtml(p.path);
+        return `
+        <div class="flex items-center justify-between p-2 rounded-lg bg-[#0d1117] border border-[#30363d] ${data.current === p.path || (!data.current && data.detected.startsWith(p.path)) ? 'ring-1 ring-indigo-500' : ''}"
+             data-pg-path="${pathAttr}">
             <div class="flex-1 min-w-0">
-                <div class="font-mono text-sm truncate">${p.path}</div>
-                <div class="text-xs text-gray-500">${p.version}</div>
+                <div class="font-mono text-sm truncate">${pathAttr}</div>
+                <div class="text-xs text-gray-500">${escapeHtml(p.version)}</div>
             </div>
-            <button onclick="selectPgPath('${p.path}')" class="text-sm text-indigo-400 hover:text-indigo-300 px-2">Use</button>
+            <button onclick="selectPgPath(this.closest('[data-pg-path]').dataset.pgPath)" class="text-sm text-indigo-400 hover:text-indigo-300 px-2">Use</button>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 window.selectPgPath = async function(path) {
@@ -1939,17 +1979,20 @@ function renderHistory(items) {
         const statusColor = h.status === 'success' ? 'text-green-500' : 'text-red-500';
         const connName = h.connection_name || 'Unknown';
         const connShort = connName.length > 10 ? connName.slice(0, 10) + '..' : connName;
+        const connNameEsc = escapeHtml(connName);
+        const sqlFullEsc = escapeHtml(h.sql);
+        const execMs = Number(h.execution_time_ms) || 0;
 
         return `
             <div class="group px-2 py-1.5 rounded hover:bg-[#21262d] cursor-pointer"
-                 onclick="useHistoryQuery(${h.id})"
-                 title="${h.sql.replace(/"/g, '&quot;')}">
+                 onclick="useHistoryQuery(${Number(h.id)})"
+                 title="${sqlFullEsc}">
                 <div class="flex items-center gap-1 text-[10px] text-gray-600 mb-0.5">
                     <span class="${statusColor}">${statusIcon}</span>
-                    <span title="${connName}">${connShort}</span>
-                    <span class="ml-auto">${h.execution_time_ms}ms</span>
+                    <span title="${connNameEsc}">${escapeHtml(connShort)}</span>
+                    <span class="ml-auto">${execMs}ms</span>
                 </div>
-                <div class="truncate text-gray-400 font-mono text-xs">${sqlPreview}</div>
+                <div class="truncate text-gray-400 font-mono text-xs">${escapeHtml(sqlPreview)}</div>
             </div>
         `;
     }).join('');
@@ -2033,7 +2076,7 @@ window.showDatabasesModal = async function(connId) {
     const list = document.getElementById('databases-list');
 
     if (data.error) {
-        list.innerHTML = `<div class="text-red-400">${data.error}</div>`;
+        list.innerHTML = `<div class="text-red-400">${escapeHtml(data.error)}</div>`;
         return;
     }
 
@@ -2042,25 +2085,29 @@ window.showDatabasesModal = async function(connId) {
         return;
     }
 
-    list.innerHTML = data.databases.map(db => `
-        <div class="flex items-center justify-between p-3 rounded-lg hover:bg-[#21262d] ${db.is_current ? 'bg-[#21262d] ring-1 ring-green-500/50' : ''}">
+    list.innerHTML = data.databases.map(db => {
+        const dbNameEsc = escapeHtml(db.name);
+        return `
+        <div class="flex items-center justify-between p-3 rounded-lg hover:bg-[#21262d] ${db.is_current ? 'bg-[#21262d] ring-1 ring-green-500/50' : ''}"
+             data-db-name="${dbNameEsc}">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <span class="font-medium">${db.name}</span>
+                    <span class="font-medium">${dbNameEsc}</span>
                     ${db.is_current ? '<span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">current</span>' : ''}
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
-                    ${db.size_human} · Owner: ${db.owner}
+                    ${escapeHtml(db.size_human)} · Owner: ${escapeHtml(db.owner)}
                 </div>
             </div>
             ${!db.is_current ? `
-                <button onclick="connectToDatabase('${db.name}')"
+                <button onclick="connectToDatabase(this.closest('[data-db-name]').dataset.dbName)"
                         class="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 px-3 py-1 rounded transition-colors text-sm">
                     Connect
                 </button>
             ` : ''}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 window.hideDatabasesModal = function() {
@@ -2131,7 +2178,7 @@ async function loadSavedQueries() {
     for (const [folder, queries] of Object.entries(folders)) {
         html += `
             <details class="mt-1">
-                <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs">📁 ${folder}</summary>
+                <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs">📁 ${escapeHtml(folder)}</summary>
                 <div class="ml-2">
                     ${queries.map(q => renderSavedQueryItem(q)).join('')}
                 </div>
@@ -2144,15 +2191,16 @@ async function loadSavedQueries() {
 
 function renderSavedQueryItem(q) {
     const sqlPreview = q.sql.length > 30 ? q.sql.slice(0, 30) + '...' : q.sql;
+    const id = Number(q.id);
     return `
         <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-[#21262d] cursor-pointer"
-             onclick="loadSavedQuery(${q.id})"
-             title="${q.sql.replace(/"/g, '&quot;')}">
+             onclick="loadSavedQuery(${id})"
+             title="${escapeHtml(q.sql)}">
             <span class="text-indigo-400 text-xs">⭐</span>
-            <span class="flex-1 truncate text-gray-300 text-xs">${q.name}</span>
-            <button onclick="event.stopPropagation(); editSavedQuery(${q.id})"
+            <span class="flex-1 truncate text-gray-300 text-xs">${escapeHtml(q.name)}</span>
+            <button onclick="event.stopPropagation(); editSavedQuery(${id})"
                     class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 text-xs">✎</button>
-            <button onclick="event.stopPropagation(); deleteSavedQuery(${q.id})"
+            <button onclick="event.stopPropagation(); deleteSavedQuery(${id})"
                     class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 text-xs">×</button>
         </div>
     `;
@@ -2385,26 +2433,35 @@ async function loadFiles() {
         return;
     }
 
-    list.innerHTML = data.folders.map(folder => `
-        <details open class="mt-1">
+    list.innerHTML = data.folders.map(folder => {
+        const folderPathEsc = escapeHtml(folder.path);
+        return `
+        <details open class="mt-1" data-folder-path="${folderPathEsc}">
             <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs flex items-center gap-1">
-                <span>📁</span> ${folder.name}
-                <button onclick="event.stopPropagation(); removeFolder('${folder.path}')"
+                <span>📁</span> ${escapeHtml(folder.name)}
+                <button onclick="event.stopPropagation(); removeFolder(this.closest('details').dataset.folderPath)"
                         class="ml-auto text-gray-600 hover:text-red-400 text-xs">×</button>
             </summary>
             <div class="ml-3 mt-1 space-y-0.5">
                 ${folder.files.length === 0 ? '<div class="text-gray-600 text-xs py-1">No data files</div>' : ''}
-                ${folder.files.map(f => `
+                ${folder.files.map(f => {
+                    const fPathEsc = escapeHtml(f.path);
+                    const fTypeEsc = escapeHtml(f.file_type);
+                    const fNameEsc = escapeHtml(f.name);
+                    return `
                     <div class="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#21262d] cursor-pointer text-xs"
-                         onclick="previewFile('${f.path}', '${f.file_type}', '${f.name}')">
-                        <span>${f.icon}</span>
-                        <span class="flex-1 truncate text-gray-300" title="${f.name}">${f.name}</span>
-                        <span class="text-gray-600">${f.size_human}</span>
+                         data-file-path="${fPathEsc}" data-file-type="${fTypeEsc}" data-file-name="${fNameEsc}"
+                         onclick="previewFile(this.dataset.filePath, this.dataset.fileType, this.dataset.fileName)">
+                        <span>${escapeHtml(f.icon)}</span>
+                        <span class="flex-1 truncate text-gray-300" title="${fNameEsc}">${fNameEsc}</span>
+                        <span class="text-gray-600">${escapeHtml(f.size_human)}</span>
                     </div>
-                `).join('')}
+                `;
+                }).join('')}
             </div>
         </details>
-    `).join('');
+    `;
+    }).join('');
 }
 
 window.showAddFolderModal = function() {
@@ -2516,7 +2573,7 @@ window.previewFile = async function(path, fileType, name) {
     const info = await infoRes.json();
 
     if (info.error) {
-        document.getElementById('file-preview-info').innerHTML = `<span class="text-red-400">${info.error}</span>`;
+        document.getElementById('file-preview-info').innerHTML = `<span class="text-red-400">${escapeHtml(info.error)}</span>`;
         return;
     }
 
@@ -2528,21 +2585,26 @@ window.previewFile = async function(path, fileType, name) {
         `;
 
         // Show tables
+        const pathEsc = escapeHtml(path);
         document.getElementById('file-preview-content').innerHTML = `
             <div class="space-y-2">
-                ${info.tables?.map(t => `
+                ${info.tables?.map(t => {
+                    const tNameEsc = escapeHtml(t.name);
+                    return `
                     <div class="flex items-center justify-between p-2 rounded bg-[#0d1117] hover:bg-[#21262d] cursor-pointer"
-                         onclick="previewSqliteTable('${path}', '${t.name}')">
-                        <span class="font-mono text-sm">${t.name}</span>
+                         data-sqlite-path="${pathEsc}" data-sqlite-table="${tNameEsc}"
+                         onclick="previewSqliteTable(this.dataset.sqlitePath, this.dataset.sqliteTable)">
+                        <span class="font-mono text-sm">${tNameEsc}</span>
                         <span class="text-xs text-gray-500">${t.row_count?.toLocaleString() || 0} rows</span>
                     </div>
-                `).join('') || '<div class="text-gray-500">No tables found</div>'}
+                `;
+                }).join('') || '<div class="text-gray-500">No tables found</div>'}
             </div>
         `;
     } else {
         document.getElementById('file-preview-info').innerHTML = `
-            <span class="text-gray-400">${fileType.toUpperCase()}</span> ·
-            <span class="text-gray-500">${info.row_count_human || info.row_count?.toLocaleString() + ' rows'}</span> ·
+            <span class="text-gray-400">${escapeHtml(fileType.toUpperCase())}</span> ·
+            <span class="text-gray-500">${escapeHtml(info.row_count_human || info.row_count?.toLocaleString() + ' rows')}</span> ·
             <span class="text-gray-500">${info.columns?.length || 0} columns</span>
         `;
 
@@ -2551,7 +2613,7 @@ window.previewFile = async function(path, fileType, name) {
         const preview = await previewRes.json();
 
         if (preview.error) {
-            document.getElementById('file-preview-content').innerHTML = `<span class="text-red-400">${preview.error}</span>`;
+            document.getElementById('file-preview-content').innerHTML = `<span class="text-red-400">${escapeHtml(preview.error)}</span>`;
             return;
         }
 
@@ -2561,20 +2623,20 @@ window.previewFile = async function(path, fileType, name) {
 }
 
 window.previewSqliteTable = async function(path, table) {
-    document.getElementById('file-preview-info').innerHTML = `Loading ${table}...`;
+    document.getElementById('file-preview-info').innerHTML = `Loading ${escapeHtml(table)}...`;
 
     const previewRes = await fetch(`/api/files/preview?path=${encodeURIComponent(path)}&table=${encodeURIComponent(table)}`);
     const preview = await previewRes.json();
 
     if (preview.error) {
-        document.getElementById('file-preview-content').innerHTML = `<span class="text-red-400">${preview.error}</span>`;
+        document.getElementById('file-preview-content').innerHTML = `<span class="text-red-400">${escapeHtml(preview.error)}</span>`;
         return;
     }
 
     document.getElementById('file-preview-info').innerHTML = `
         <span class="text-gray-400">SQLite</span> ·
-        <span class="font-mono text-sm">${table}</span> ·
-        <span class="text-gray-500">${preview.row_count} rows (showing first 100)</span>
+        <span class="font-mono text-sm">${escapeHtml(table)}</span> ·
+        <span class="text-gray-500">${Number(preview.row_count) || 0} rows (showing first 100)</span>
     `;
 
     currentPreviewFile.table = table;
@@ -2594,8 +2656,8 @@ function renderPreviewTable(data) {
                     <tr>
                         ${data.columns.map(c => `
                             <th class="px-3 py-2 text-left text-gray-400 font-medium border-b border-[#30363d]">
-                                ${c.name}
-                                <span class="text-gray-600 font-normal ml-1">${c.type}</span>
+                                ${escapeHtml(c.name)}
+                                <span class="text-gray-600 font-normal ml-1">${escapeHtml(c.type)}</span>
                             </th>
                         `).join('')}
                     </tr>
@@ -2605,7 +2667,7 @@ function renderPreviewTable(data) {
                         <tr class="${i % 2 === 0 ? '' : 'bg-[#0d1117]/50'}">
                             ${row.map(cell => `
                                 <td class="px-3 py-1.5 border-b border-[#30363d]/50 max-w-[200px] truncate">
-                                    ${cell === null ? '<span class="null-badge">NULL</span>' : String(cell)}
+                                    ${cell === null ? '<span class="null-badge">NULL</span>' : escapeHtml(String(cell))}
                                 </td>
                             `).join('')}
                         </tr>
