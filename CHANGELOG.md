@@ -2,6 +2,14 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc13] - 2026-04-27 — Hotfix: tab switch also resets to Table
+
+rc12 only reset the result pane to Table when running a fresh
+query. If the user clicked Map (or JSON / Plan) on tab 1 and then
+switched to tab 2, tab 2 opened on the previous tab's pane — often
+empty — and the user had to click Table by hand. switchTab now
+calls setResultView('table') after restoring the tab's results.
+
 ## [0.4.3rc12] - 2026-04-27 — Hotfix: results pane snaps back to Table on new query
 
 If you ran a query, then clicked JSON / Plan, then ran a new query,

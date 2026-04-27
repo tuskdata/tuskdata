@@ -204,10 +204,20 @@ window.switchTab = function(tabId) {
 
         // Restore results
         currentResults = tab.results;
+        window.currentResults = currentResults;
         sortColumn = null;
         sortDirection = 'asc';
         filterText = '';
         currentPage = 1;
+
+        // Reset the result-pane view to Table on every tab switch.
+        // Otherwise, if the previous tab left the view on Map / JSON /
+        // Plan, the new tab opens to that pane (often empty) and the
+        // user has to click Table by hand to see their results.
+        if (typeof window.setResultView === 'function') {
+            window.setResultView('table');
+        }
+
         renderResults();
 
         // Follow tab's connection if it differs from the current one.
