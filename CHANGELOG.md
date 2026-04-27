@@ -2,6 +2,39 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3] - 2026-04-27 — Redesign closure release
+
+Same payload as `rc15`. Cut as the official `0.4.3` after the user
+verified the warm-dark top nav, the SSH session sharing, and the
+universal color uniformity across every page. The 15 release
+candidates that led here are tagged in the history below; this
+release rolls them all up.
+
+Highlights of the 0.4.3 cycle:
+- **v0.4 redesign port** of every core page (Studio, Admin, Data,
+  Cluster, Users, Profile, Login) and every plugin (BI · CI ·
+  Security · Cluster) onto the mockup classes from
+  `static/tusk-app.css` — no more override hacks.
+- **Color uniformity** across the whole app: light + dark modes
+  flip the design tokens cleanly, plus legacy var aliases catch
+  any leftover reference.
+- **Top nav warm-dark** (rc15 hotfix) — removed a legacy
+  `header { ... !important }` rule that was forcing GitHub-gray
+  in dark mode regardless of the design tokens.
+- **SSH session sharing** — multiple connections behind the same
+  bastion now share one asyncssh session + multiple forwards.
+  First-hit latency drops from `N × 1.5s` to `~1.5s + N × 50ms`.
+- **Hardening of admin guard** — `TUSK_ADMIN_ALLOW_LAN=1` opt-in
+  for private RFC1918 networks; default-on in
+  `tuskdata-compose/docker-compose.yml`.
+- **APScheduler pin** to `<4` — prevents the import-time crash
+  from APScheduler 4.0's module reorganization.
+- **Studio polish** — multi-cursor (Ctrl+D), error highlight from
+  PG `statement_position`, INSERT-from-table template, Copy CSV
+  to clipboard, editor↔results splitter, view tabs (Table/Map/
+  Chart/JSON/Plan), tab-bound connections, tab switch resets to
+  Table view, clean templates with no inline CSS/JS.
+
 ## [0.4.3rc15] - 2026-04-27 — Top nav warm-dark fix + legacy var aliases
 
 ### The bug the user pointed at
