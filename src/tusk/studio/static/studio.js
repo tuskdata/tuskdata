@@ -1571,6 +1571,13 @@ window.runQuery = async function(options = {}) {
             highlightQueryError(currentResults.error_position);
         }
 
+        // Snap back to the Table view whenever a brand-new query runs.
+        // Page fetches keep whatever pane the user was on (table is the
+        // only pane that re-renders during pagination anyway).
+        if (!isPageFetch && typeof window.setResultView === 'function') {
+            window.setResultView('table');
+        }
+
         renderResults();
     } catch (err) {
         if (err.name === 'AbortError') {

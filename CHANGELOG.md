@@ -2,6 +2,14 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc12] - 2026-04-27 — Hotfix: results pane snaps back to Table on new query
+
+If you ran a query, then clicked JSON / Plan, then ran a new query,
+the results pane stayed on the previous tab and looked empty —
+you had to click `Table` again. `runQuery` now calls
+`setResultView('table')` after a successful new query (page-fetches
+during pagination keep the active pane untouched).
+
 ## [0.4.3rc11] - 2026-04-26 — Admin internals + Data preview pane + cluster plugin
 
 Continuing the per-template port. No more override hacks; every
