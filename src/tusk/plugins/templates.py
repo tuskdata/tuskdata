@@ -76,19 +76,30 @@ def setup_plugin_templates(base_templates_dir: Path) -> None:
 
 
 def setup_plugin_statics(base_static_dir: Path) -> None:
-    """Copy plugin static files to a runtime-writable directory.
+    """Copy plugin static files to a runtime-writable directory and
+    expose them under the venv's static dir via a symlink.
 
-    Called on startup to make plugin statics servable at
-    ``/static/plugins/{tab_id}/filename.js``. The destination is
-    :data:`PLUGIN_STATIC_DIR` (i.e. ``~/.tusk/plugin_static``), NOT the
-    venv. The ``base_static_dir`` argument is kept for backwards
-    compatibility but ignored.
+    Called on startup so plugin assets are servable at
+    ``/static/plugins/{tab_id}/filename.js``.
+
+    The flow:
+
+    1. Copy each plugin's static files into ``PLUGIN_STATIC_DIR/{tab_id}/``
+       (defaults to ``~/.tusk/plugin_static``). This is the runtime-
+       writable canonical location — it survives venv rebuilds, and a
+       Docker deploy can ship new assets without rebuilding the image.
+    2. Symlink ``base_static_dir/plugins`` → ``PLUGIN_STATIC_DIR``. That
+       way the existing ``/static`` mount serves both core assets AND
+       plugin assets without needing a second StaticFilesConfig (which
+       Litestar's prefix matcher couldn't disambiguate).
+
+    On read-only venvs (some container deploys), the symlink step is
+    skipped silently — the explicit `/static/plugins/...` route falls
+    back to reading PLUGIN_STATIC_DIR directly.
 
     Args:
-        base_static_dir: Legacy parameter, retained for back-compat.
+        base_static_dir: The main static directory (used for the symlink).
     """
-    del base_static_dir  # legacy: now writes to PLUGIN_STATIC_DIR
-
     PLUGIN_STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
     for plugin in get_all_plugins():
@@ -110,6 +121,12 @@ def setup_plugin_statics(base_static_dir: Path) -> None:
         # Copy new statics
         shutil.copytree(static_path, dest)
         log.info("Plugin statics copied", plugin=plugin.name, dest=str(dest))
+
+    # No symlink: Starlette's StaticFiles security check rejects symlink
+    # targets outside the configured directory. Plugin assets are served
+    # by the explicit `/static/plugins/{plugin_id}/{filename:path}`
+    # handler in PageController, which reads PLUGIN_STATIC_DIR directly.
+    del base_static_dir
 
 
 def cleanup_plugin_templates(base_templates_dir: Path) -> None:

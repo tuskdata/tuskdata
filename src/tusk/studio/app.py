@@ -288,9 +288,19 @@ def on_startup() -> None:
     # deploys don't require a rebuild on plugin asset changes.
     setup_plugin_templates(TEMPLATES_DIR)
 
-    # Nuke any legacy in-venv copy from previous versions so requests
-    # can't accidentally hit a stale file via the first StaticFilesConfig.
-    shutil.rmtree(STATIC_DIR / "plugins", ignore_errors=True)
+    # Nuke any legacy in-venv copy or stale symlink from a previous
+    # version / test run before `setup_plugin_statics` recreates the
+    # symlink. `shutil.rmtree` only handles real directories — symlinks
+    # need `unlink()`.
+    legacy = STATIC_DIR / "plugins"
+    if legacy.is_symlink() or legacy.exists():
+        try:
+            if legacy.is_symlink():
+                legacy.unlink()
+            else:
+                shutil.rmtree(legacy, ignore_errors=True)
+        except OSError:
+            pass
 
     setup_plugin_statics(STATIC_DIR)
 
@@ -451,16 +461,13 @@ app = Litestar(
         engine=MiniJinjaTemplateEngine,
     ),
     static_files_config=[
+        # Plugin assets are served by an explicit handler in PageController
+        # (`/static/plugins/{plugin_id}/{filename}`) instead of a second
+        # StaticFilesConfig — Litestar's prefix matching couldn't pick
+        # the most specific prefix and the plugin assets were shadowed.
         StaticFilesConfig(
             directories=[STATIC_DIR],
             path="/static",
-        ),
-        # Plugin static assets live outside the venv so a Docker deploy
-        # doesn't require a rebuild on asset changes. The URL contract
-        # `/static/plugins/{id}/foo.js` is preserved.
-        StaticFilesConfig(
-            directories=[PLUGIN_STATIC_DIR],
-            path="/static/plugins",
         ),
     ],
     compression_config=CompressionConfig(

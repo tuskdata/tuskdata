@@ -2,6 +2,85 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.5] - 2026-04-27 — Studio Round 2 + plugin assets out of venv + dedup
+
+### Plugin assets out of venv (#29)
+
+`setup_plugin_statics` previously copied plugin static assets into
+`.venv/lib/python3.12/site-packages/tusk/studio/static/plugins/`,
+which means a Docker rebuild on every plugin asset change. Now the
+destination is `~/.tusk/plugin_static/` (override with
+`TUSK_PLUGIN_STATIC_DIR`). The `/static/plugins/{id}/...` URL
+contract is preserved via a second `StaticFilesConfig` entry —
+**registered before the main `/static`** so the longer prefix wins
+(the v0.4.4.x BI 404s came from the wrong order). New regression
+test `test_plugin_static_assets_resolve` curls a known asset from
+each of the four plugins.
+
+Templates stay inside the venv — they're imported once and don't
+suffer the same Docker churn as assets.
+
+### Studio Round 2 (#40)
+
+Result-pane interiors ported to v3 mockup classes:
+- Result chips → `.chip-green` / `.chip-violet` / `.chip-amber`
+  with Lucide icons (matches mockup line 678-679).
+- Result table → `.dtable` (cleaned inline `style=` on `<th>`).
+- View tabs (Table / Chart / Map / JSON / EXPLAIN) → `.tablist`
+  with `button.on` active state.
+- Bottom status bar → `.results-status` (was already there in
+  CSS — markup rewired).
+- Inline-style cleanup: empty / error / column-header / filter
+  row / conn-meta separator → CSS classes in `studio-redesign.css`.
+
+Constraints preserved: `tuskRowDetail.open(...)` cell-click drawer,
+row-key checkbox column, server-side PG pagination, EXPLAIN viewer,
+geo-detection chip — all still work.
+
+### CSS/JS dedup across plugins (#55)
+
+Added shared `tusk-utils.js` to TuskData core with `tuskFormatBytes`,
+`tuskTimeAgo`, `tuskEscapeHtml`, `tuskFormatNumber`, `tuskQS`. Loaded
+from `base.html` so plugins inherit the globals.
+
+**BI** → `0.2.3`: `bi.css` shrunk from 1753 → 1475 lines. Dropped
+`.bi-btn*`, `.bi-tab`, `.bi-input`, `.bi-empty`, `.bi-modal*`,
+`.bi-table`, `.bi-badge*`, `.bi-pill*`, `.bi-select`. Templates
+migrated to core `.btn` / `.nav-tab` / `.dtable` / `.chip-*` /
+`empty_state` macro. 31 raw `fetch()` → `tuskFetch` /
+`tuskFetchJSON`. Inline scripts extracted to per-template
+`.js` files in `static/bi/` — `widgets.js`, `dashboard-view.js`,
+`dashboard-edit.js`, `dashboard-list.js`, `query-editor.js`,
+`query-builder.js`, `explore.js`, `overview.js`, `embed.js`.
+~11 hardcoded indigo / emerald / rose hex codes → design tokens.
+
+**CI** → `0.2.2`: extracted inline scripts from `run.html`,
+`pipeline.html`, `vault.html`, `dashboard.html` into
+`run-view.js`, `pipeline-view.js`, `vault-view.js`,
+`dashboard-view.js`. Dropped duplicated
+`htmx:afterSwap → lucide.createIcons()` listener. ~15 raw
+`fetch()` → `tuskFetch`. Local `_escHtml` /
+`formatSize` → core globals.
+
+**Security** → `0.2.3`: created `static/` dir (didn't exist),
+moved `security_base_js` macro and inline scripts from
+`dns.html` / `compliance.html` / `sbom.html` / `network.html`
+to `security.js` / `dns-threat-map.js` / `compliance.js` /
+`sbom.js` / `network.js`. Plugin registers `get_static_path()`.
+
+**Cluster** → `0.2.4`: dropped local `formatBytes` / `timeAgo`
+copies. ~15 raw `fetch()` → `tuskFetch`. New `cluster.css`
+with `.btn-success` / `.btn-danger` so `dashboard.html` button
+inline styles get a class.
+
+### Smoke tests now block deploy
+
+`tests/test_frontend_smoke.py` is the gate. Every PR / release
+candidate runs it. 13 tests covering: per-page render + JS
+console clean, cmdk-mask hidden at first paint, search button
+click opens palette, ⌘K opens palette and focuses input,
+homepage stats render, plugin static assets resolve.
+
 ## [0.4.4.2] - 2026-04-27 — Frontend hotfix: search button click
 
 The ⌘K shortcut opened the palette but clicking the topnav search

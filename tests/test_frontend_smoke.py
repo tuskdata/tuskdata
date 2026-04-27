@@ -230,6 +230,37 @@ def test_cmdk_opens_with_keyboard(tusk_server):
         browser.close()
 
 
+def test_plugin_static_assets_resolve(tusk_server):
+    """Plugin static assets at `/static/plugins/{id}/...` must resolve.
+
+    Regression catch: when plugin assets moved out of the venv to
+    `PLUGIN_STATIC_DIR`, the StaticFilesConfig for `/static` was
+    registered first and shadowed `/static/plugins`, returning 404 for
+    every plugin .js / .css. Each plugin's CSS/JS shipped fine but the
+    UI was broken because the assets never loaded.
+    """
+    import urllib.request
+
+    # Hit a known plugin static file from each of the 4 plugins. The
+    # filenames are stable v0.4.5+ contracts.
+    plugin_assets = [
+        "/static/plugins/bi/bi.css",
+        "/static/plugins/bi/bi.js",
+        "/static/plugins/ci/ci.js",
+        "/static/plugins/security/security.js",
+        "/static/plugins/cluster/cluster.js",
+    ]
+    for asset in plugin_assets:
+        req = urllib.request.Request(f"{tusk_server}{asset}")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                assert resp.status == 200, f"{asset} returned {resp.status}"
+                body = resp.read()
+                assert len(body) > 0, f"{asset} returned empty body"
+        except urllib.error.HTTPError as e:
+            pytest.fail(f"{asset} returned {e.code} — plugin assets are not being served")
+
+
 def test_homepage_renders_real_stats(tusk_server):
     """Homepage greeting + stat cards must render with computed values
     (not template literal placeholders)."""

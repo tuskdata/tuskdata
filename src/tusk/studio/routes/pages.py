@@ -1,14 +1,22 @@
 """Page routes for Tusk Studio"""
 
+import mimetypes
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from litestar import get, Request
-from litestar.response import Template, Response
+from litestar.exceptions import NotFoundException
+from litestar.response import Template, Response, File
 
 from tusk.core.auth import get_session, get_user_by_id, get_user_groups, get_user_permissions
 from tusk.core.config import get_config
 from tusk.core.connection import list_connections
+from tusk.plugins.templates import PLUGIN_STATIC_DIR
 from tusk.studio.routes.base import TuskController
+
+# Plugin id format guard — keeps `..` and slashes out of the path.
+_PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
 
 SESSION_COOKIE = "tusk_session"
 
@@ -272,6 +280,60 @@ class PageController(TuskController):
             profile_user=user,
             profile_groups=groups,
             profile_permissions=permissions,
+        )
+
+    @get("/static/plugins/{plugin_id:str}/{filename:path}")
+    async def serve_plugin_asset(self, plugin_id: str, filename: str) -> File:
+        """Serve plugin static assets out of `PLUGIN_STATIC_DIR`.
+
+        Litestar's `StaticFilesConfig` doesn't pick the most-specific
+        prefix when two configs share a stem (`/static` and
+        `/static/plugins`), so the plugin assets get shadowed by the
+        main `/static` mount and 404. An explicit handler dodges that.
+        Path-traversal is blocked by validating `plugin_id` against a
+        regex and ensuring the final resolved path stays under
+        `PLUGIN_STATIC_DIR/{plugin_id}`.
+
+        Litestar passes `filename` with a leading slash because of the
+        `:path` converter; strip it so the join behaves naturally.
+        """
+        from tusk.core.logging import get_logger
+        log = get_logger("plugin_static")
+
+        if not _PLUGIN_ID_RE.match(plugin_id):
+            raise NotFoundException("plugin not found")
+
+        # `:path` captures leave a leading slash on the captured value.
+        clean_filename = filename.lstrip("/")
+        if not clean_filename:
+            raise NotFoundException("filename required")
+
+        plugin_root = (PLUGIN_STATIC_DIR / plugin_id).resolve()
+        target = (plugin_root / clean_filename).resolve()
+
+        # Containment check — block `..` traversal.
+        try:
+            target.relative_to(plugin_root)
+        except ValueError:
+            log.warning("Plugin asset traversal blocked", plugin_id=plugin_id, filename=clean_filename)
+            raise NotFoundException("plugin asset not found")
+
+        if not target.is_file():
+            log.debug(
+                "Plugin asset miss",
+                plugin_id=plugin_id,
+                filename=clean_filename,
+                target=str(target),
+                static_dir=str(PLUGIN_STATIC_DIR),
+            )
+            raise NotFoundException("plugin asset not found")
+
+        media_type, _ = mimetypes.guess_type(str(target))
+        return File(
+            path=target,
+            media_type=media_type or "application/octet-stream",
+            filename=target.name,
+            content_disposition_type="inline",
         )
 
     @get("/favicon.ico")

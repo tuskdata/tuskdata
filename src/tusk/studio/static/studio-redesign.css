@@ -232,6 +232,21 @@ body.studio-redesigned aside{background:var(--bg);color:var(--fg)}
 /* Result toolbar label */
 .results-toolbar .results-label{font-weight:500;font-size:13px}
 
+/* Inline-error block used for query errors and EXPLAIN errors inside
+   the results pane. Replaces ad-hoc inline-style attribute clusters. */
+.inline-error.results-error{margin:14px}
+.inline-error.results-error i[data-lucide]{width:14px;height:14px;flex-shrink:0;margin-top:1px}
+.inline-error.results-error pre{margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap}
+.results-empty .ico i[data-lucide]{width:18px;height:18px}
+
+/* Column header text + uniqueness label inside .dtable thead */
+.dtable thead th .col-head{display:flex;align-items:center;gap:6px}
+.dtable thead th .col-head .col-name{font-weight:500;color:var(--fg);font-size:12.5px;font-family:var(--font-ui);text-transform:none;letter-spacing:0}
+.dtable thead th .col-stat .col-unique{opacity:.85}
+
+/* Tabs row connection-meta separator */
+.studio-tabs .conn-meta .conn-meta-sep{color:var(--fg-4)}
+
 /* tiny utilities mirroring tailwind without bringing them in */
 .r-sidebar .relative{position:relative}
 .r-sidebar .mt-1{margin-top:4px}

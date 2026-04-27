@@ -527,7 +527,7 @@ function _updateConnMeta() {
     }
     const typeLabel = {postgres: 'PostgreSQL', sqlite: 'SQLite', duckdb: 'DuckDB'}[currentConnection.type] || currentConnection.type;
     if (meta) {
-        meta.innerHTML = `<span class="dot green"></span><span>${escapeHtml(currentConnection.name)}</span><span style="color:var(--fg-4)">·</span><span>${escapeHtml(typeLabel)}</span>`;
+        meta.innerHTML = `<span class="dot green"></span><span>${tuskEscapeHtml(currentConnection.name)}</span><span class="conn-meta-sep">·</span><span>${tuskEscapeHtml(typeLabel)}</span>`;
     }
     if (chip && chipLabel) {
         chip.style.display = '';
@@ -558,7 +558,7 @@ function renderResults() {
 
     if (!currentResults) {
         if (headerEl) headerEl.innerHTML = '';
-        if (tableEl) tableEl.innerHTML = '<div class="results-empty"><div class="ico"><i data-lucide="table" style="width:18px;height:18px"></i></div>Run a query to see results.</div>';
+        if (tableEl) tableEl.innerHTML = '<div class="results-empty"><div class="ico"><i data-lucide="table"></i></div>Run a query to see results.</div>';
         _updateResultChips(null, 0, false, false);
         _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
         if (window.lucide) lucide.createIcons();
@@ -567,7 +567,7 @@ function renderResults() {
 
     if (currentResults.error) {
         if (headerEl) headerEl.innerHTML = '';
-        if (tableEl) tableEl.innerHTML = `<div class="inline-error" style="margin:14px"><i data-lucide="alert-circle" style="width:14px;height:14px;flex-shrink:0;margin-top:1px"></i><pre style="margin:0;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">${escapeHtml(currentResults.error)}</pre></div>`;
+        if (tableEl) tableEl.innerHTML = `<div class="inline-error results-error"><i data-lucide="alert-circle"></i><pre>${tuskEscapeHtml(currentResults.error)}</pre></div>`;
         _updateResultChips(null, 0, false, false);
         _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
         if (window.lucide) lucide.createIcons();
@@ -576,7 +576,7 @@ function renderResults() {
 
     if (!currentResults.columns || currentResults.columns.length === 0) {
         if (headerEl) headerEl.innerHTML = '';
-        if (tableEl) tableEl.innerHTML = `<div class="results-empty"><div class="ico"><i data-lucide="check" style="width:18px;height:18px"></i></div>Query executed successfully (no results) · ${currentResults.execution_time_ms || 0}ms</div>`;
+        if (tableEl) tableEl.innerHTML = `<div class="results-empty"><div class="ico"><i data-lucide="check"></i></div>Query executed successfully (no results) · ${currentResults.execution_time_ms || 0}ms</div>`;
         _updateResultChips(currentResults.row_count || 0, currentResults.execution_time_ms || 0, false, false);
         _updateStatusBar({page: 1, totalPages: 1, cols: 0, bytes: 0});
         if (window.lucide) lucide.createIcons();
@@ -626,21 +626,21 @@ function renderResults() {
         const filterRow = !isServerPaginated ? `
             <input type="text"
                    id="results-filter"
+                   class="results-header-filter"
                    placeholder="Filter visible rows…"
-                   value="${(filterText || '').replace(/"/g, '&quot;')}"
-                   onkeyup="filterResults(this.value)"
-                   style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11.5px;color:var(--fg);font-family:var(--font-mono);width:160px">
+                   value="${tuskEscapeHtml(filterText || '')}"
+                   onkeyup="filterResults(this.value)">
         ` : '';
         const filteredHint = (!isServerPaginated && filterText)
-            ? `<span style="color:var(--accent-amber)">${totalFiltered.toLocaleString()} filtered</span>`
+            ? `<span class="results-header-filtered">${totalFiltered.toLocaleString()} filtered</span>`
             : '';
         headerEl.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-                <div style="display:flex;gap:10px;align-items:center;font-family:var(--font-mono);font-size:11.5px;color:var(--fg-3)">
+            <div class="results-header-row">
+                <div class="results-header-stats">
                     <span>${(totalCount || 0).toLocaleString()} rows</span>
-                    <span style="color:var(--fg-4)">·</span>
+                    <span class="sep">·</span>
                     <span>${currentResults.execution_time_ms || 0}ms</span>
-                    ${filteredHint ? '<span style="color:var(--fg-4)">·</span>' + filteredHint : ''}
+                    ${filteredHint ? '<span class="sep">·</span>' + filteredHint : ''}
                 </div>
                 ${filterRow}
             </div>
@@ -654,7 +654,7 @@ function renderResults() {
             ${currentResults.columns.map((c, i) => `
                 <th>
                     <input type="text"
-                           value="${(columnFilters[i] || '').replace(/"/g, '&quot;')}"
+                           value="${tuskEscapeHtml(columnFilters[i] || '')}"
                            oninput="setColumnFilter(${i}, this.value)"
                            placeholder="filter…">
                 </th>
@@ -678,14 +678,14 @@ function renderResults() {
                             ? `· ${u} unique`
                             : '';
                         return `
-                        <th onclick="sortByColumn(${i})" title="${escapeHtml(c.name)} · ${escapeHtml(c.type || '')}">
-                            <div style="display:flex;align-items:center;gap:6px">
-                                <span style="font-weight:500;color:var(--fg);font-size:12.5px;font-family:var(--font-ui);text-transform:none;letter-spacing:0">${escapeHtml(c.name)}</span>
+                        <th onclick="sortByColumn(${i})" title="${tuskEscapeHtml(c.name)} · ${tuskEscapeHtml(c.type || '')}">
+                            <div class="col-head">
+                                <span class="col-name">${tuskEscapeHtml(c.name)}</span>
                                 ${sortColumn === i ? `<span class="sort-arrow">${sortDirection === 'asc' ? '↑' : '↓'}</span>` : ''}
                             </div>
                             <div class="col-stat">
-                                <span class="type-chip ${cat}">${escapeHtml(_typeShort(c.type))}</span>
-                                ${uniqueLabel ? `<span style="opacity:.85">${escapeHtml(uniqueLabel)}</span>` : ''}
+                                <span class="type-chip ${cat}">${tuskEscapeHtml(_typeShort(c.type))}</span>
+                                ${uniqueLabel ? `<span class="col-unique">${tuskEscapeHtml(uniqueLabel)}</span>` : ''}
                             </div>
                         </th>`;
                     }).join('')}
