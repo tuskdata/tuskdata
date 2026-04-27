@@ -2,6 +2,20 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.5.2] - 2026-04-27 — AI Copilot httpx.AsyncClient hotfix
+
+The container env raised `module 'httpx' has no attribute 'AsyncClient'`
+when testing an Ollama connection — even though `httpx>=0.27` is
+declared as a dependency and AsyncClient has been part of the API
+since 0.7. Cause unclear (uv resolution, shadowed install, or a
+build-cache layer) but reproducible from the `/settings/ai` Test
+button.
+
+Switched all three providers (Ollama / OpenAI / Anthropic) from
+`httpx.AsyncClient` to synchronous `httpx.post` / `httpx.get` wrapped
+in `asyncio.to_thread`. Same behaviour, no async client surface, so
+even an old or partial httpx that lacks `AsyncClient` works.
+
 ## [0.4.5.1] - 2026-04-27 — AI Copilot SSRF guard hotfix
 
 The SSRF guard introduced in v0.4.4 (intended for notification

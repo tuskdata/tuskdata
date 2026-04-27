@@ -22,6 +22,7 @@ this module is also covered by the SSRF guard.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Protocol
@@ -183,37 +184,42 @@ class OllamaProvider:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": temperature,
-                        "num_predict": max_tokens,
-                    },
-                },
-            )
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+
+        def _post():
+            resp = httpx.post(f"{self.base_url}/api/chat", json=body, timeout=120)
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("message", {}).get("content", "").strip()
+            return resp.json()
+
+        data = await asyncio.to_thread(_post)
+        return data.get("message", {}).get("content", "").strip()
 
     async def list_models(self) -> list[str]:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{self.base_url}/api/tags")
+        def _get():
+            resp = httpx.get(f"{self.base_url}/api/tags", timeout=10)
             resp.raise_for_status()
-            data = resp.json()
-            return [m["name"] for m in data.get("models", [])]
+            return resp.json()
+
+        data = await asyncio.to_thread(_get)
+        return [m["name"] for m in data.get("models", [])]
 
     async def health(self) -> bool:
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{self.base_url}/api/tags")
+        def _ping():
+            try:
+                resp = httpx.get(f"{self.base_url}/api/tags", timeout=5)
                 return resp.status_code == 200
-        except Exception:
-            return False
+            except Exception:
+                return False
+
+        return await asyncio.to_thread(_ping)
 
 
 # ───────────────────────── OpenAI / OpenAI-compatible ─────────────────
@@ -252,30 +258,41 @@ class OpenAIProvider:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        headers = self._auth_header()
+
+        def _post():
+            resp = httpx.post(
                 f"{self.base_url}/chat/completions",
-                headers=self._auth_header(),
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                },
+                headers=headers,
+                json=body,
+                timeout=120,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            return resp.json()
+
+        data = await asyncio.to_thread(_post)
+        return data["choices"][0]["message"]["content"].strip()
 
     async def list_models(self) -> list[str]:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
+        headers = self._auth_header()
+
+        def _get():
+            resp = httpx.get(
                 f"{self.base_url}/models",
-                headers=self._auth_header(),
+                headers=headers,
+                timeout=10,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return [m["id"] for m in data.get("data", [])]
+            return resp.json()
+
+        data = await asyncio.to_thread(_get)
+        return [m["id"] for m in data.get("data", [])]
 
     async def health(self) -> bool:
         try:
@@ -321,16 +338,21 @@ class AnthropicProvider:
         if system:
             body["system"] = system
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
+        headers = self._auth_headers()
+
+        def _post():
+            resp = httpx.post(
                 f"{self.base_url}/v1/messages",
-                headers=self._auth_headers(),
+                headers=headers,
                 json=body,
+                timeout=120,
             )
             resp.raise_for_status()
-            data = resp.json()
-            blocks = data.get("content", [])
-            return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+            return resp.json()
+
+        data = await asyncio.to_thread(_post)
+        blocks = data.get("content", [])
+        return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
 
     async def list_models(self) -> list[str]:
         # Anthropic doesn't expose a /models endpoint to public users; ship a static list.
