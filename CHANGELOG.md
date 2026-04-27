@@ -2,6 +2,20 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.5.3] - 2026-04-27 — AI Copilot: drop httpx for stdlib urllib
+
+After 0.4.5.2 the container still rejected `httpx.post(json=...)` with
+`post() got an unexpected keyword argument 'json'`. Whatever httpx the
+deployed container has is missing both `AsyncClient` and the `json`
+kwarg on `post`, so it isn't real httpx. Cause not pinned down — some
+interaction with uv / Coolify build cache / some shadowing — but the
+fix is to stop relying on the dependency entirely.
+
+Replaced httpx with stdlib `urllib.request` for all three AI providers
+(Ollama / OpenAI / Anthropic). Same JSON in/out, same async surface
+(via `asyncio.to_thread` so we don't block the event loop), no extra
+dependency. Works on every Python version Tusk supports.
+
 ## [0.4.5.2] - 2026-04-27 — AI Copilot httpx.AsyncClient hotfix
 
 The container env raised `module 'httpx' has no attribute 'AsyncClient'`

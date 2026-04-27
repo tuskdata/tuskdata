@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Protocol
 
-import httpx
 import msgspec
 import tomllib
 
@@ -42,6 +43,43 @@ from tusk.core.logging import get_logger
 log = get_logger("ai")
 
 CONFIG_PATH = Path.home() / ".tusk" / "ai.toml"
+
+
+# ───────────────────────── HTTP helpers ─────────────────────────
+# We use stdlib `urllib.request` instead of `httpx`. The deployed
+# container kept raising errors on the httpx API — first
+# `module 'httpx' has no attribute 'AsyncClient'`, then
+# `post() got an unexpected keyword argument 'json'` — even though
+# `httpx>=0.27` is a declared dependency. Cause not pinned down
+# (some interaction with the wheel/uv/Docker layer cache), but stdlib
+# urllib bypasses all of that and Just Works™ across every Python
+# version Tusk supports. The traffic volume here is "occasional admin
+# clicks Save" so the pretty async client buys us nothing.
+
+def _http_request(url: str, *, method: str = "GET", headers: dict | None = None,
+                  body: dict | None = None, timeout: float = 30.0) -> dict:
+    """Make an HTTP(S) request and return the parsed JSON body.
+    Raises an exception with the response body on non-2xx."""
+    req_body = json.dumps(body).encode("utf-8") if body is not None else None
+    req_headers = dict(headers or {})
+    if req_body is not None:
+        req_headers.setdefault("Content-Type", "application/json")
+    req = urllib.request.Request(url, data=req_body, method=method, headers=req_headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            ctype = resp.headers.get("Content-Type", "")
+            if "json" in ctype or data.startswith(b"{") or data.startswith(b"["):
+                return json.loads(data) if data else {}
+            return {"_text": data.decode("utf-8", errors="replace")}
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = ""
+        raise RuntimeError(f"HTTP {e.code} {e.reason}: {err_body[:500]}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"connection failed: {e.reason}") from e
 
 # Provider defaults — used by the settings UI to pre-fill base URLs and
 # pick a sensible model when the user picks a provider for the first
@@ -193,33 +231,29 @@ class OllamaProvider:
                 "num_predict": max_tokens,
             },
         }
-
-        def _post():
-            resp = httpx.post(f"{self.base_url}/api/chat", json=body, timeout=120)
-            resp.raise_for_status()
-            return resp.json()
-
-        data = await asyncio.to_thread(_post)
+        data = await asyncio.to_thread(
+            _http_request,
+            f"{self.base_url}/api/chat",
+            method="POST",
+            body=body,
+            timeout=120,
+        )
         return data.get("message", {}).get("content", "").strip()
 
     async def list_models(self) -> list[str]:
-        def _get():
-            resp = httpx.get(f"{self.base_url}/api/tags", timeout=10)
-            resp.raise_for_status()
-            return resp.json()
-
-        data = await asyncio.to_thread(_get)
+        data = await asyncio.to_thread(
+            _http_request, f"{self.base_url}/api/tags", timeout=10,
+        )
         return [m["name"] for m in data.get("models", [])]
 
     async def health(self) -> bool:
-        def _ping():
-            try:
-                resp = httpx.get(f"{self.base_url}/api/tags", timeout=5)
-                return resp.status_code == 200
-            except Exception:
-                return False
-
-        return await asyncio.to_thread(_ping)
+        try:
+            await asyncio.to_thread(
+                _http_request, f"{self.base_url}/api/tags", timeout=5,
+            )
+            return True
+        except Exception:
+            return False
 
 
 # ───────────────────────── OpenAI / OpenAI-compatible ─────────────────
@@ -264,34 +298,23 @@ class OpenAIProvider:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        headers = self._auth_header()
-
-        def _post():
-            resp = httpx.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=body,
-                timeout=120,
-            )
-            resp.raise_for_status()
-            return resp.json()
-
-        data = await asyncio.to_thread(_post)
+        data = await asyncio.to_thread(
+            _http_request,
+            f"{self.base_url}/chat/completions",
+            method="POST",
+            headers=self._auth_header(),
+            body=body,
+            timeout=120,
+        )
         return data["choices"][0]["message"]["content"].strip()
 
     async def list_models(self) -> list[str]:
-        headers = self._auth_header()
-
-        def _get():
-            resp = httpx.get(
-                f"{self.base_url}/models",
-                headers=headers,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return resp.json()
-
-        data = await asyncio.to_thread(_get)
+        data = await asyncio.to_thread(
+            _http_request,
+            f"{self.base_url}/models",
+            headers=self._auth_header(),
+            timeout=10,
+        )
         return [m["id"] for m in data.get("data", [])]
 
     async def health(self) -> bool:
@@ -338,19 +361,14 @@ class AnthropicProvider:
         if system:
             body["system"] = system
 
-        headers = self._auth_headers()
-
-        def _post():
-            resp = httpx.post(
-                f"{self.base_url}/v1/messages",
-                headers=headers,
-                json=body,
-                timeout=120,
-            )
-            resp.raise_for_status()
-            return resp.json()
-
-        data = await asyncio.to_thread(_post)
+        data = await asyncio.to_thread(
+            _http_request,
+            f"{self.base_url}/v1/messages",
+            method="POST",
+            headers=self._auth_headers(),
+            body=body,
+            timeout=120,
+        )
         blocks = data.get("content", [])
         return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
 
