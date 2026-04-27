@@ -2,6 +2,28 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.5.1] - 2026-04-27 — AI Copilot SSRF guard hotfix
+
+The SSRF guard introduced in v0.4.4 (intended for notification
+webhooks and downloads) was also applied to AI provider URLs, which
+made the feature unusable: `localhost`, `host.docker.internal`, and
+any private LAN IP (e.g. `10.0.0.188:11434` where the user's Ollama
+actually runs) were rejected as "unsafe URL".
+
+Removed `validate_outbound_url(...)` from `OllamaProvider`,
+`OpenAIProvider`, `AnthropicProvider`, and the corresponding
+`/api/ai/test` and `/api/ai/models` error branches. The provider URL
+comes from `/settings/ai` which is gated to admins in multi-user
+mode — admin-supplied trusted input, not the SSRF surface the guard
+was designed for.
+
+Notification webhooks and download URLs still go through the guard.
+
+Added `test_ai_provider_accepts_local_urls` to the smoke suite —
+constructs `OllamaProvider` with `localhost`, `127.0.0.1`,
+`host.docker.internal`, and two RFC1918 IPs and asserts none of
+them throw.
+
 ## [0.4.5] - 2026-04-27 — Studio Round 2 + plugin assets out of venv + dedup
 
 ### Plugin assets out of venv (#29)

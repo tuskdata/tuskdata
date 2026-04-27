@@ -261,6 +261,43 @@ def test_plugin_static_assets_resolve(tusk_server):
             pytest.fail(f"{asset} returned {e.code} — plugin assets are not being served")
 
 
+def test_ai_provider_accepts_local_urls():
+    """The AI provider URL is admin-supplied and the canonical use case
+    is a local Ollama (`localhost`, `host.docker.internal`, or a LAN
+    IP). The SSRF guard that protects notification webhooks/downloads
+    must NOT be applied here — otherwise constructing the provider
+    raises and the feature is unusable.
+
+    Regression catch: in v0.4.5 the OllamaProvider constructor called
+    `validate_outbound_url(...)` which rejected `host.docker.internal`
+    (didn't resolve in test env) and `10.0.0.188` (private range), so
+    pressing Save on /settings/ai surfaced "unsafe URL" and the user
+    couldn't enable the feature.
+    """
+    from tusk.core.ai import OllamaProvider, build_provider, AIConfig
+
+    # Construct directly — used to throw UnsafeURL.
+    for url in (
+        "http://localhost:11434",
+        "http://127.0.0.1:11434",
+        "http://host.docker.internal:11434",
+        "http://10.0.0.188:11434",
+        "http://192.168.1.50:11434",
+    ):
+        OllamaProvider(url, "qwen2.5-coder:3b")
+
+    # And the factory should accept these too.
+    cfg = AIConfig(
+        enabled=True,
+        provider="ollama",
+        base_url="http://10.0.0.188:11434",
+        model="qwen2.5-coder:3b",
+    )
+    provider = build_provider(cfg)
+    assert provider is not None, "build_provider returned None for a local Ollama URL"
+    assert provider.base_url == "http://10.0.0.188:11434"
+
+
 def test_homepage_renders_real_stats(tusk_server):
     """Homepage greeting + stat cards must render with computed values
     (not template literal placeholders)."""

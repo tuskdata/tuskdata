@@ -32,7 +32,11 @@ import tomllib
 
 from tusk.core.crypto import decrypt, encrypt
 from tusk.core.logging import get_logger
-from tusk.core.url_guard import UnsafeURL, validate_outbound_url
+# Note: SSRF guard intentionally NOT applied to AI provider URLs.
+# The URL is admin-supplied via /settings/ai (gated to admins in
+# multi-user mode) and the canonical use case is `localhost`, `host.docker.internal`,
+# or a private LAN IP (e.g. `10.0.0.x`) hosting Ollama — exactly what
+# the SSRF guard would reject. Don't import the guard here.
 
 log = get_logger("ai")
 
@@ -160,7 +164,11 @@ class OllamaProvider:
     def __init__(self, base_url: str, model: str):
         self.base_url = base_url.rstrip("/")
         self.model = model
-        validate_outbound_url(self.base_url + "/api/tags")
+        # The whole point of an Ollama provider is to talk to a local
+        # model — `localhost`, `host.docker.internal`, `10.0.0.x`, etc.
+        # are explicitly the right targets, not an SSRF risk. The URL
+        # comes from admin settings (gated to admins in multi-user
+        # mode) so the provenance is trusted.
 
     async def complete(
         self,
@@ -358,9 +366,6 @@ def build_provider(cfg: AIConfig) -> AIProvider | None:
             return OpenAIProvider(cfg.base_url, cfg.api_key, cfg.model)
         if cfg.provider == "anthropic":
             return AnthropicProvider(cfg.base_url, cfg.api_key, cfg.model)
-    except UnsafeURL as e:
-        log.warning("AI provider rejected by URL guard", error=str(e))
-        return None
     except Exception as e:
         log.warning("Failed to build AI provider", error=str(e))
         return None

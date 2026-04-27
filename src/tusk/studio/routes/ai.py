@@ -26,7 +26,6 @@ from tusk.core.ai import (
 )
 from tusk.core.crypto import is_encrypted
 from tusk.core.logging import get_logger
-from tusk.core.url_guard import UnsafeURL
 from tusk.studio.routes.base import TuskController
 
 log = get_logger("ai_routes")
@@ -104,8 +103,6 @@ class AICopilotController(Controller):
                 provider = AnthropicProvider(base_url, enc_key, model)
             else:
                 return {"ok": False, "error": f"unknown provider {provider_kind!r}"}
-        except UnsafeURL as e:
-            return {"ok": False, "error": f"unsafe URL: {e}"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -141,8 +138,6 @@ class AICopilotController(Controller):
             else:
                 return {"models": []}
             return {"models": await provider.list_models()}
-        except UnsafeURL as e:
-            return {"error": f"unsafe URL: {e}", "models": []}
         except Exception as e:
             return {"error": str(e), "models": []}
 
