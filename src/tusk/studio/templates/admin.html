@@ -81,20 +81,20 @@
             </div>
 
             <!-- Active Processes -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ filterUser: '', filterDb: '' }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between flex-wrap gap-2">
-                    <h3 class="font-medium">Active Processes</h3>
-                    <div class="flex items-center gap-2">
+            <div class="card" style="margin-bottom:18px" x-data="{ filterUser: '', filterDb: '' }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="activity" style="width:14px;height:14px"></i>Active Processes
+                    </div>
+                    <div class="flex aic gap-2">
                         <input type="text" x-model.debounce.300ms="filterUser"
                                @input="$nextTick(() => htmx.trigger('#processes-list', 'refresh'))"
-                               placeholder="Filter user…"
-                               class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-32 focus:outline-none focus:border-indigo-500">
+                               placeholder="Filter user…" style="width:128px">
                         <input type="text" x-model.debounce.300ms="filterDb"
                                @input="$nextTick(() => htmx.trigger('#processes-list', 'refresh'))"
-                               placeholder="Filter db…"
-                               class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-32 focus:outline-none focus:border-indigo-500">
-                        <button @click="htmx.trigger('#processes-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
-                            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+                               placeholder="Filter db…" style="width:128px">
+                        <button @click="htmx.trigger('#processes-list', 'refresh')" class="btn btn-sm btn-ghost">
+                            <i data-lucide="refresh-cw"></i> Refresh
                         </button>
                     </div>
                 </div>
@@ -105,23 +105,21 @@
                                   (filterUser && filterDb ? '&' : '') +
                                   (filterDb ? 'database=' + encodeURIComponent(filterDb) : '')) : '')"
                      hx-trigger="adminRefresh from:body, every 5s, refresh"
-                     hx-swap="innerHTML"
-                     class="divide-y divide-[#30363d]">
-                    <div class="p-4 text-gray-500">Loading...</div>
+                     hx-swap="innerHTML">
+                    <div style="padding:14px;color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- Locks Monitor -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="lock" class="w-4 h-4"></i> Lock Monitor
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <label class="flex items-center gap-2 text-sm text-gray-400">
+            <div class="card" style="margin-bottom:18px" x-data="{ showAll: false }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="lock" style="width:14px;height:14px"></i>Lock Monitor
+                    </div>
+                    <div class="flex aic gap-2">
+                        <label class="flex aic gap-2 text-sm">
                             <input type="checkbox" x-model="showAll"
-                                   @change="$nextTick(() => htmx.trigger('#locks-list', 'refresh'))"
-                                   class="accent-indigo-500">
+                                   @change="$nextTick(() => htmx.trigger('#locks-list', 'refresh'))">
                             Show all locks
                         </label>
                     </div>
@@ -129,55 +127,54 @@
                 <div id="locks-list"
                      :hx-get="'/api/admin/' + connId + (showAll ? '/locks/all' : '/locks')"
                      hx-trigger="revealed, refresh, adminRefresh from:body"
-                     hx-swap="innerHTML"
-                     class="divide-y divide-[#30363d]">
-                    <div class="p-4 text-gray-500">Loading...</div>
+                     hx-swap="innerHTML">
+                    <div style="padding:14px;color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- Table Maintenance -->
-            <div class="card rounded-xl overflow-hidden mb-6">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="wrench" class="w-4 h-4"></i> Table Maintenance
-                    </h3>
-                    <button @click="htmx.trigger('#bloat-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
-                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+            <div class="card" style="margin-bottom:18px">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="wrench" style="width:14px;height:14px"></i>Table Maintenance
+                    </div>
+                    <button @click="htmx.trigger('#bloat-list', 'refresh')" class="btn btn-sm btn-ghost">
+                        <i data-lucide="refresh-cw"></i> Refresh
                     </button>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-[#21262d] text-gray-400 text-left">
+                <div style="overflow-x:auto">
+                    <table class="dtable" style="width:100%">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-2 font-medium">Table</th>
-                                <th class="px-4 py-2 font-medium">Size</th>
-                                <th class="px-4 py-2 font-medium">Dead Tuples</th>
-                                <th class="px-4 py-2 font-medium">Bloat %</th>
-                                <th class="px-4 py-2 font-medium">Last Vacuum</th>
-                                <th class="px-4 py-2 font-medium">Last Analyze</th>
-                                <th class="px-4 py-2 font-medium text-right">Actions</th>
+                                <th>Table</th>
+                                <th>Size</th>
+                                <th>Dead Tuples</th>
+                                <th>Bloat %</th>
+                                <th>Last Vacuum</th>
+                                <th>Last Analyze</th>
+                                <th style="text-align:right">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="bloat-list"
                                :hx-get="'/api/admin/' + connId + '/tables/bloat'"
                                hx-trigger="revealed, refresh, adminRefresh from:body"
-                               hx-swap="innerHTML"
-                               class="divide-y divide-[#30363d]">
-                            <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
+                               hx-swap="innerHTML">
+                            <tr><td colspan="7" style="padding:14px;color:var(--fg-3)">Loading…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Extensions -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium">Extensions</h3>
-                    <div class="flex items-center gap-2">
-                        <label class="flex items-center gap-2 text-sm text-gray-400">
+            <div class="card" style="margin-bottom:18px" x-data="{ showAll: false }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="puzzle" style="width:14px;height:14px"></i>Extensions
+                    </div>
+                    <div class="flex aic gap-2">
+                        <label class="flex aic gap-2 text-sm">
                             <input type="checkbox" x-model="showAll"
-                                   @change="$nextTick(() => htmx.trigger('#extensions-list', 'refresh'))"
-                                   class="accent-indigo-500">
+                                   @change="$nextTick(() => htmx.trigger('#extensions-list', 'refresh'))">
                             Show available
                         </label>
                     </div>
@@ -185,223 +182,212 @@
                 <div id="extensions-list"
                      :hx-get="'/api/admin/' + connId + '/extensions?show_all=' + showAll"
                      hx-trigger="revealed, refresh, adminRefresh from:body"
-                     hx-swap="innerHTML"
-                     class="divide-y divide-[#30363d]">
-                    <div class="p-4 text-gray-500">Loading...</div>
+                     hx-swap="innerHTML">
+                    <div style="padding:14px;color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- Database Settings -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ showAll: false, search: '' }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between flex-wrap gap-2">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="settings" class="w-4 h-4"></i> Database Settings
-                    </h3>
-                    <div class="flex items-center gap-2">
+            <div class="card" style="margin-bottom:18px" x-data="{ showAll: false, search: '' }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="settings" style="width:14px;height:14px"></i>Database Settings
+                    </div>
+                    <div class="flex aic gap-2">
                         <input type="text" x-model.debounce.250ms="search"
-                               placeholder="Filter…"
-                               class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs w-32 focus:outline-none focus:border-indigo-500">
-                        <label class="flex items-center gap-2 text-sm text-gray-400">
+                               placeholder="Filter…" style="width:128px">
+                        <label class="flex aic gap-2 text-sm">
                             <input type="checkbox" x-model="showAll"
-                                   @change="$nextTick(() => htmx.trigger('#settings-list', 'refresh'))"
-                                   class="accent-indigo-500">
+                                   @change="$nextTick(() => htmx.trigger('#settings-list', 'refresh'))">
                             Show all
                         </label>
                     </div>
                 </div>
-                <div class="overflow-x-auto max-h-96">
-                    <table class="w-full text-sm">
-                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                <div style="overflow-x:auto;max-height:384px;overflow-y:auto">
+                    <table class="dtable" style="width:100%">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-2 font-medium">Setting</th>
-                                <th class="px-4 py-2 font-medium">Value</th>
-                                <th class="px-4 py-2 font-medium">Default</th>
-                                <th class="px-4 py-2 font-medium">Category</th>
-                                <th class="px-4 py-2 font-medium">Description</th>
-                                <th class="px-4 py-2 font-medium text-right">Action</th>
+                                <th>Setting</th>
+                                <th>Value</th>
+                                <th>Default</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th style="text-align:right">Action</th>
                             </tr>
                         </thead>
                         <tbody id="settings-list"
                                :hx-get="'/api/admin/' + connId + '/settings' + (showAll ? '' : '?important_only=true')"
                                hx-trigger="revealed, refresh, adminRefresh from:body"
                                hx-swap="innerHTML"
-                               x-effect="(() => { const q = (search || '').toLowerCase(); $el.querySelectorAll('tr[data-setting]').forEach(r => { r.hidden = q && !r.dataset.setting.toLowerCase().includes(q); }); })()"
-                               class="divide-y divide-[#30363d]">
-                            <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
+                               x-effect="(() => { const q = (search || '').toLowerCase(); $el.querySelectorAll('tr[data-setting]').forEach(r => { r.hidden = q && !r.dataset.setting.toLowerCase().includes(q); }); })()">
+                            <tr><td colspan="6" style="padding:14px;color:var(--fg-3)">Loading…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Scheduled Tasks -->
-            <div class="card rounded-xl overflow-hidden mb-6">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="clock" class="w-4 h-4"></i> Scheduled Tasks
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button @click="$dispatch('open-schedule-modal')"
-                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                            <i data-lucide="plus" class="w-4 h-4"></i> Add Schedule
+            <div class="card" style="margin-bottom:18px">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="clock" style="width:14px;height:14px"></i>Scheduled Tasks
+                    </div>
+                    <div class="flex aic gap-2">
+                        <button @click="$dispatch('open-schedule-modal')" class="btn btn-sm btn-brand">
+                            <i data-lucide="plus"></i> Add Schedule
                         </button>
-                        <button @click="htmx.trigger('#scheduled-jobs-list', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
-                            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+                        <button @click="htmx.trigger('#scheduled-jobs-list', 'refresh')" class="btn btn-sm btn-ghost">
+                            <i data-lucide="refresh-cw"></i> Refresh
                         </button>
                     </div>
                 </div>
-                <div id="scheduled-jobs-list" class="divide-y divide-[#30363d]">
-                    <div class="p-4 text-gray-500">Loading...</div>
+                <div id="scheduled-jobs-list">
+                    <div style="padding:14px;color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- Roles Management -->
-            <div class="card rounded-xl overflow-hidden mb-6">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="users" class="w-4 h-4"></i> Roles & Users
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button @click="$dispatch('open-role-modal')"
-                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                            <i data-lucide="plus" class="w-4 h-4"></i> New Role
+            <div class="card" style="margin-bottom:18px">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="users" style="width:14px;height:14px"></i>Roles &amp; Users
+                    </div>
+                    <div class="flex aic gap-2">
+                        <button @click="$dispatch('open-role-modal')" class="btn btn-sm btn-brand">
+                            <i data-lucide="plus"></i> New Role
                         </button>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-[#21262d] text-gray-400 text-left">
+                <div style="overflow-x:auto">
+                    <table class="dtable" style="width:100%">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-2 font-medium">Role</th>
-                                <th class="px-4 py-2 font-medium">Login</th>
-                                <th class="px-4 py-2 font-medium">Superuser</th>
-                                <th class="px-4 py-2 font-medium">Create DB</th>
-                                <th class="px-4 py-2 font-medium">Create Role</th>
-                                <th class="px-4 py-2 font-medium">Member Of</th>
-                                <th class="px-4 py-2 font-medium text-right">Actions</th>
+                                <th>Role</th>
+                                <th>Login</th>
+                                <th>Superuser</th>
+                                <th>Create DB</th>
+                                <th>Create Role</th>
+                                <th>Member Of</th>
+                                <th style="text-align:right">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="roles-list"
                                :hx-get="'/api/admin/' + connId + '/roles'"
                                hx-trigger="revealed, rolesChanged from:body, adminRefresh from:body"
-                               hx-swap="innerHTML"
-                               class="divide-y divide-[#30363d]">
-                            <tr><td colspan="7" class="p-4 text-gray-500">Loading...</td></tr>
+                               hx-swap="innerHTML">
+                            <tr><td colspan="7" style="padding:14px;color:var(--fg-3)">Loading…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Slow Queries -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ orderBy: 'total_time' }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="snail" class="w-4 h-4"></i> Slow Queries
-                    </h3>
-                    <div class="flex items-center gap-2">
+            <div class="card" style="margin-bottom:18px" x-data="{ orderBy: 'total_time' }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="snail" style="width:14px;height:14px"></i>Slow Queries
+                    </div>
+                    <div class="flex aic gap-2">
                         <select x-model="orderBy"
                                 @change="$nextTick(() => htmx.trigger('#slow-queries-list', 'refresh'))"
-                                class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                                style="width:120px">
                             <option value="total_time">Total Time</option>
                             <option value="mean_time">Avg Time</option>
                             <option value="calls">Calls</option>
                         </select>
-                        <button @click="resetSlowQueries()" class="text-sm text-gray-400 hover:text-white" title="Reset statistics">Reset</button>
+                        <button @click="resetSlowQueries()" class="btn btn-sm btn-ghost" title="Reset statistics">Reset</button>
                     </div>
                 </div>
-                <div class="overflow-x-auto max-h-80">
-                    <table class="w-full text-sm">
-                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
+                    <table class="dtable" style="width:100%">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-2 font-medium">Query</th>
-                                <th class="px-4 py-2 font-medium text-right">Calls</th>
-                                <th class="px-4 py-2 font-medium text-right">Total Time</th>
-                                <th class="px-4 py-2 font-medium text-right">Avg Time</th>
-                                <th class="px-4 py-2 font-medium text-right">Rows</th>
-                                <th class="px-4 py-2 font-medium text-right">Cache %</th>
+                                <th>Query</th>
+                                <th style="text-align:right">Calls</th>
+                                <th style="text-align:right">Total Time</th>
+                                <th style="text-align:right">Avg Time</th>
+                                <th style="text-align:right">Rows</th>
+                                <th style="text-align:right">Cache %</th>
                             </tr>
                         </thead>
                         <tbody id="slow-queries-list"
                                :hx-get="'/api/admin/' + connId + '/slow-queries?order_by=' + orderBy + '&limit=20'"
                                hx-trigger="revealed, refresh, adminRefresh from:body"
-                               hx-swap="innerHTML"
-                               class="divide-y divide-[#30363d]">
-                            <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
+                               hx-swap="innerHTML">
+                            <tr><td colspan="6" style="padding:14px;color:var(--fg-3)">Loading…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Index Usage -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ unusedOnly: false }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="list-tree" class="w-4 h-4"></i> Index Usage
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <label class="flex items-center gap-2 text-sm text-gray-400">
+            <div class="card" style="margin-bottom:18px" x-data="{ unusedOnly: false }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="list-tree" style="width:14px;height:14px"></i>Index Usage
+                    </div>
+                    <div class="flex aic gap-2">
+                        <label class="flex aic gap-2 text-sm">
                             <input type="checkbox" x-model="unusedOnly"
-                                   @change="$nextTick(() => htmx.trigger('#index-usage-list', 'refresh'))"
-                                   class="accent-indigo-500">
+                                   @change="$nextTick(() => htmx.trigger('#index-usage-list', 'refresh'))">
                             Unused only
                         </label>
                     </div>
                 </div>
-                <div class="overflow-x-auto max-h-80">
-                    <table class="w-full text-sm">
-                        <thead class="bg-[#21262d] text-gray-400 text-left sticky top-0">
+                <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
+                    <table class="dtable" style="width:100%">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-2 font-medium">Index</th>
-                                <th class="px-4 py-2 font-medium">Table</th>
-                                <th class="px-4 py-2 font-medium text-right">Size</th>
-                                <th class="px-4 py-2 font-medium text-right">Scans</th>
-                                <th class="px-4 py-2 font-medium text-right">Tuples Read</th>
-                                <th class="px-4 py-2 font-medium">Status</th>
+                                <th>Index</th>
+                                <th>Table</th>
+                                <th style="text-align:right">Size</th>
+                                <th style="text-align:right">Scans</th>
+                                <th style="text-align:right">Tuples Read</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody id="index-usage-list"
                                :hx-get="'/api/admin/' + connId + '/indexes' + (unusedOnly ? '?unused_only=true' : '')"
                                hx-trigger="revealed, refresh, adminRefresh from:body"
-                               hx-swap="innerHTML"
-                               class="divide-y divide-[#30363d]">
-                            <tr><td colspan="6" class="p-4 text-gray-500">Loading...</td></tr>
+                               hx-swap="innerHTML">
+                            <tr><td colspan="6" style="padding:14px;color:var(--fg-3)">Loading…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Replication -->
-            <div class="card rounded-xl overflow-hidden mb-6">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="copy" class="w-4 h-4"></i> Replication
-                    </h3>
-                    <button @click="htmx.trigger('#replication-content', 'refresh')" class="text-sm text-gray-400 hover:text-white flex items-center gap-1">
-                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+            <div class="card" style="margin-bottom:18px">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="copy" style="width:14px;height:14px"></i>Replication
+                    </div>
+                    <button @click="htmx.trigger('#replication-content', 'refresh')" class="btn btn-sm btn-ghost">
+                        <i data-lucide="refresh-cw"></i> Refresh
                     </button>
                 </div>
                 <div id="replication-content"
                      :hx-get="'/api/admin/' + connId + '/replication'"
                      hx-trigger="revealed, refresh, adminRefresh from:body"
                      hx-swap="innerHTML"
-                     class="p-4">
-                    <div class="text-gray-500">Loading...</div>
+                     style="padding:16px">
+                    <div style="color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- Server Logs -->
-            <div class="card rounded-xl overflow-hidden mb-6" x-data="{ logLevel: '', logSearch: '' }">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between flex-wrap gap-2">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="scroll-text" class="w-4 h-4"></i> Server Logs
-                    </h3>
-                    <div class="flex items-center gap-2">
+            <div class="card" style="margin-bottom:18px" x-data="{ logLevel: '', logSearch: '' }">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="scroll-text" style="width:14px;height:14px"></i>Server Logs
+                    </div>
+                    <div class="flex aic gap-2">
                         <input type="text" x-model.debounce.400ms="logSearch"
                                @input="$nextTick(() => htmx.trigger('#logs-content', 'refresh'))"
-                               placeholder="Search…"
-                               class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm w-48 focus:outline-none focus:border-indigo-500">
+                               placeholder="Search…" style="width:192px">
                         <select x-model="logLevel"
                                 @change="$nextTick(() => htmx.trigger('#logs-content', 'refresh'))"
-                                class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+                                style="width:120px">
                             <option value="">All Levels</option>
                             <option value="ERROR">ERROR</option>
                             <option value="WARNING">WARNING</option>
@@ -416,21 +402,20 @@
                               (logSearch ? '&search=' + encodeURIComponent(logSearch) : '')"
                      hx-trigger="revealed, refresh, adminRefresh from:body"
                      hx-swap="innerHTML"
-                     class="p-4 max-h-96 overflow-auto">
-                    <div class="text-gray-500">Loading...</div>
+                     style="padding:16px;max-height:384px;overflow:auto">
+                    <div style="color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
 
             <!-- PITR -->
-            <div class="card rounded-xl overflow-hidden mb-6">
-                <div class="px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-                    <h3 class="font-medium flex items-center gap-2">
-                        <i data-lucide="timer" class="w-4 h-4"></i> Point-In-Time Recovery
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button @click="createBaseBackup()"
-                                class="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-1">
-                            <i data-lucide="hard-drive" class="w-4 h-4"></i> Base Backup
+            <div class="card" style="margin-bottom:18px">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
+                        <i data-lucide="timer" style="width:14px;height:14px"></i>Point-In-Time Recovery
+                    </div>
+                    <div class="flex aic gap-2">
+                        <button @click="createBaseBackup()" class="btn btn-sm btn-brand">
+                            <i data-lucide="hard-drive"></i> Base Backup
                         </button>
                     </div>
                 </div>
@@ -438,8 +423,8 @@
                      :hx-get="'/api/admin/' + connId + '/pitr'"
                      hx-trigger="revealed, refresh, adminRefresh from:body"
                      hx-swap="innerHTML"
-                     class="p-4">
-                    <div class="text-gray-500">Loading...</div>
+                     style="padding:16px">
+                    <div style="color:var(--fg-3)">Loading…</div>
                 </div>
             </div>
         </div>
@@ -455,41 +440,39 @@
      x-on:keydown.escape.window="open = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
-        <h3 class="text-lg font-bold mb-4" x-text="isEdit ? 'Edit Role' : 'Create Role'"></h3>
-        <form @submit.prevent="saveRole()" class="space-y-4">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="open = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:450px;box-shadow:var(--shadow-xl)" @click.stop>
+        <h3 style="font-size:17px;font-weight:600;margin-bottom:16px" x-text="isEdit ? 'Edit Role' : 'Create Role'"></h3>
+        <form @submit.prevent="saveRole()" style="display:flex;flex-direction:column;gap:14px">
             <div>
-                <label class="block text-sm text-gray-400 mb-1">Role Name</label>
-                <input x-model="form.name" :disabled="isEdit" placeholder="my_user"
-                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-50" required>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Role Name</label>
+                <input x-model="form.name" :disabled="isEdit" placeholder="my_user" required style="width:100%">
             </div>
             <div>
-                <label class="block text-sm text-gray-400 mb-1">Password (optional for roles without login)</label>
-                <input x-model="form.password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
-                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Password (optional for roles without login)</label>
+                <input x-model="form.password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" style="width:100%">
             </div>
-            <div class="grid grid-cols-2 gap-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="form.login" class="accent-indigo-500">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <label class="flex aic gap-2" style="cursor:pointer">
+                    <input type="checkbox" x-model="form.login">
                     <span class="text-sm">Can Login</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="form.superuser" class="accent-indigo-500">
+                <label class="flex aic gap-2" style="cursor:pointer">
+                    <input type="checkbox" x-model="form.superuser">
                     <span class="text-sm">Superuser</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="form.createdb" class="accent-indigo-500">
+                <label class="flex aic gap-2" style="cursor:pointer">
+                    <input type="checkbox" x-model="form.createdb">
                     <span class="text-sm">Create Database</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="form.createrole" class="accent-indigo-500">
+                <label class="flex aic gap-2" style="cursor:pointer">
+                    <input type="checkbox" x-model="form.createrole">
                     <span class="text-sm">Create Role</span>
                 </label>
             </div>
-            <div class="flex gap-3 justify-end pt-2 border-t border-[#30363d]">
-                <button type="button" @click="open = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save</button>
+            <div class="flex gap-3" style="justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border)">
+                <button type="button" @click="open = false" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-brand">Save</button>
             </div>
         </form>
     </div>
@@ -502,14 +485,14 @@
      x-on:keydown.escape.window="open = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl w-[700px] max-h-[85vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
-        <div class="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
-            <h3 class="text-lg font-bold">Grants for <span class="font-mono" x-text="roleName"></span></h3>
-            <button @click="open = false" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="open = false"></div>
+    <div class="card" style="position:relative;width:700px;max-height:85vh;display:flex;flex-direction:column;box-shadow:var(--shadow-xl)" @click.stop>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
+            <h3 style="font-size:17px;font-weight:600">Grants for <span class="mono" x-text="roleName"></span></h3>
+            <button @click="open = false" class="icon-btn" style="font-size:20px">&times;</button>
         </div>
-        <div id="role-grants-content" class="flex-1 overflow-auto">
-            <div class="p-4 text-gray-500">Select a role to view its grants.</div>
+        <div id="role-grants-content" style="flex:1;overflow:auto">
+            <div style="padding:14px;color:var(--fg-3)">Select a role to view its grants.</div>
         </div>
     </div>
 </div>
@@ -521,65 +504,62 @@
      x-on:keydown.escape.window="open = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="open = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[560px] max-h-[85vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-bold">Create Backup</h3>
-            <button @click="open = false" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="open = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:560px;max-height:85vh;display:flex;flex-direction:column;box-shadow:var(--shadow-xl)" @click.stop>
+        <div class="flex aic jcb" style="margin-bottom:16px">
+            <h3 style="font-size:17px;font-weight:600">Create Backup</h3>
+            <button @click="open = false" class="icon-btn" style="font-size:20px">&times;</button>
         </div>
-        <div class="space-y-4 overflow-auto">
+        <div style="display:flex;flex-direction:column;gap:14px;overflow:auto">
             <div>
-                <label class="block text-sm text-gray-400 mb-2">Format</label>
-                <div class="grid grid-cols-3 gap-2">
-                    <label :class="{'border-indigo-500': format === 'plain'}" class="border border-[#30363d] rounded-lg p-3 cursor-pointer hover:bg-[#21262d]">
-                        <input type="radio" x-model="format" value="plain" class="hidden">
-                        <div class="font-medium text-sm">Plain (.sql.gz)</div>
-                        <div class="text-xs text-gray-500 mt-1">Portable. Restore with psql.</div>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:8px">Format</label>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                    <label :style="format === 'plain' ? 'border-color:var(--brand)' : ''" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer">
+                        <input type="radio" x-model="format" value="plain" style="display:none">
+                        <div style="font-weight:500;font-size:12.5px">Plain (.sql.gz)</div>
+                        <div class="text-xs" style="color:var(--fg-3);margin-top:4px">Portable. Restore with psql.</div>
                     </label>
-                    <label :class="{'border-indigo-500': format === 'custom'}" class="border border-[#30363d] rounded-lg p-3 cursor-pointer hover:bg-[#21262d]">
-                        <input type="radio" x-model="format" value="custom" class="hidden">
-                        <div class="font-medium text-sm">Custom (.dump)</div>
-                        <div class="text-xs text-gray-500 mt-1">Compressed. pg_restore.</div>
+                    <label :style="format === 'custom' ? 'border-color:var(--brand)' : ''" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer">
+                        <input type="radio" x-model="format" value="custom" style="display:none">
+                        <div style="font-weight:500;font-size:12.5px">Custom (.dump)</div>
+                        <div class="text-xs" style="color:var(--fg-3);margin-top:4px">Compressed. pg_restore.</div>
                     </label>
-                    <label :class="{'border-indigo-500': format === 'directory'}" class="border border-[#30363d] rounded-lg p-3 cursor-pointer hover:bg-[#21262d]">
-                        <input type="radio" x-model="format" value="directory" class="hidden">
-                        <div class="font-medium text-sm">Directory (.tar.gz)</div>
-                        <div class="text-xs text-gray-500 mt-1">Parallel-friendly, archived.</div>
+                    <label :style="format === 'directory' ? 'border-color:var(--brand)' : ''" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer">
+                        <input type="radio" x-model="format" value="directory" style="display:none">
+                        <div style="font-weight:500;font-size:12.5px">Directory (.tar.gz)</div>
+                        <div class="text-xs" style="color:var(--fg-3);margin-top:4px">Parallel-friendly, archived.</div>
                     </label>
                 </div>
             </div>
             <div>
-                <label class="flex items-center gap-2 cursor-pointer mb-2">
-                    <input type="checkbox" x-model="filterTables" class="accent-indigo-500">
-                    <span class="text-sm text-gray-300">Only specific tables</span>
+                <label class="flex aic gap-2" style="cursor:pointer;margin-bottom:8px">
+                    <input type="checkbox" x-model="filterTables">
+                    <span class="text-sm">Only specific tables</span>
                 </label>
-                <div x-show="filterTables" class="border border-[#30363d] rounded-lg p-2 max-h-48 overflow-auto bg-[#0d1117]">
-                    <input type="text" x-model="tableFilter" placeholder="Search tables…"
-                           class="w-full bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-xs mb-2 focus:outline-none focus:border-indigo-500">
+                <div x-show="filterTables" style="border:1px solid var(--border);border-radius:8px;padding:8px;max-height:192px;overflow:auto;background:var(--surface-2)">
+                    <input type="text" x-model="tableFilter" placeholder="Search tables…" style="width:100%;font-size:11.5px;margin-bottom:8px">
                     <template x-for="t in availableTables.filter(t => !tableFilter || t.qualified.toLowerCase().includes(tableFilter.toLowerCase()))" :key="t.qualified">
-                        <label class="flex items-center gap-2 py-0.5 text-sm hover:bg-[#21262d] px-1 rounded">
-                            <input type="checkbox" :value="t.qualified" x-model="selectedTables" class="accent-indigo-500">
-                            <span class="font-mono text-xs" x-text="t.qualified"></span>
+                        <label class="flex aic gap-2 text-sm" style="padding:2px 4px;border-radius:4px">
+                            <input type="checkbox" :value="t.qualified" x-model="selectedTables">
+                            <span class="mono text-xs" x-text="t.qualified"></span>
                         </label>
                     </template>
-                    <div x-show="!availableTables.length" class="text-xs text-gray-500 p-2">Loading tables…</div>
+                    <div x-show="!availableTables.length" class="text-xs" style="color:var(--fg-3);padding:8px">Loading tables…</div>
                 </div>
             </div>
-            <div x-show="running" class="bg-[#0d1117] border border-[#30363d] rounded-lg p-3">
-                <div class="text-sm text-gray-400 mb-2">
-                    <i data-lucide="loader" class="w-4 h-4 inline animate-spin"></i>
+            <div x-show="running" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px">
+                <div class="text-sm" style="color:var(--fg-3);margin-bottom:8px">
+                    <i data-lucide="loader" class="animate-spin" style="width:14px;height:14px;display:inline"></i>
                     <span x-text="phase || 'starting'"></span>
                 </div>
-                <div class="h-1.5 bg-[#21262d] rounded overflow-hidden">
-                    <div class="h-full bg-indigo-500 transition-all" :style="`width: ${progressPct}%`"></div>
+                <div style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;background:var(--brand);transition:width .25s" :style="`width: ${progressPct}%`"></div>
                 </div>
             </div>
         </div>
-        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button @click="open = false" :disabled="running"
-                    class="px-4 py-2 rounded-lg hover:bg-[#21262d] disabled:opacity-50">Cancel</button>
-            <button @click="run()" :disabled="running"
-                    class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium">
+        <div class="flex gap-3" style="justify-content:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)">
+            <button @click="open = false" :disabled="running" class="btn">Cancel</button>
+            <button @click="run()" :disabled="running" class="btn btn-brand">
                 <span x-show="!running">Create Backup</span>
                 <span x-show="running">Running…</span>
             </button>
@@ -594,18 +574,18 @@
      x-on:keydown.escape.window="backupsOpen = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="backupsOpen = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[550px] max-h-[80vh] border border-[#30363d] shadow-2xl flex flex-col" @click.stop>
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-bold">Database Backups</h3>
-            <button @click="backupsOpen = false" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="backupsOpen = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:550px;max-height:80vh;display:flex;flex-direction:column;box-shadow:var(--shadow-xl)" @click.stop>
+        <div class="flex aic jcb" style="margin-bottom:16px">
+            <h3 style="font-size:17px;font-weight:600">Database Backups</h3>
+            <button @click="backupsOpen = false" class="icon-btn" style="font-size:20px">&times;</button>
         </div>
         <div id="backups-content"
              :hx-get="connId ? '/api/admin/' + connId + '/backups' : ''"
              hx-trigger="refresh"
              hx-swap="innerHTML"
-             class="flex-1 overflow-auto">
-            <div class="text-gray-500">Loading...</div>
+             style="flex:1;overflow:auto">
+            <div style="color:var(--fg-3)">Loading…</div>
         </div>
     </div>
 </div>
@@ -617,27 +597,26 @@
      x-on:keydown.escape.window="createDbOpen = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="createDbOpen = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
-        <h3 class="text-lg font-bold mb-4">Create Database from Backup</h3>
-        <div class="space-y-4">
-            <div class="bg-[#0d1117] rounded-lg p-3 text-sm">
-                <div class="text-gray-400 mb-1">Backup file:</div>
-                <div class="font-mono text-indigo-400" x-text="backupFile"></div>
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="createDbOpen = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:450px;box-shadow:var(--shadow-xl)" @click.stop>
+        <h3 style="font-size:17px;font-weight:600;margin-bottom:16px">Create Database from Backup</h3>
+        <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:var(--surface-2);border-radius:8px;padding:12px;font-size:12.5px">
+                <div style="color:var(--fg-3);margin-bottom:4px">Backup file:</div>
+                <div class="mono" style="color:var(--brand)" x-text="backupFile"></div>
             </div>
             <div>
-                <label class="block text-sm text-gray-400 mb-1">New Database Name</label>
-                <input x-model="dbName" type="text" placeholder="my_new_database"
-                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
-                <p class="text-xs text-gray-500 mt-1">Use lowercase letters, numbers, and underscores</p>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">New Database Name</label>
+                <input x-model="dbName" type="text" placeholder="my_new_database" style="width:100%">
+                <p class="text-xs" style="color:var(--fg-3);margin-top:4px">Use lowercase letters, numbers, and underscores</p>
             </div>
-            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-400">
+            <div style="background:rgba(176,119,0,.10);border:1px solid rgba(176,119,0,.30);border-radius:8px;padding:12px;font-size:12.5px;color:var(--accent-amber)">
                 This will create a new database and restore the backup into it.
             </div>
         </div>
-        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button @click="createDbOpen = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button @click="createDatabase()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium">Create Database</button>
+        <div class="flex gap-3" style="justify-content:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)">
+            <button @click="createDbOpen = false" class="btn">Cancel</button>
+            <button @click="createDatabase()" class="btn" style="background:var(--green);color:white;border-color:var(--green)">Create Database</button>
         </div>
     </div>
 </div>
@@ -649,53 +628,51 @@
      x-on:keydown.escape.window="scheduleOpen = false"
      x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60" @click="scheduleOpen = false"></div>
-    <div class="relative bg-[#161b22] rounded-xl p-6 w-[450px] border border-[#30363d] shadow-2xl" @click.stop>
-        <h3 class="text-lg font-bold mb-4">Add Scheduled Task</h3>
-        <div class="space-y-4">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="scheduleOpen = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:450px;box-shadow:var(--shadow-xl)" @click.stop>
+        <h3 style="font-size:17px;font-weight:600;margin-bottom:16px">Add Scheduled Task</h3>
+        <div style="display:flex;flex-direction:column;gap:14px">
             <div>
-                <label class="block text-sm text-gray-400 mb-1">Task Type</label>
-                <select x-model="taskType" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Task Type</label>
+                <select x-model="taskType" style="width:100%">
                     <option value="backup">Backup</option>
                     <option value="vacuum">VACUUM</option>
                     <option value="analyze">ANALYZE</option>
                 </select>
             </div>
             <div x-show="taskType === 'vacuum'">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" x-model="vacuumFull" class="accent-indigo-500">
+                <label class="flex aic gap-2" style="cursor:pointer">
+                    <input type="checkbox" x-model="vacuumFull">
                     <span class="text-sm">VACUUM FULL (more thorough, but locks tables)</span>
                 </label>
             </div>
             <div>
-                <label class="block text-sm text-gray-400 mb-2">Schedule Mode</label>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:8px">Schedule Mode</label>
                 <div class="flex gap-2">
-                    <button @click="mode = 'recurring'" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border"
-                            :class="mode === 'recurring' ? 'bg-[#21262d] text-white border-indigo-500' : 'bg-[#0d1117] text-[#8b949e] hover:text-white border-[#30363d]'">
-                        <i data-lucide="repeat" class="w-4 h-4 inline mr-1"></i> Recurring
+                    <button @click="mode = 'recurring'" class="btn"
+                            :style="mode === 'recurring' ? 'border-color:var(--brand);background:var(--brand-soft);color:var(--brand);flex:1' : 'flex:1'">
+                        <i data-lucide="repeat"></i> Recurring
                     </button>
-                    <button @click="mode = 'once'" class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border"
-                            :class="mode === 'once' ? 'bg-[#21262d] text-white border-indigo-500' : 'bg-[#0d1117] text-[#8b949e] hover:text-white border-[#30363d]'">
-                        <i data-lucide="calendar" class="w-4 h-4 inline mr-1"></i> Run Once
+                    <button @click="mode = 'once'" class="btn"
+                            :style="mode === 'once' ? 'border-color:var(--brand);background:var(--brand-soft);color:var(--brand);flex:1' : 'flex:1'">
+                        <i data-lucide="calendar"></i> Run Once
                     </button>
                 </div>
             </div>
             <div x-show="mode === 'recurring'">
-                <div class="grid grid-cols-2 gap-4">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                     <div>
-                        <label class="block text-sm text-gray-400 mb-1">Hour (0-23)</label>
-                        <input x-model.number="hour" type="number" min="0" max="23"
-                               class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Hour (0-23)</label>
+                        <input x-model.number="hour" type="number" min="0" max="23" style="width:100%">
                     </div>
                     <div>
-                        <label class="block text-sm text-gray-400 mb-1">Minute (0-59)</label>
-                        <input x-model.number="minute" type="number" min="0" max="59"
-                               class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                        <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Minute (0-59)</label>
+                        <input x-model.number="minute" type="number" min="0" max="59" style="width:100%">
                     </div>
                 </div>
-                <div class="mt-4">
-                    <label class="block text-sm text-gray-400 mb-1">Day of Week</label>
-                    <select x-model="dayOfWeek" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                <div style="margin-top:14px">
+                    <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Day of Week</label>
+                    <select x-model="dayOfWeek" style="width:100%">
                         <option value="*">Every day</option>
                         <option value="mon">Monday</option>
                         <option value="tue">Tuesday</option>
@@ -709,20 +686,19 @@
                 </div>
             </div>
             <div x-show="mode === 'once'">
-                <label class="block text-sm text-gray-400 mb-1">Date & Time</label>
-                <input x-model="runDatetime" type="datetime-local"
-                       class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white">
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Date &amp; Time</label>
+                <input x-model="runDatetime" type="datetime-local" style="width:100%">
             </div>
-            <div class="bg-[#0d1117] rounded-lg p-3 text-sm text-[#8b949e]">
-                <div class="flex items-start gap-2">
-                    <i data-lucide="info" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+            <div style="background:var(--surface-2);border-radius:8px;padding:12px;font-size:12.5px;color:var(--fg-3)">
+                <div class="flex gap-2" style="align-items:flex-start">
+                    <i data-lucide="info" style="width:14px;height:14px;margin-top:2px;flex-shrink:0"></i>
                     <div>Scheduled tasks run at the specified time for the currently selected connection.</div>
                 </div>
             </div>
         </div>
-        <div class="flex gap-3 justify-end pt-4 mt-4 border-t border-[#30363d]">
-            <button @click="scheduleOpen = false" class="px-4 py-2 rounded-lg hover:bg-[#21262d]">Cancel</button>
-            <button @click="addTask()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Add Schedule</button>
+        <div class="flex gap-3" style="justify-content:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)">
+            <button @click="scheduleOpen = false" class="btn">Cancel</button>
+            <button @click="addTask()" class="btn btn-brand">Add Schedule</button>
         </div>
     </div>
 </div>
@@ -883,31 +859,31 @@ function loadScheduledJobs() {
         .then(data => {
             const jobs = data.jobs || [];
             if (!jobs.length) {
-                el.innerHTML = '<div class="p-4 text-gray-500">No scheduled tasks</div>';
+                el.innerHTML = '<div style="padding:14px;color:var(--fg-3)">No scheduled tasks</div>';
                 return;
             }
             el.innerHTML = jobs.map(j => `
-                <div class="p-4 flex items-center justify-between hover:bg-[#21262d]/50">
+                <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
                     <div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium">${j.name || j.type || 'Task'}</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full ${j.paused ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'}">${j.paused ? 'Paused' : 'Active'}</span>
+                        <div class="flex aic gap-2">
+                            <span style="font-weight:500">${j.name || j.type || 'Task'}</span>
+                            <span class="chip ${j.paused ? 'chip-amber' : 'chip-green'}">${j.paused ? 'Paused' : 'Active'}</span>
                         </div>
-                        <div class="text-sm text-gray-500 mt-1">${j.schedule || ''} ${j.next_run ? '· Next: ' + j.next_run : ''}</div>
+                        <div class="text-sm" style="color:var(--fg-3);margin-top:4px">${j.schedule || ''} ${j.next_run ? '· Next: ' + j.next_run : ''}</div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button onclick="runJobNow('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-indigo-400" title="Run now">Run</button>
+                    <div class="flex aic gap-2">
+                        <button onclick="runJobNow('${j.id}')" class="btn btn-sm btn-ghost" title="Run now">Run</button>
                         ${j.paused
-                            ? `<button onclick="resumeJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-green-400">Resume</button>`
-                            : `<button onclick="pauseJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-yellow-400">Pause</button>`
+                            ? `<button onclick="resumeJob('${j.id}')" class="btn btn-sm btn-ghost" style="color:var(--green)">Resume</button>`
+                            : `<button onclick="pauseJob('${j.id}')" class="btn btn-sm btn-ghost" style="color:var(--accent-amber)">Pause</button>`
                         }
-                        <button onclick="deleteJob('${j.id}')" class="text-xs px-2 py-1 rounded hover:bg-[#21262d] text-red-400">Delete</button>
+                        <button onclick="deleteJob('${j.id}')" class="btn btn-sm btn-ghost" style="color:var(--red)">Delete</button>
                     </div>
                 </div>
             `).join('');
         })
         .catch(() => {
-            el.innerHTML = '<div class="p-4 text-gray-500">No scheduled tasks</div>';
+            el.innerHTML = '<div style="padding:14px;color:var(--fg-3)">No scheduled tasks</div>';
         });
 }
 

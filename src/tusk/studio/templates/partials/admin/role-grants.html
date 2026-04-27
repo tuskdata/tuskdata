@@ -1,97 +1,97 @@
-<div class="space-y-4 p-4">
+<div style="padding:16px;display:flex;flex-direction:column;gap:18px">
     <div>
-        <h4 class="text-sm font-semibold text-gray-300 mb-2">Database privileges</h4>
+        <h4 class="text-sm" style="font-weight:600;color:var(--fg-2);margin-bottom:8px">Database privileges</h4>
         {% if databases %}
-        <div class="overflow-x-auto">
-            <table class="w-full text-xs">
-                <thead class="bg-[#21262d] text-gray-400">
+        <div style="overflow-x:auto">
+            <table class="dtable" style="width:100%;font-size:11.5px">
+                <thead>
                     <tr>
-                        <th class="px-3 py-1.5 text-left font-medium">Database</th>
-                        <th class="px-3 py-1.5 text-center font-medium">CONNECT</th>
-                        <th class="px-3 py-1.5 text-center font-medium">CREATE</th>
-                        <th class="px-3 py-1.5 text-center font-medium">TEMP</th>
+                        <th>Database</th>
+                        <th style="text-align:center">CONNECT</th>
+                        <th style="text-align:center">CREATE</th>
+                        <th style="text-align:center">TEMP</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-[#30363d]">
+                <tbody>
                     {% for d in databases %}
                     <tr>
-                        <td class="px-3 py-1.5 font-mono">{{ d.name }}</td>
-                        <td class="px-3 py-1.5 text-center">{% if d.can_connect %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-3 py-1.5 text-center">{% if d.can_create %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-3 py-1.5 text-center">{% if d.can_temp %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
+                        <td class="mono">{{ d.name }}</td>
+                        <td style="text-align:center">{% if d.can_connect %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if d.can_create %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if d.can_temp %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="text-xs text-gray-500">No database grants.</div>
+        <div class="text-xs" style="color:var(--fg-3)">No database grants.</div>
         {% endif %}
     </div>
 
     <div>
-        <h4 class="text-sm font-semibold text-gray-300 mb-2">Schema privileges (current database)</h4>
+        <h4 class="text-sm" style="font-weight:600;color:var(--fg-2);margin-bottom:8px">Schema privileges (current database)</h4>
         {% if schemas %}
-        <div class="overflow-x-auto">
-            <table class="w-full text-xs">
-                <thead class="bg-[#21262d] text-gray-400">
+        <div style="overflow-x:auto">
+            <table class="dtable" style="width:100%;font-size:11.5px">
+                <thead>
                     <tr>
-                        <th class="px-3 py-1.5 text-left font-medium">Schema</th>
-                        <th class="px-3 py-1.5 text-center font-medium">USAGE</th>
-                        <th class="px-3 py-1.5 text-center font-medium">CREATE</th>
+                        <th>Schema</th>
+                        <th style="text-align:center">USAGE</th>
+                        <th style="text-align:center">CREATE</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-[#30363d]">
+                <tbody>
                     {% for s in schemas %}
                     <tr>
-                        <td class="px-3 py-1.5 font-mono">{{ s.name }}</td>
-                        <td class="px-3 py-1.5 text-center">{% if s.can_usage %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-3 py-1.5 text-center">{% if s.can_create %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
+                        <td class="mono">{{ s.name }}</td>
+                        <td style="text-align:center">{% if s.can_usage %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if s.can_create %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="text-xs text-gray-500">No schema grants.</div>
+        <div class="text-xs" style="color:var(--fg-3)">No schema grants.</div>
         {% endif %}
     </div>
 
     <div>
-        <h4 class="text-sm font-semibold text-gray-300 mb-2">Table privileges</h4>
+        <h4 class="text-sm" style="font-weight:600;color:var(--fg-2);margin-bottom:8px">Table privileges</h4>
         {% if tables %}
-        <div class="overflow-x-auto max-h-72 overflow-y-auto">
-            <table class="w-full text-xs">
-                <thead class="bg-[#21262d] text-gray-400 sticky top-0">
+        <div style="overflow-x:auto;max-height:288px;overflow-y:auto">
+            <table class="dtable" style="width:100%;font-size:11.5px">
+                <thead>
                     <tr>
-                        <th class="px-3 py-1.5 text-left font-medium">Table</th>
-                        <th class="px-2 py-1.5 text-center font-medium">SEL</th>
-                        <th class="px-2 py-1.5 text-center font-medium">INS</th>
-                        <th class="px-2 py-1.5 text-center font-medium">UPD</th>
-                        <th class="px-2 py-1.5 text-center font-medium">DEL</th>
-                        <th class="px-2 py-1.5 text-center font-medium">TRUNC</th>
-                        <th class="px-2 py-1.5 text-center font-medium">REF</th>
-                        <th class="px-2 py-1.5 text-center font-medium">TRG</th>
+                        <th>Table</th>
+                        <th style="text-align:center">SEL</th>
+                        <th style="text-align:center">INS</th>
+                        <th style="text-align:center">UPD</th>
+                        <th style="text-align:center">DEL</th>
+                        <th style="text-align:center">TRUNC</th>
+                        <th style="text-align:center">REF</th>
+                        <th style="text-align:center">TRG</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-[#30363d]">
+                <tbody>
                     {% for t in tables %}
                     <tr>
-                        <td class="px-3 py-1.5 font-mono">{{ t.schema }}.{{ t.name }}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.select %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.insert %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.update %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.delete %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.truncate %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.references %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
-                        <td class="px-2 py-1.5 text-center">{% if t.trigger %}<span class="text-green-400">✓</span>{% else %}<span class="text-gray-600">·</span>{% endif %}</td>
+                        <td class="mono">{{ t.schema }}.{{ t.name }}</td>
+                        <td style="text-align:center">{% if t.select %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.insert %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.update %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.delete %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.truncate %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.references %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
+                        <td style="text-align:center">{% if t.trigger %}<span style="color:var(--green)">✓</span>{% else %}<span style="color:var(--fg-4)">·</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="text-xs text-gray-500">No table grants.</div>
+        <div class="text-xs" style="color:var(--fg-3)">No table grants.</div>
         {% endif %}
     </div>
 </div>

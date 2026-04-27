@@ -1,36 +1,36 @@
-<div class="space-y-4">
+<div style="display:flex;flex-direction:column;gap:16px">
     {% if config %}
-    <div class="grid grid-cols-2 gap-4">
-        <div class="p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
-            <div class="text-xs text-gray-500 mb-1">WAL Level</div>
-            <div class="text-sm font-medium">{{ config.wal_level or 'unknown' }}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+            <div class="text-xs" style="color:var(--fg-3);margin-bottom:4px">WAL Level</div>
+            <div class="text-sm" style="font-weight:500">{{ config.wal_level or 'unknown' }}</div>
         </div>
-        <div class="p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
-            <div class="text-xs text-gray-500 mb-1">Archive Mode</div>
-            <div class="text-sm font-medium">{{ config.archive_mode or 'off' }}</div>
+        <div style="padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+            <div class="text-xs" style="color:var(--fg-3);margin-bottom:4px">Archive Mode</div>
+            <div class="text-sm" style="font-weight:500">{{ config.archive_mode or 'off' }}</div>
         </div>
     </div>
     {% endif %}
 
     {% if base_backups %}
     <div>
-        <h4 class="text-sm font-medium text-gray-400 mb-2">Base Backups</h4>
-        <div class="space-y-2">
+        <h4 class="text-sm" style="font-weight:500;color:var(--fg-3);margin-bottom:8px">Base Backups</h4>
+        <div style="display:flex;flex-direction:column;gap:8px">
             {% for b in base_backups %}
-            <div class="p-3 rounded-lg bg-[#0d1117] border border-[#30363d] flex items-center justify-between">
+            <div style="padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:space-between">
                 <div>
-                    <div class="font-mono text-sm">{{ b.name or b.filename }}</div>
-                    <div class="text-xs text-gray-500">{{ b.size_human or '' }} {{ b.created or '' }}</div>
+                    <div class="mono text-sm">{{ b.name or b.filename }}</div>
+                    <div class="text-xs" style="color:var(--fg-3)">{{ b.size_human or '' }} {{ b.created or '' }}</div>
                 </div>
                 <button hx-post="/api/admin/{{ conn_id }}/pitr/base-backups/{{ b.name or b.filename }}/delete"
                         hx-target="#pitr-content" hx-swap="innerHTML"
                         hx-confirm="Delete base backup?"
-                        class="text-red-400 hover:bg-red-500/20 px-2 py-1 rounded text-xs">Delete</button>
+                        class="btn btn-sm btn-ghost" style="color:var(--red)">Delete</button>
             </div>
             {% endfor %}
         </div>
     </div>
     {% else %}
-    <div class="text-gray-500 text-sm">No base backups available. Create one to enable PITR.</div>
+    <div class="text-sm" style="color:var(--fg-3)">No base backups available. Create one to enable PITR.</div>
     {% endif %}
 </div>

@@ -1,22 +1,22 @@
 {% if indexes %}
     {% for idx in indexes %}
-    <tr class="hover:bg-[#21262d]/50">
-        <td class="px-4 py-2 font-mono text-sm">{{ idx.index }}</td>
-        <td class="px-4 py-2 text-sm text-gray-400">{{ idx.schema }}.{{ idx.table }}</td>
-        <td class="px-4 py-2 text-right text-sm text-gray-400">{{ idx.size_human }}</td>
-        <td class="px-4 py-2 text-right text-sm {% if idx.idx_scan == 0 %}text-red-400{% else %}text-gray-400{% endif %}">{{ idx.idx_scan }}</td>
-        <td class="px-4 py-2 text-right text-sm text-gray-400">{{ idx.idx_tup_read }}</td>
-        <td class="px-4 py-2">
+    <tr>
+        <td class="mono text-sm">{{ idx.index }}</td>
+        <td class="text-sm" style="color:var(--fg-3)">{{ idx.schema }}.{{ idx.table }}</td>
+        <td class="text-sm" style="text-align:right;color:var(--fg-3)">{{ idx.size_human }}</td>
+        <td class="text-sm" style="text-align:right;color:{% if idx.idx_scan == 0 %}var(--red){% else %}var(--fg-3){% endif %}">{{ idx.idx_scan }}</td>
+        <td class="text-sm" style="text-align:right;color:var(--fg-3)">{{ idx.idx_tup_read }}</td>
+        <td>
             {% if idx.idx_scan == 0 %}
-            <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Unused</span>
+            <span class="chip chip-rose">Unused</span>
             {% elif idx.idx_scan < 10 %}
-            <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">Rarely Used</span>
+            <span class="chip chip-amber">Rarely Used</span>
             {% else %}
-            <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Active</span>
+            <span class="chip chip-green">Active</span>
             {% endif %}
         </td>
     </tr>
     {% endfor %}
 {% else %}
-    <tr><td colspan="6" class="p-4 text-gray-500">No index data available</td></tr>
+    <tr><td colspan="6" style="padding:14px;color:var(--fg-3)">No index data available</td></tr>
 {% endif %}

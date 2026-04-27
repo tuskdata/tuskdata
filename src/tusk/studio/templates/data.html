@@ -136,73 +136,71 @@
 </aside>
 
 <!-- Main Panel - Results -->
-<main class="flex-1 flex flex-col overflow-hidden">
+<main style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)">
     <!-- Preview Header -->
-    <div id="preview-header" class="px-4 py-2 border-b border-[#30363d] flex items-center justify-between bg-[#161b22]">
-        <div class="flex items-center gap-3">
-            <span class="text-sm font-medium">Preview</span>
-            <span id="results-stats" class="text-xs text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded-full hidden"></span>
-            <span id="engine-badge" class="text-xs px-2 py-0.5 rounded-full hidden"></span>
+    <div id="preview-header" style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:500;font-size:13px">Preview</span>
+            <span id="results-stats" class="chip chip-green hidden"></span>
+            <span id="engine-badge" class="chip chip-neutral hidden"></span>
         </div>
-        <div class="flex items-center gap-2">
-            <button id="toggle-canvas-btn" onclick="togglePipelineCanvas()" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5" title="Toggle pipeline canvas">
-                <i data-lucide="workflow" class="w-3.5 h-3.5"></i> Canvas
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <button id="toggle-canvas-btn" onclick="togglePipelineCanvas()" class="btn btn-sm btn-ghost" title="Toggle pipeline canvas">
+                <i data-lucide="workflow"></i>Canvas
             </button>
-            <div class="w-px h-4 bg-[#30363d]"></div>
-            <label class="flex items-center gap-2 text-sm text-[#8b949e]">
-                <span>Engine:</span>
-                <select id="engine-select" onchange="changeEngine()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+            <span style="width:1px;height:18px;background:var(--border)"></span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-3)">
+                Engine:
+                <select id="engine-select" onchange="changeEngine()" style="font-size:12px;padding:3px 8px">
                     <option value="ibis+duckdb">Ibis · DuckDB (default)</option>
                     <option value="ibis+polars">Ibis · Polars</option>
                     <option value="duckdb">DuckDB (legacy)</option>
                     <option value="polars">Polars (legacy)</option>
                 </select>
             </label>
-            <button onclick="runProfile()" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5" title="Profile columns (Ibis)">
-                <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Profile
+            <button onclick="runProfile()" class="btn btn-sm btn-ghost" title="Profile columns (Ibis)">
+                <i data-lucide="bar-chart-3"></i>Profile
             </button>
-            <div class="w-px h-4 bg-[#30363d]"></div>
-            <label class="flex items-center gap-2 text-sm text-[#8b949e]">
-                <span>Rows:</span>
-                <select id="preview-limit" onchange="changeLimit()" class="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm">
+            <span style="width:1px;height:18px;background:var(--border)"></span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-3)">
+                Rows:
+                <select id="preview-limit" onchange="changeLimit()" style="font-size:12px;padding:3px 8px;width:80px">
                     <option value="100">100</option>
                     <option value="500">500</option>
                     <option value="1000">1000</option>
                     <option value="5000">5000</option>
                 </select>
             </label>
-            <div class="w-px h-4 bg-[#30363d]"></div>
-            <button onclick="exportResults('csv')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i> CSV
-            </button>
-            <button onclick="exportResults('parquet')" class="px-2.5 py-1 text-sm hover:bg-[#21262d] rounded text-[#8b949e] flex items-center gap-1.5">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i> Parquet
-            </button>
+            <span style="width:1px;height:18px;background:var(--border)"></span>
+            <button onclick="exportResults('csv')" class="btn btn-sm btn-ghost"><i data-lucide="download"></i>CSV</button>
+            <button onclick="exportResults('parquet')" class="btn btn-sm btn-ghost"><i data-lucide="download"></i>Parquet</button>
         </div>
     </div>
 
-    <!-- Pipeline Canvas (collapsible) -->
-    <div id="pipeline-canvas-container" class="hidden border-b border-[#30363d]">
+    <!-- Pipeline canvas (collapsible) -->
+    <div id="pipeline-canvas-container" class="hidden" style="border-bottom:1px solid var(--border)">
         {{ pipeline_canvas(id="data-pipeline", height="280px", toolbar=true, minimap=false) }}
     </div>
 
-    <!-- Results Table -->
-    <div id="results-container" class="flex-1 overflow-auto p-4">
-        <div class="text-[#8b949e] text-center py-12 max-w-md mx-auto">
-            <i data-lucide="workflow" class="w-16 h-16 mx-auto mb-4 opacity-30"></i>
-            <h3 class="text-lg font-medium text-white mb-4">Build a Data Pipeline</h3>
-            <div class="text-left space-y-3 bg-[#161b22] rounded-lg p-4 text-sm">
-                <div class="flex items-start gap-3">
-                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
-                    <div><strong>Select a data source</strong><br/>File (CSV, Parquet, JSON, OSM) or Database table/query</div>
+    <!-- Results -->
+    <div id="results-container" style="flex:1;overflow:auto;padding:32px 24px">
+        <div style="max-width:520px;margin:0 auto;text-align:center">
+            <i data-lucide="workflow" style="width:64px;height:64px;color:var(--fg-4);margin-bottom:16px"></i>
+            <h3 style="font-family:var(--serif);font-size:28px;line-height:1.1;letter-spacing:-.01em;margin-bottom:6px">Build a data pipeline</h3>
+            <p style="color:var(--fg-3);font-size:14px;margin-bottom:20px">From file or table to clean output in three steps.</p>
+
+            <div class="card" style="padding:18px;text-align:left;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                    <span style="width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:12px;font-weight:600;flex-shrink:0">1</span>
+                    <div style="font-size:13px"><strong>Select a data source</strong><br/><span style="color:var(--fg-3)">File (CSV, Parquet, JSON, OSM) or database table/query</span></div>
                 </div>
-                <div class="flex items-start gap-3">
-                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
-                    <div><strong>Add transforms</strong> (optional)<br/>Filter, sort, join, group by...</div>
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                    <span style="width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:12px;font-weight:600;flex-shrink:0">2</span>
+                    <div style="font-size:13px"><strong>Add transforms</strong> <span style="color:var(--fg-4)">(optional)</span><br/><span style="color:var(--fg-3)">Filter, sort, join, group by…</span></div>
                 </div>
-                <div class="flex items-start gap-3">
-                    <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
-                    <div><strong>Run &amp; Export</strong><br/>Preview, export to CSV/Parquet, or import to DB</div>
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                    <span style="width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:12px;font-weight:600;flex-shrink:0">3</span>
+                    <div style="font-size:13px"><strong>Run &amp; export</strong><br/><span style="color:var(--fg-3)">Preview, export to CSV / Parquet, or import to DB</span></div>
                 </div>
             </div>
         </div>

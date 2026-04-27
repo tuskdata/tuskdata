@@ -2,6 +2,41 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc11] - 2026-04-26 — Admin internals + Data preview pane + cluster plugin
+
+Continuing the per-template port. No more override hacks; every
+section listed below now uses the mockup classes directly from
+`static/tusk-app.css`.
+
+### Admin internals
+- All 14 admin sections (Active Processes, Locks Monitor, Table
+  Maintenance, Extensions, Database Settings, Scheduled Tasks,
+  Roles, Slow Queries, Indexes, Replication, Server Logs, PITR,
+  Backups, Stats) ported from the legacy `card rounded-xl` cascade
+  to the redesign `.card` + design-token header pattern
+  (`padding:12px 16px;border-bottom:1px solid var(--border)…`).
+- 6 admin modals (Role, Role Grants, Backup Options, Backups,
+  Create DB, Schedule) flipped to `.card` + design-token form
+  fields. Action buttons use `.btn` / `.btn-brand` / `.btn-ghost`.
+- 13 admin partials ported (`processes`, `locks`, `bloat`,
+  `extensions`, `indexes`, `logs`, `pitr`, `replication`,
+  `roles`, `role-grants`, `settings`, `slow-queries`, `backups`).
+  Status badges use `chip chip-{green|amber|rose|violet}`. Tables
+  use `.dtable`. ~200 hex literals removed in this round.
+
+### Data
+- Preview header (engine/profile/rows/exports) flipped to
+  `.btn btn-sm btn-ghost` + design-token select inputs.
+- Empty-state hero rewritten with serif title + `.card` "build a
+  data pipeline" walkthrough mirroring the mockup's empty-state
+  pattern.
+
+### tusk-cluster plugin (own dashboard.html)
+- Plugin's standalone dashboard template ported to the redesign
+  shell (`studio-shell` + `r-sidebar` + `dash-grid` of
+  `dash-card.span-3` stat tiles with serif numbers and lucide
+  icons in token colors).
+
 ## [0.4.3rc10] - 2026-04-26 — Real port: every core page on the new shell
 
 Continuing the full port (no more override hacks). Every core page

@@ -1,28 +1,28 @@
 {% if settings %}
     {% for s in settings %}
     {% set differs_from_default = s.boot_val and s.setting != s.boot_val %}
-    <tr class="hover:bg-[#21262d]/50" data-setting="{{ s.name }}">
-        <td class="px-4 py-2 font-mono text-sm">
+    <tr data-setting="{{ s.name }}">
+        <td class="mono text-sm">
             {{ s.name }}
-            {% if s.pending_restart %} <span class="text-xs text-yellow-400">restart needed</span>{% endif %}
-            {% if differs_from_default %} <span class="text-xs text-amber-400" title="Differs from default">●</span>{% endif %}
+            {% if s.pending_restart %} <span class="text-xs" style="color:var(--accent-amber)">restart needed</span>{% endif %}
+            {% if differs_from_default %} <span class="text-xs" style="color:var(--accent-amber)" title="Differs from default">●</span>{% endif %}
         </td>
-        <td class="px-4 py-2 font-mono text-sm text-indigo-400">{{ s.formatted }}</td>
-        <td class="px-4 py-2 font-mono text-xs text-gray-500">{{ s.boot_val or '-' }}</td>
-        <td class="px-4 py-2 text-xs text-gray-500">{{ s.category }}</td>
-        <td class="px-4 py-2 text-xs text-gray-500">{{ s.description }}</td>
-        <td class="px-4 py-2 text-right">
+        <td class="mono text-sm" style="color:var(--brand)">{{ s.formatted }}</td>
+        <td class="mono text-xs" style="color:var(--fg-3)">{{ s.boot_val or '-' }}</td>
+        <td class="text-xs" style="color:var(--fg-3)">{{ s.category }}</td>
+        <td class="text-xs" style="color:var(--fg-3)">{{ s.description }}</td>
+        <td style="text-align:right">
             {% if s.context in ('user', 'superuser') %}
             <button onclick="window.tuskEditSetting('{{ s.name }}', '{{ s.setting | replace('\'', '\\\'') }}')"
-                    class="text-xs text-indigo-400 hover:text-indigo-300" title="SET for this session">
+                    class="btn btn-sm btn-ghost" style="color:var(--brand)" title="SET for this session">
                 Edit
             </button>
             {% else %}
-            <span class="text-xs text-gray-600" title="Requires reload or restart">read-only</span>
+            <span class="text-xs" style="color:var(--fg-4)" title="Requires reload or restart">read-only</span>
             {% endif %}
         </td>
     </tr>
     {% endfor %}
 {% else %}
-    <tr><td colspan="6" class="p-4 text-gray-500">No settings found</td></tr>
+    <tr><td colspan="6" style="padding:14px;color:var(--fg-3)">No settings found</td></tr>
 {% endif %}

@@ -1,35 +1,36 @@
 {% if backups %}
     {% for b in backups %}
-    <div class="p-3 rounded-lg hover:bg-[#21262d] mb-2 border border-[#30363d]">
-        <div class="flex items-center justify-between mb-2">
-            <div>
-                <div class="font-mono text-sm">{{ b.filename }}</div>
-                <div class="text-xs text-gray-500">{{ b.size_human }} · {{ b.created }}</div>
+    <div style="padding:10px 12px;background:var(--surface-2);border-radius:6px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <i data-lucide="file-archive" style="width:14px;height:14px;color:var(--brand);flex-shrink:0"></i>
+            <div style="flex:1;min-width:0">
+                <div class="mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.filename }}</div>
+                <div class="mono text-xs" style="color:var(--fg-3)">{{ b.size_human }} · {{ b.created }}</div>
             </div>
-            <a href="/api/admin/backups/{{ b.filename }}"
-               class="text-indigo-400 hover:text-indigo-300 text-sm px-2 py-1 rounded hover:bg-indigo-500/20">Download</a>
+            <span class="chip chip-green">verified</span>
+            <a href="/api/admin/backups/{{ b.filename }}" class="btn btn-sm btn-ghost" style="color:var(--brand)">Download</a>
         </div>
         <div class="flex gap-2">
             <button hx-post="/api/admin/{{ conn_id }}/restore"
                     hx-vals='{"filename": "{{ b.filename }}"}'
                     hx-swap="none"
                     hx-confirm="Restore backup to current database? This will overwrite existing data."
-                    class="flex-1 text-xs px-2 py-1.5 rounded bg-amber-600/20 text-amber-400 hover:bg-amber-600/30">
+                    class="btn btn-sm" style="flex:1;color:var(--accent-amber);border-color:rgba(176,119,0,.30)">
                 Restore to current DB
             </button>
             <button @click="showCreateDb('{{ b.filename }}')"
-                    class="flex-1 text-xs px-2 py-1.5 rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">
+                    class="btn btn-sm" style="flex:1;color:var(--green);border-color:rgba(31,138,76,.30)">
                 Create new DB
             </button>
             <button hx-delete="/api/admin/backups/{{ b.filename }}"
                     hx-swap="none"
                     hx-confirm="Delete backup {{ b.filename }}? This cannot be undone."
-                    class="text-xs px-2 py-1.5 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30">
+                    class="btn btn-sm" style="color:var(--red);border-color:rgba(204,46,61,.30)">
                 Delete
             </button>
         </div>
     </div>
     {% endfor %}
 {% else %}
-    <div class="text-gray-500">No backups found for this database</div>
+    <div style="color:var(--fg-3)">No backups found for this database</div>
 {% endif %}
