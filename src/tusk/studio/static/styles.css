@@ -2,31 +2,31 @@
 
 /* ============================================
    CSS Variables (Theming)
-   ============================================ */
-
-/* Dark theme (default) */
+   ============================================
+ *
+ * Legacy var aliases. The old GitHub-dark palette
+ * (`--bg-primary` = #0d1117, `--bg-secondary` = #161b22, etc) used
+ * to live here, but every page is now ported to the v0.4 design
+ * tokens (`--bg`, `--surface`, `--surface-2`, `--fg`, `--fg-3`, …)
+ * defined in `tusk-app.css` / `design-tokens.css`. We keep the old
+ * names as aliases pointing at the new tokens so any leftover
+ * reference (a plugin, an HTMX partial, an inline style) still
+ * picks up the warm light/dark palette and stays uniform.
+ */
 :root {
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-tertiary: #21262d;
-    --border-color: #30363d;
-    --text-primary: #e6edf3;
-    --text-secondary: #8b949e;
-    --accent-color: rgba(99, 102, 241, 0.15);
-    --accent-text: #a5b4fc;
+    --bg-primary:    var(--bg);
+    --bg-secondary:  var(--surface);
+    --bg-tertiary:   var(--surface-2);
+    --border-color:  var(--border);
+    --text-primary:  var(--fg);
+    --text-secondary:var(--fg-3);
+    --accent-color:  var(--brand-tint);
+    --accent-text:   var(--brand);
 }
-
-/* Light theme */
-.light {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f6f8fa;
-    --bg-tertiary: #eaeef2;
-    --border-color: #d0d7de;
-    --text-primary: #1f2328;
-    --text-secondary: #656d76;
-    --accent-color: rgba(99, 102, 241, 0.1);
-    --accent-text: #6366f1;
-}
+/* `body.light` historically toggled the legacy dark↔light mapping.
+ * We keep the class for back-compat — design-tokens.css now flips
+ * the underlying tokens by `body[data-theme="dark"]`, so this just
+ * needs to do nothing. */
 
 /* ============================================
    Base Styles
@@ -35,12 +35,9 @@
 /* Alpine.js cloak — hide elements until Alpine initializes */
 [x-cloak] { display: none !important; }
 
-* { font-family: 'Inter', sans-serif; }
-.mono { font-family: 'JetBrains Mono', monospace; }
+.mono { font-family: var(--font-mono, 'Geist Mono', ui-monospace, monospace); }
 
 body {
-    background: var(--bg-primary);
-    color: var(--text-primary);
     transition: background-color 0.2s, color 0.2s;
 }
 
@@ -67,27 +64,18 @@ body {
     border: 1px solid var(--border-color);
 }
 
-/* Header */
-header {
-    background: var(--bg-secondary) !important;
-    border-color: var(--border-color) !important;
-}
+/* Header — no styles here; .tusk-topnav in design-tokens.css and
+ * .topnav in tusk-app.css drive every header background. The legacy
+ * `header { background: var(--bg-secondary) !important }` rule that
+ * used to live here was overriding the redesign tokens and giving
+ * the dark-theme top nav a cold GitHub gray (#161b22) instead of the
+ * warm `rgba(14,13,10,.85)` from the mockup. */
 
-/* ============================================
-   Navigation
-   ============================================ */
-
-.nav-tab {
+/* Legacy .nav-tab styles below are kept for any plugin pages that
+ * still target them; the redesign uses .tusk-nav-tab and .nav-tabs
+ * styled in tusk-app.css / design-tokens.css. */
+.nav-tab:not(.tusk-nav-tab) {
     transition: all 0.15s;
-    color: var(--text-secondary);
-}
-.nav-tab:hover {
-    background: var(--accent-color);
-    color: var(--text-primary);
-}
-.nav-tab.active {
-    background: var(--accent-color);
-    color: var(--accent-text);
 }
 
 /* ============================================

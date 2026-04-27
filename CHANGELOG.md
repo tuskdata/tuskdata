@@ -2,6 +2,46 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc15] - 2026-04-27 — Top nav warm-dark fix + legacy var aliases
+
+### The bug the user pointed at
+In dark mode the top navigation bar rendered a cold GitHub-gray
+(`#161b22`) while the body was the warm `#0e0d0a` from the design
+tokens. Side-by-side with the v3 mockup the gap was obvious — the
+mockup has the nav and body share the same warm dark with a subtle
+backdrop blur on top.
+
+### Cause
+`styles.css` carried a leftover legacy rule:
+```css
+header {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+```
+where `--bg-secondary` was the GitHub-dark `#161b22`. The `!important`
+beat the `body[data-theme="dark"] .tusk-topnav` rule from
+`design-tokens.css` (which correctly maps to `rgba(14,13,10,.85)`).
+Result: nav got the cold gray no matter what the design tokens said.
+
+### Fix
+- Removed the legacy `header { ... !important }` rule. The top nav
+  now reads only from `.tusk-topnav` (design-tokens.css) and
+  `.topnav` (tusk-app.css), both of which point at the warm tokens.
+- Re-defined every legacy CSS var (`--bg-primary`, `--bg-secondary`,
+  `--bg-tertiary`, `--border-color`, `--text-primary`,
+  `--text-secondary`, `--accent-color`, `--accent-text`) as an
+  **alias** of the v0.4 design tokens. So any plugin or partial
+  that still references the old names automatically picks up the
+  warm-light/warm-dark palette and stays uniform with everything
+  else.
+- Dropped the legacy hard-coded `#0d1117 / #161b22 / #f6f8fa` color
+  blocks from `styles.css` `:root` and `.light` since they're now
+  redundant.
+
+The whole top nav now matches the mockup byte-for-byte: warm cream
+on light, warm dark on dark, same color as body, blurred bottom.
+
 ## [0.4.3rc14] - 2026-04-27 — Share SSH sessions across connections to the same bastion
 
 Before this, every Tusk connection that needed an SSH tunnel opened
