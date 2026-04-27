@@ -2,6 +2,35 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc14] - 2026-04-27 — Share SSH sessions across connections to the same bastion
+
+Before this, every Tusk connection that needed an SSH tunnel opened
+its own asyncssh session — even if 5 of them sat behind the same
+bastion. That meant 5 SSH handshakes (~1.5s each) on first hit, and
+5 long-lived TCP connections kept alive forever. The user's deploy
+log showed two separate `Opening SSH tunnel ssh_host=...` lines for
+two connections to the same bastion, which is exactly the symptom.
+
+### Fix
+- `core/ssh_tunnel.py` rewritten around two layers:
+  - `_Session` — one `asyncssh.connect(...)` per
+    `(ssh_host, ssh_port, ssh_user, key_fingerprint)`. Multiple
+    connections that share those four share the session.
+  - `_Forward` — one `forward_local_port(...)` per `(target_host,
+    target_port)` *within* a session. Two Tusk connections pointing
+    at the same downstream DB share the forward (refcount-managed).
+- `close_tunnel(connection_id)` decrements the refcount, GC's the
+  forward when nobody else uses it, and tears the session down when
+  the last forward goes away.
+- `test_ssh_connection` opens a one-shot session+forward and tears
+  both back down (no leak).
+
+### Why this matters
+- First-hit latency on a workspace with N connections behind the
+  same bastion goes from `N * ~1.5s` to `~1.5s + N * ~50ms`.
+- TCP/auth state on the bastion drops from N to 1.
+- Healthcheck and reconnect storms are dramatically smaller.
+
 ## [0.4.3rc13] - 2026-04-27 — Hotfix: tab switch also resets to Table
 
 rc12 only reset the result pane to Table when running a fresh

@@ -2,11 +2,16 @@
 
 When a `ConnectionConfig` has its `ssh_*` fields populated, the postgres
 engine asks this module for a tunneled DSN. We open an asyncssh
-connection to the bastion, set up a port-forward to the actual database,
-and hand the engine a localhost DSN pointing at the forwarded port.
+connection to the bastion and a local port-forward to the actual
+database, then hand the engine a localhost DSN pointing at the local
+end of the forward.
 
-Tunnels are reused across queries — one per `ConnectionConfig.id` — and
-torn down on app shutdown.
+**Sharing**: multiple Tusk connections that point at the same bastion
+(same `ssh_host:port:user:key`) share **one** asyncssh session — only
+the per-target *forwarded port* is opened separately. Before this,
+each Tusk connection opened its own SSH session, so a workspace with
+five DBs behind one bastion meant five SSH handshakes (~1.5s each)
+on first hit. Now it's one handshake plus N cheap port forwards.
 
 Authentication priority when both are set:
     1. ssh_private_key (PEM contents, optionally with passphrase = ssh_password)
@@ -20,8 +25,8 @@ is fine in dev but you should pin it for prod.
 from __future__ import annotations
 
 import asyncio
-import io
-from dataclasses import dataclass
+import hashlib
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from tusk.core.logging import get_logger
@@ -40,35 +45,66 @@ except ImportError:
 
 
 @dataclass
-class _Tunnel:
-    conn: object               # asyncssh.SSHClientConnection
-    listener: object           # asyncssh listener
+class _Forward:
+    """A single local→remote port forward riding on a shared SSH session."""
+    listener: object         # asyncssh listener
     local_port: int
-    fingerprint: str           # signature of the tunnel params, used to detect config drift
+    target_host: str
+    target_port: int
+    refcount: int = 0        # how many connection_ids are using this forward
 
 
-_tunnels: dict[str, _Tunnel] = {}
+@dataclass
+class _Session:
+    """One asyncssh connection. Hosts multiple forwards keyed by target."""
+    conn: object             # asyncssh.SSHClientConnection
+    fingerprint: str         # SSH-side params signature (host/user/key)
+    forwards: dict[str, _Forward] = field(default_factory=dict)
+    # connection_id → forward key it's using; lets us decrement on close.
+    consumers: dict[str, str] = field(default_factory=dict)
+
+
+# Sessions keyed by SSH-side fingerprint (host:port:user:keyhash).
+_sessions: dict[str, _Session] = {}
 _lock = asyncio.Lock()
 
 
-def _fingerprint(config: "ConnectionConfig") -> str:
-    """Stable signature of the parameters that define the tunnel.
+def _ssh_fingerprint(config: "ConnectionConfig") -> str:
+    """Stable signature of *just the SSH session* parameters.
 
-    If any of these change, the existing tunnel is stale and we rebuild.
+    Two Tusk connections that share host/port/user/key share one SSH
+    session, even if they target different downstream DB hosts.
     """
-    return "|".join(str(x) for x in (
-        config.ssh_host, config.ssh_port, config.ssh_user,
-        config.host, config.port,
-        bool(config.ssh_private_key), bool(config.ssh_password),
+    key_material = ""
+    if config.ssh_private_key:
+        # Hash the key so the fingerprint isn't huge — actual auth still
+        # uses the full key. We only need stable equality here.
+        key_material = "k:" + hashlib.sha256(
+            config.ssh_private_key.encode("utf-8", errors="replace")
+        ).hexdigest()[:16]
+    elif config.ssh_password:
+        key_material = "p:" + hashlib.sha256(
+            config.ssh_password.encode("utf-8", errors="replace")
+        ).hexdigest()[:16]
+    return "|".join((
+        config.ssh_host or "",
+        str(config.ssh_port or 22),
+        config.ssh_user or "",
+        key_material,
     ))
+
+
+def _forward_key(config: "ConnectionConfig") -> str:
+    """Stable key for the (target_host, target_port) pair within an SSH session."""
+    return f"{config.host or 'localhost'}:{config.port}"
 
 
 async def get_tunneled_dsn(config: "ConnectionConfig") -> str:
     """Return a DSN ready to hand to psycopg.
 
     For non-tunneled connections this is just `config.dsn`. For tunneled
-    ones we open (or reuse) the SSH forward and return a DSN pointing at
-    the local end of the forward.
+    ones we open (or reuse) the SSH session + local forward, and return
+    a DSN pointing at the local end of the forward.
     """
     if not config.uses_ssh_tunnel:
         return config.dsn
@@ -79,25 +115,54 @@ async def get_tunneled_dsn(config: "ConnectionConfig") -> str:
             "Install with `pip install tuskdata[postgres]` to enable SSH tunnels."
         )
 
-    fp = _fingerprint(config)
+    sess_fp = _ssh_fingerprint(config)
+    fwd_key = _forward_key(config)
 
     async with _lock:
-        existing = _tunnels.get(config.id)
-        if existing and existing.fingerprint == fp:
-            return config.local_dsn(existing.local_port)
+        # 1. Get-or-create the SSH session for this bastion.
+        session = _sessions.get(sess_fp)
+        if session is None:
+            conn = await _open_session(config)
+            session = _Session(conn=conn, fingerprint=sess_fp)
+            _sessions[sess_fp] = session
+            log.info(
+                "SSH session opened",
+                ssh_host=config.ssh_host, ssh_user=config.ssh_user,
+            )
 
-        if existing:
-            # Stale tunnel (config changed) — close before rebuilding
-            await _close(existing)
-            _tunnels.pop(config.id, None)
+        # 2. Get-or-create the forward for this (target_host, target_port).
+        forward = session.forwards.get(fwd_key)
+        if forward is None:
+            forward = await _open_forward(session.conn, config)
+            session.forwards[fwd_key] = forward
+            log.info(
+                "SSH forward opened",
+                target=fwd_key, local_port=forward.local_port,
+                shares_session=len(session.consumers) > 0,
+            )
 
-        tunnel = await _open(config, fp)
-        _tunnels[config.id] = tunnel
-        return config.local_dsn(tunnel.local_port)
+        # 3. Bookkeeping: register this connection as a consumer of the
+        #    forward, so close_tunnel() can decrement and (eventually)
+        #    GC the forward when nobody is using it.
+        prev_key = session.consumers.get(config.id)
+        if prev_key and prev_key != fwd_key:
+            # Connection was using a different forward (config changed).
+            # Decrement the old one; it'll be GC'd if nobody else uses it.
+            old = session.forwards.get(prev_key)
+            if old:
+                old.refcount = max(0, old.refcount - 1)
+                if old.refcount == 0:
+                    await _close_forward(old)
+                    session.forwards.pop(prev_key, None)
+        if session.consumers.get(config.id) != fwd_key:
+            forward.refcount += 1
+            session.consumers[config.id] = fwd_key
+
+        return config.local_dsn(forward.local_port)
 
 
-async def _open(config: "ConnectionConfig", fingerprint: str) -> _Tunnel:
-    """Open a fresh SSH connection + local port forward."""
+async def _open_session(config: "ConnectionConfig"):
+    """Open a fresh asyncssh connection (no forwards yet)."""
     kwargs: dict = {
         "host": config.ssh_host,
         "port": config.ssh_port,
@@ -107,7 +172,6 @@ async def _open(config: "ConnectionConfig", fingerprint: str) -> _Tunnel:
     if config.ssh_known_hosts:
         kwargs["known_hosts"] = asyncssh.import_known_hosts(config.ssh_known_hosts)
     else:
-        # Accept-new: don't fail on first connect, but still verify subsequent ones.
         kwargs["known_hosts"] = None
 
     if config.ssh_private_key:
@@ -126,59 +190,71 @@ async def _open(config: "ConnectionConfig", fingerprint: str) -> _Tunnel:
             "ssh_tunnel: neither ssh_private_key nor ssh_password is set"
         )
 
-    log.info(
-        "Opening SSH tunnel",
-        ssh_host=config.ssh_host,
-        ssh_user=config.ssh_user,
-        target=f"{config.host}:{config.port}",
-    )
+    return await asyncssh.connect(**kwargs)
 
-    conn = await asyncssh.connect(**kwargs)
-    # Bind to any free local port; asyncssh will report which it picked.
+
+async def _open_forward(conn, config: "ConnectionConfig") -> _Forward:
+    """Open a local→remote forward on an existing SSH session."""
     listener = await conn.forward_local_port(
         listen_host="127.0.0.1",
         listen_port=0,
         dest_host=config.host or "localhost",
         dest_port=config.port,
     )
-    local_port = listener.get_port()
-    log.info(
-        "SSH tunnel established",
-        connection_id=config.id,
-        local_port=local_port,
+    return _Forward(
+        listener=listener,
+        local_port=listener.get_port(),
+        target_host=config.host or "localhost",
+        target_port=config.port,
     )
-    return _Tunnel(conn=conn, listener=listener, local_port=local_port, fingerprint=fingerprint)
 
 
-async def _close(tunnel: _Tunnel) -> None:
+async def _close_forward(forward: _Forward) -> None:
     try:
-        tunnel.listener.close()
+        forward.listener.close()
     except Exception:
         pass
+
+
+async def _close_session(session: _Session) -> None:
+    for fwd in list(session.forwards.values()):
+        await _close_forward(fwd)
+    session.forwards.clear()
     try:
-        tunnel.conn.close()
-        await tunnel.conn.wait_closed()
+        session.conn.close()
+        await session.conn.wait_closed()
     except Exception:
         pass
 
 
 async def close_tunnel(connection_id: str) -> None:
-    """Force-close the tunnel for a connection (e.g. on connection delete)."""
+    """Drop a connection's reference. GC the forward (and session) if idle."""
     async with _lock:
-        tunnel = _tunnels.pop(connection_id, None)
-    if tunnel:
-        await _close(tunnel)
+        for sess_fp, session in list(_sessions.items()):
+            fwd_key = session.consumers.pop(connection_id, None)
+            if not fwd_key:
+                continue
+            forward = session.forwards.get(fwd_key)
+            if forward:
+                forward.refcount = max(0, forward.refcount - 1)
+                if forward.refcount == 0:
+                    await _close_forward(forward)
+                    session.forwards.pop(fwd_key, None)
+            # If this session no longer hosts any forwards, tear it down.
+            if not session.forwards:
+                await _close_session(session)
+                _sessions.pop(sess_fp, None)
 
 
 async def close_all_tunnels() -> None:
-    """Close every open tunnel — call on app shutdown."""
+    """Close every SSH session — call on app shutdown."""
     async with _lock:
-        snapshot = list(_tunnels.values())
-        _tunnels.clear()
-    for tunnel in snapshot:
-        await _close(tunnel)
-    if snapshot:
-        log.info("Closed SSH tunnels", count=len(snapshot))
+        sessions = list(_sessions.values())
+        _sessions.clear()
+    for s in sessions:
+        await _close_session(s)
+    if sessions:
+        log.info("Closed SSH sessions", count=len(sessions))
 
 
 async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
@@ -189,9 +265,24 @@ async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
         return False, "asyncssh is not installed"
 
     try:
-        tunnel = await _open(config, _fingerprint(config))
+        conn = await _open_session(config)
     except Exception as e:
-        return False, f"tunnel failed: {e}"
+        return False, f"SSH connect failed: {e}"
 
-    await _close(tunnel)
-    return True, f"tunnel OK (local port would be {tunnel.local_port})"
+    try:
+        forward = await _open_forward(conn, config)
+        await _close_forward(forward)
+    except Exception as e:
+        try:
+            conn.close()
+            await conn.wait_closed()
+        except Exception:
+            pass
+        return False, f"port forward failed: {e}"
+
+    try:
+        conn.close()
+        await conn.wait_closed()
+    except Exception:
+        pass
+    return True, "SSH + port forward OK"
