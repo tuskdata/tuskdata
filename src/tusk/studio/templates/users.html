@@ -3,131 +3,113 @@
 {% block title %}Tusk - User Management{% endblock %}
 
 {% block header_actions %}
-<button onclick="window.dispatchEvent(new CustomEvent('open-create-user'))" class="px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] rounded text-sm flex items-center gap-2">
-    <i data-lucide="user-plus" class="w-4 h-4"></i>
-    Add User
+<button onclick="window.dispatchEvent(new CustomEvent('open-create-user'))" class="btn" style="background:var(--green);color:#fff;border-color:var(--green)">
+    <i data-lucide="user-plus"></i>Add user
 </button>
 {% endblock %}
 
 {% block content %}
-<main class="flex-1 flex flex-col overflow-hidden p-6" x-data="usersPage()">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+<main class="dash-page" x-data="usersPage()" style="flex:1;overflow:auto">
+    <div class="dash-head">
         <div>
-            <h1 class="text-2xl font-bold">User Management</h1>
-            <p class="text-[#8b949e] text-sm mt-1">Manage users, groups, and permissions</p>
+            <div class="dash-title">User management</div>
+            <div class="dash-desc">Manage users, groups, and permissions.</div>
         </div>
-        <div class="flex gap-2">
-            <button @click="activeTab = 'users'" :class="activeTab === 'users' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
-                Users
-            </button>
-            <button @click="activeTab = 'groups'" :class="activeTab === 'groups' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
-                Groups
-            </button>
-            <button @click="activeTab = 'audit'" :class="activeTab === 'audit' ? 'bg-[#21262d]' : 'hover:bg-[#21262d]'" class="px-4 py-2 rounded-lg text-sm font-medium">
-                Audit Log
-            </button>
+        <div class="nav-tabs">
+            <button class="nav-tab" :class="activeTab === 'users' && 'active'" @click="activeTab = 'users'"><i data-lucide="users"></i>Users</button>
+            <button class="nav-tab" :class="activeTab === 'groups' && 'active'" @click="activeTab = 'groups'"><i data-lucide="layers"></i>Groups</button>
+            <button class="nav-tab" :class="activeTab === 'audit' && 'active'" @click="activeTab = 'audit'"><i data-lucide="history"></i>Audit log</button>
         </div>
     </div>
 
-    <!-- Users Tab -->
-    <div x-show="activeTab === 'users'" class="flex-1 overflow-auto">
-        <div class="bg-[#161b22] border border-[#30363d] rounded-lg">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-[#30363d] text-left text-xs text-[#8b949e] uppercase tracking-wider">
-                        <th class="px-4 py-3">User</th>
-                        <th class="px-4 py-3">Email</th>
-                        <th class="px-4 py-3">Role</th>
-                        <th class="px-4 py-3">Groups</th>
-                        <th class="px-4 py-3">Status</th>
-                        <th class="px-4 py-3">Last Login</th>
-                        <th class="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="users-table"
-                       hx-get="/api/users/"
-                       hx-trigger="load, usersChanged from:body"
-                       hx-swap="innerHTML">
-                    <tr><td colspan="7" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
-                </tbody>
-            </table>
+    <!-- Users tab -->
+    <div x-show="activeTab === 'users'" class="card" style="overflow:hidden">
+        <table class="dtable" style="width:100%">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Groups</th>
+                    <th>Status</th>
+                    <th>Last login</th>
+                    <th style="text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="users-table"
+                   hx-get="/api/users/"
+                   hx-trigger="load, usersChanged from:body"
+                   hx-swap="innerHTML">
+                <tr><td colspan="7" style="padding:24px;text-align:center;color:var(--fg-3)">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Groups tab -->
+    <div x-show="activeTab === 'groups'" x-cloak>
+        <div id="groups-grid" class="dash-grid"
+             hx-get="/api/groups/" hx-trigger="load" hx-swap="innerHTML">
+            <div style="color:var(--fg-3);grid-column:span 12">Loading…</div>
         </div>
     </div>
 
-    <!-- Groups Tab -->
-    <div x-show="activeTab === 'groups'" x-cloak class="flex-1 overflow-auto">
-        <div id="groups-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-             hx-get="/api/groups/"
-             hx-trigger="load"
-             hx-swap="innerHTML">
-            <div class="text-[#8b949e]">Loading...</div>
-        </div>
-    </div>
-
-    <!-- Audit Log Tab -->
-    <div x-show="activeTab === 'audit'" x-cloak class="flex-1 overflow-auto"
+    <!-- Audit tab -->
+    <div x-show="activeTab === 'audit'" x-cloak
          x-data="{ search: '', actionFilter: '', offset: 0, limit: 50,
                    refresh() { htmx.trigger('#audit-table', 'refresh'); } }">
-        <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
             <input name="search" type="text" x-model.debounce.300ms="search"
                    @input="offset = 0; refresh()"
                    placeholder="Search user / resource / details / IP…"
-                   class="bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:border-indigo-500">
-            <select name="action" x-model="actionFilter" @change="offset = 0; refresh()"
-                    class="bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-sm">
-                <option value="">All Actions</option>
+                   style="width:280px">
+            <select name="action" x-model="actionFilter" @change="offset = 0; refresh()" style="width:200px">
+                <option value="">All actions</option>
                 <option value="login">Login</option>
                 <option value="logout">Logout</option>
-                <option value="user.create">User Create</option>
-                <option value="user.update">User Update</option>
-                <option value="user.delete">User Delete</option>
-                <option value="password.change">Password Change</option>
-                <option value="group.assign">Group Assign</option>
-                <option value="data.export">Data Export</option>
+                <option value="user.create">User create</option>
+                <option value="user.update">User update</option>
+                <option value="user.delete">User delete</option>
+                <option value="password.change">Password change</option>
+                <option value="group.assign">Group assign</option>
+                <option value="data.export">Data export</option>
             </select>
-            <button @click="refresh()" class="px-3 py-2 text-sm rounded-lg bg-[#21262d] hover:bg-[#30363d] flex items-center gap-1">
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
-            </button>
+            <button @click="refresh()" class="btn btn-sm"><i data-lucide="refresh-cw"></i>Refresh</button>
             <a :href="'/api/audit/export?format=csv' +
                        (actionFilter ? '&action=' + actionFilter : '') +
                        (search ? '&search=' + encodeURIComponent(search) : '')"
-               class="px-3 py-2 text-sm rounded-lg bg-[#21262d] hover:bg-[#30363d] flex items-center gap-1">
-                <i data-lucide="download" class="w-4 h-4"></i> Export CSV
+               class="btn btn-sm">
+                <i data-lucide="download"></i>Export CSV
             </a>
         </div>
-        <div class="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden">
-            <table class="w-full">
+        <div class="card" style="overflow:hidden">
+            <table class="dtable" style="width:100%">
                 <thead>
-                    <tr class="border-b border-[#30363d] text-left text-xs text-[#8b949e] uppercase tracking-wider">
-                        <th class="px-4 py-3">Timestamp</th>
-                        <th class="px-4 py-3">User</th>
-                        <th class="px-4 py-3">Action</th>
-                        <th class="px-4 py-3">Resource</th>
-                        <th class="px-4 py-3">Details</th>
-                        <th class="px-4 py-3">IP Address</th>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>Details</th>
+                        <th>IP address</th>
                     </tr>
                 </thead>
                 <tbody id="audit-table"
                        :hx-get="'/api/audit/?limit=' + limit + '&offset=' + offset +
                                 (actionFilter ? '&action=' + actionFilter : '') +
                                 (search ? '&search=' + encodeURIComponent(search) : '')"
-                       hx-trigger="load, refresh"
-                       hx-swap="innerHTML">
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-[#8b949e]">Loading...</td></tr>
+                       hx-trigger="load, refresh" hx-swap="innerHTML">
+                    <tr><td colspan="6" style="padding:24px;text-align:center;color:var(--fg-3)">Loading…</td></tr>
                 </tbody>
             </table>
         </div>
-        <div class="flex items-center justify-between mt-4 text-sm text-[#8b949e]">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:12.5px;color:var(--fg-3)">
             <span>Page <span x-text="Math.floor(offset / limit) + 1"></span></span>
-            <div class="flex gap-2">
+            <div style="display:flex;gap:6px">
                 <button @click="offset = Math.max(0, offset - limit); refresh()"
-                        :disabled="offset === 0"
-                        class="px-3 py-1 rounded bg-[#21262d] hover:bg-[#30363d] disabled:opacity-50">
+                        :disabled="offset === 0" class="btn btn-sm">
                     Previous
                 </button>
-                <button @click="offset += limit; refresh()"
-                        class="px-3 py-1 rounded bg-[#21262d] hover:bg-[#30363d]">
+                <button @click="offset += limit; refresh()" class="btn btn-sm">
                     Next
                 </button>
             </div>

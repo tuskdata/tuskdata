@@ -1,121 +1,102 @@
 {% extends "base.html" %}
 
-{% block title %}Profile - Tusk{% endblock %}
+{% block title %}Profile · Tusk{% endblock %}
 
 {% block content %}
-<main class="flex-1 overflow-auto p-6">
-    <div class="max-w-2xl mx-auto">
-        <h1 class="text-2xl font-bold mb-6">Profile</h1>
+<main class="dash-page" style="flex:1;overflow:auto">
+    <div style="max-width:720px;margin:0 auto">
+        <div class="dash-head">
+            <div>
+                <div class="dash-title">Profile</div>
+                <div class="dash-desc">Account info, password, and membership.</div>
+            </div>
+        </div>
 
-        <!-- Profile Info Card -->
-        <div class="card rounded-xl p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-4">Account Information</h2>
+        <!-- Account info -->
+        <div class="card" style="padding:22px;margin-bottom:18px">
+            <h2 style="font-family:var(--serif);font-size:22px;line-height:1.1;margin-bottom:16px">Account information</h2>
 
-            <form hx-post="/api/profile/"
-                  hx-swap="none"
-                  class="space-y-4">
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Username</label>
-                    <input disabled
-                           value="{{ profile_user.username if profile_user else '' }}"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-gray-500">
+            <form hx-post="/api/profile/" hx-swap="none">
+                <div class="field">
+                    <label>Username</label>
+                    <input disabled value="{{ profile_user.username if profile_user else '' }}"
+                           style="opacity:.7">
                 </div>
-
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Display Name</label>
+                <div class="field">
+                    <label>Display name</label>
                     <input name="display_name"
                            value="{{ profile_user.display_name if profile_user and profile_user.display_name else '' }}"
-                           placeholder="Your name"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                           placeholder="Your name">
                 </div>
-
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Email</label>
-                    <input name="email"
-                           type="email"
+                <div class="field">
+                    <label>Email</label>
+                    <input name="email" type="email"
                            value="{{ profile_user.email if profile_user and profile_user.email else '' }}"
-                           placeholder="you@example.com"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                           placeholder="you@example.com">
                 </div>
-
-                <div class="flex justify-end pt-2">
-                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium">Save Changes</button>
+                <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                    <button type="submit" class="btn btn-brand">Save changes</button>
                 </div>
             </form>
         </div>
 
-        <!-- Change Password Card -->
-        <div class="card rounded-xl p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-4">Change Password</h2>
+        <!-- Change password -->
+        <div class="card" style="padding:22px;margin-bottom:18px">
+            <h2 style="font-family:var(--serif);font-size:22px;line-height:1.1;margin-bottom:16px">Change password</h2>
 
             <form x-data="{ newPw: '', confirmPw: '', currentPw: '' }"
-                  hx-post="/api/profile/password"
-                  hx-swap="none"
+                  hx-post="/api/profile/password" hx-swap="none"
                   @htmx:after-request.camel="if ($event.detail.successful) { newPw = ''; confirmPw = ''; currentPw = ''; $el.reset() }"
                   @submit="if (!currentPw) { tuskToast('Current password required', 'warning'); $event.preventDefault(); return; }
                            if (!newPw) { tuskToast('New password required', 'warning'); $event.preventDefault(); return; }
                            if (newPw.length < 6) { tuskToast('Password must be at least 6 characters', 'warning'); $event.preventDefault(); return; }
-                           if (newPw !== confirmPw) { tuskToast('Passwords do not match', 'warning'); $event.preventDefault(); return; }"
-                  class="space-y-4">
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Current Password</label>
-                    <input name="current_password"
-                           type="password"
-                           x-model="currentPw"
-                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
-                </div>
+                           if (newPw !== confirmPw) { tuskToast('Passwords do not match', 'warning'); $event.preventDefault(); return; }">
 
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">New Password</label>
-                    <input name="new_password"
-                           type="password"
-                           x-model="newPw"
-                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
-                    <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                <div class="field">
+                    <label>Current password</label>
+                    <input name="current_password" type="password" x-model="currentPw" placeholder="••••••••">
                 </div>
-
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Confirm New Password</label>
-                    <input type="password"
-                           x-model="confirmPw"
-                           placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
-                           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+                <div class="field">
+                    <label>New password</label>
+                    <input name="new_password" type="password" x-model="newPw" placeholder="••••••••">
+                    <span style="font-size:11px;color:var(--fg-4)">Minimum 8 characters; must contain at least one letter and one digit.</span>
                 </div>
-
-                <div class="flex justify-end pt-2">
-                    <button type="submit" class="bg-[#238636] hover:bg-[#2ea043] px-4 py-2 rounded-lg font-medium">Change Password</button>
+                <div class="field">
+                    <label>Confirm new password</label>
+                    <input type="password" x-model="confirmPw" placeholder="••••••••">
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                    <button type="submit" class="btn" style="background:var(--green);color:#fff;border-color:var(--green)">Change password</button>
                 </div>
             </form>
         </div>
 
-        <!-- Groups & Permissions Card -->
-        <div class="card rounded-xl p-6">
-            <h2 class="text-lg font-semibold mb-4">Groups & Permissions</h2>
+        <!-- Groups & permissions -->
+        <div class="card" style="padding:22px">
+            <h2 style="font-family:var(--serif);font-size:22px;line-height:1.1;margin-bottom:16px">Groups &amp; permissions</h2>
 
-            <div class="mb-4">
-                <label class="block text-sm text-gray-400 mb-2">Member of</label>
-                <div class="flex flex-wrap gap-2">
+            <div style="margin-bottom:18px">
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px;font-weight:500">Member of</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
                     {% if profile_groups %}
                         {% for g in profile_groups %}
-                        <span class="px-3 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-sm">{{ g.name }}</span>
+                        <span class="chip chip-violet">{{ g.name }}</span>
                         {% endfor %}
                     {% else %}
-                        <span class="text-gray-500 text-sm">No groups assigned</span>
+                        <span style="color:var(--fg-4);font-size:13px">No groups assigned</span>
                     {% endif %}
                 </div>
             </div>
 
             <div>
-                <label class="block text-sm text-gray-400 mb-2">Permissions</label>
-                <div class="flex flex-wrap gap-2">
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px;font-weight:500">Permissions</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
                     {% if profile_permissions %}
                         {% for p in profile_permissions %}
-                        <span class="px-2 py-0.5 bg-[#21262d] text-gray-400 rounded text-xs font-mono">{{ p }}</span>
+                        <span class="chip chip-neutral">{{ p }}</span>
                         {% endfor %}
                     {% else %}
-                        <span class="text-gray-500 text-sm">No permissions</span>
+                        <span style="color:var(--fg-4);font-size:13px">No permissions</span>
                     {% endif %}
                 </div>
             </div>

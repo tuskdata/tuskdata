@@ -3,147 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Tusk</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <title>Login · Tusk</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/tusk-app.css">
+    <link rel="stylesheet" href="/static/design-tokens.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
-        * { font-family: 'Inter', sans-serif; }
-        body { background: #0d1117; color: #e6edf3; }
+        body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .login-shell { width: 100%; max-width: 420px; }
+        .login-brand { text-align: center; margin-bottom: 28px; }
+        .login-brand .mark { display: inline-grid; place-items: center; }
+        .login-brand .wordmark { font-size: 28px; font-weight: 600; letter-spacing: -.02em; margin-left: 10px; vertical-align: middle; }
+        .login-brand .badge { font-size: 11px; color: var(--brand); background: var(--brand-soft); padding: 2px 7px; border-radius: 4px; letter-spacing: .04em; vertical-align: middle; margin-left: 6px; }
+        .login-brand .tag { color: var(--fg-3); font-size: 14px; margin-top: 6px; }
+        .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px; box-shadow: var(--shadow); }
+        .login-card h2 { font-family: var(--serif); font-size: 26px; line-height: 1.1; margin-bottom: 20px; text-align: center; letter-spacing: -.01em; }
+        .login-card .field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .login-card .field label { font-size: 12px; color: var(--fg-3); font-weight: 500; }
+        .login-card .field input { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 10px 12px; font-size: 13px; color: var(--fg); font-family: inherit; }
+        .login-card .field input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+        .login-card .submit { width: 100%; margin-top: 4px; justify-content: center; padding: 10px 16px; font-size: 14px; }
+        .login-error { padding: 10px 12px; border-radius: 7px; background: rgba(204, 46, 61, .10); border: 1px solid rgba(204, 46, 61, .25); color: var(--red); font-size: 12.5px; margin-bottom: 14px; display: none; }
+        .login-error.show { display: block; }
+        .login-foot { text-align: center; color: var(--fg-3); font-size: 12.5px; margin-top: 18px; }
+        .login-foot code { font-family: var(--font-mono, "Geist Mono"); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; color: var(--fg); }
     </style>
 </head>
-<body class="h-screen flex items-center justify-center">
-    <div class="w-full max-w-md px-6">
-        <!-- Logo -->
-        <div class="text-center mb-8">
-            <div class="flex items-center justify-center gap-3 mb-2">
-                <span class="text-5xl">&#129443;</span>
-                <span class="font-bold text-3xl">Tusk</span>
-            </div>
-            <p class="text-[#8b949e]">Modern Data Platform</p>
+<body>
+    <div class="login-shell">
+        <div class="login-brand">
+            <span class="mark">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 19 C 5 12, 8 6, 13 5 C 17 4, 19 6, 18 9 L 14 14 L 16 19" stroke="var(--brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="14.5" cy="8.5" r="1.2" fill="var(--ink)"/>
+                </svg>
+            </span>
+            <span class="wordmark">Tusk</span>
+            <span class="badge">v0.4</span>
+            <div class="tag">Modern data platform</div>
         </div>
 
-        <!-- Login Card -->
-        <div class="bg-[#161b22] border border-[#30363d] rounded-lg p-6">
-            <h2 class="text-xl font-semibold mb-6 text-center">Sign in to your account</h2>
-
+        <div class="login-card">
+            <h2>Sign in</h2>
             <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2" for="username">Username</label>
-                        <input
-                            type="text"
-                            id="username"
-                            name="username"
-                            required
-                            autofocus
-                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
-                            placeholder="Enter your username"
-                        >
-                    </div>
+                <div id="error-message" class="login-error"></div>
 
-                    <div>
-                        <label class="block text-sm font-medium mb-2" for="password">Password</label>
-                        <input
-                            type="password"
-                            id="password"
-                            name="password"
-                            required
-                            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
-                            placeholder="Enter your password"
-                        >
-                    </div>
-
-                    <div id="error-message" class="hidden bg-red-500/20 border border-red-500/50 text-red-400 rounded-lg px-4 py-2 text-sm">
-                    </div>
-
-                    <button
-                        type="submit"
-                        id="login-btn"
-                        class="w-full bg-[#238636] hover:bg-[#2ea043] px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                        <i data-lucide="log-in" class="w-4 h-4"></i>
-                        Sign in
-                    </button>
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autofocus
+                           placeholder="admin">
                 </div>
+
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required
+                           placeholder="••••••••">
+                </div>
+
+                <button type="submit" id="login-btn" class="btn btn-brand submit">
+                    <i data-lucide="log-in"></i> Sign in
+                </button>
             </form>
         </div>
 
-        <!-- Footer -->
-        <div class="mt-6 text-center text-sm text-[#8b949e]">
-            <p>Default credentials: <code class="bg-[#161b22] px-1.5 py-0.5 rounded">admin</code> / <code class="bg-[#161b22] px-1.5 py-0.5 rounded">admin</code></p>
+        <div class="login-foot">
+            Default credentials: <code>admin</code> / <code>admin</code>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
+    document.addEventListener('DOMContentLoaded', () => {
+        lucide.createIcons();
+        checkAuthStatus();
+    });
 
-            // Check if already logged in
-            checkAuthStatus();
-        });
-
-        async function checkAuthStatus() {
-            try {
-                const res = await fetch('/api/auth/status');
-                const data = await res.json();
-
-                if (!data.auth_enabled) {
-                    // Auth not enabled, redirect to home
-                    window.location.href = '/';
-                    return;
-                }
-
-                if (data.user) {
-                    // Already logged in, redirect to home
-                    window.location.href = '/';
-                }
-            } catch (e) {
-                console.error('Failed to check auth status:', e);
-            }
+    async function checkAuthStatus() {
+        try {
+            const res = await fetch('/api/auth/status');
+            const data = await res.json();
+            if (!data.auth_enabled) { window.location.href = '/'; return; }
+            if (data.user) { window.location.href = '/'; }
+        } catch (e) {
+            console.error('Failed to check auth status:', e);
         }
+    }
 
-        async function handleLogin(event) {
-            event.preventDefault();
-
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('error-message');
-            const btn = document.getElementById('login-btn');
-
-            errorDiv.classList.add('hidden');
-
-            btn.disabled = true;
-            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Signing in...';
-            lucide.createIcons();
-
-            try {
-                const res = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
-                });
-
-                const data = await res.json();
-
-                if (data.success) {
-                    // Redirect to home or requested page
-                    const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
-                    window.location.href = redirect;
-                } else {
-                    errorDiv.textContent = data.error || 'Login failed';
-                    errorDiv.classList.remove('hidden');
-                }
-            } catch (e) {
-                errorDiv.textContent = 'Connection error: ' + e.message;
-                errorDiv.classList.remove('hidden');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i data-lucide="log-in" class="w-4 h-4"></i> Sign in';
-                lucide.createIcons();
+    async function handleLogin(event) {
+        event.preventDefault();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const errorDiv = document.getElementById('error-message');
+        const btn = document.getElementById('login-btn');
+        errorDiv.classList.remove('show');
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Signing in…';
+        lucide.createIcons();
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+                window.location.href = redirect;
+            } else {
+                errorDiv.textContent = data.error || 'Login failed';
+                errorDiv.classList.add('show');
             }
+        } catch (e) {
+            errorDiv.textContent = 'Connection error: ' + e.message;
+            errorDiv.classList.add('show');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="log-in"></i> Sign in';
+            lucide.createIcons();
         }
+    }
     </script>
 </body>
 </html>

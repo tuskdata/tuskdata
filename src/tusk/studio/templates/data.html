@@ -10,9 +10,8 @@
 {% endblock %}
 
 {% block header_actions %}
-<button onclick="showCode()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] rounded text-sm flex items-center gap-2">
-    <i data-lucide="code" class="w-4 h-4"></i>
-    View Code
+<button onclick="showCode()" class="btn btn-sm">
+    <i data-lucide="code"></i>View code
 </button>
 {% endblock %}
 
@@ -22,12 +21,12 @@
     <div class="drop-overlay-content">
         <i data-lucide="upload" class="w-12 h-12 mx-auto mb-3 text-indigo-400"></i>
         <div class="text-lg font-medium">Drop file to load</div>
-        <div class="text-sm text-[#8b949e] mt-1">CSV, Parquet, JSON, OSM/PBF</div>
+        <div class="text-sm" style="color:var(--fg-3)">CSV, Parquet, JSON, OSM/PBF</div>
     </div>
 </div>
-<!-- Left Sidebar - Sources & Transforms -->
-<aside id="data-sidebar" class="sidebar flex flex-col flex-shrink-0 overflow-hidden relative" x-data="resizableSidebar('data')" style="min-width: 180px; max-width: 480px;">
-    <div @mousedown="startResize($event)" class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#6366f1]/50 active:bg-[#6366f1] z-10 transition-colors"></div>
+<div class="studio-shell w-full">
+<aside id="data-sidebar" class="r-sidebar relative" x-data="resizableSidebar('data')">
+    <div class="resize-handle" @mousedown="startResize($event)"></div>
     <!-- Datasets Section -->
     <div class="p-3 border-b border-[#30363d]">
         <div class="flex items-center justify-between mb-3">
@@ -209,6 +208,7 @@
         </div>
     </div>
 </main>
+</div>
 {% endblock %}
 
 {% block modals %}

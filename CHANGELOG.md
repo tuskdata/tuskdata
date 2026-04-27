@@ -2,6 +2,51 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.3rc10] - 2026-04-26 — Real port: every core page on the new shell
+
+Continuing the full port (no more override hacks). Every core page
+now uses the mockup classes from `static/tusk-app.css` directly.
+
+### Pages ported in this release
+- **`login.html`** — full rewrite. Drops Tailwind+inline `bg-[#161b22]`
+  shell entirely. Uses `card`, `field`, `btn btn-brand`, design-token
+  inputs, serif `Sign in` heading, mammoth-tusk SVG, `v0.4` coral
+  badge. Loads `tusk-app.css` directly (this page doesn't extend
+  `base.html`).
+- **`profile.html`** — `dash-page` shell + `dash-head` serif title
+  + three `card`s with `field` form inputs. Permission/group chips
+  use `chip chip-violet` / `chip chip-neutral`.
+- **`cluster.html`** — full rewrite. `studio-shell` + `r-sidebar` with
+  redesign `side-section`/`side-label`/`side-item`/`dot` markup.
+  Scheduler form, workers list, Quick Start panel, CLI reference.
+  Main pane uses `dash-page` + `card` for submit-job form.
+- **`users.html`** — `dash-page` + `dash-head` + `nav-tabs` for
+  tabs (Users / Groups / Audit log). Tables use `dtable`. Audit log
+  filter controls become inline tokens; pager uses `btn btn-sm`.
+- **`data.html`** — sidebar shell ported to `r-sidebar` /
+  `resize-handle` / `studio-shell`. Internal sections (datasets,
+  transforms, saved pipelines, downloads) still use the legacy
+  markup but read from the design tokens through the override layer
+  — full per-section port lands when I get to round 3 of the data
+  page.
+
+### Top-nav settings link
+Pointed `/settings` (which doesn't exist as a page) to the actual
+notification-settings page at `/notifications/settings`. The 404
+the user kept hitting from the gear icon is gone.
+
+### Plugin ports — parallel sub-agent work
+- **`tusk-ci`**: 12 templates (`dashboard.html`, `pipeline.html`,
+  `run.html`, `vault.html`, `targets.html`, plus 7 partials). ~160
+  hex literals removed. Sidebars on the redesign shell, status
+  badges become `chip` variants, primary actions become
+  `btn btn-brand`. Inputs/selects/textareas drop their bespoke
+  styling and inherit from the design-token globals.
+- **`tusk-security`**: in flight (parallel agent).
+- **`tusk-bi`**: in flight (parallel agent).
+
+The sec / bi plugin pushes land in rc11 once their agents finish.
+
 ## [0.4.3rc9] - 2026-04-26 — Real port: mockup CSS as the source of truth
 
 Stop overriding, start porting. The full CSS from
