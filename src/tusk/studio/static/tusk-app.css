@@ -443,7 +443,11 @@ body[data-theme="dark"] .btn-primary{background:var(--fg);color:var(--ink)}
 
 /* ============ COMMAND PALETTE ============ */
 .cmdk-mask{position:fixed;inset:0;background:rgba(15,15,14,.4);backdrop-filter:blur(4px);z-index:100;display:none;align-items:start;justify-content:center;padding-top:120px}
-.cmdk-mask.open{display:flex}
+/* `!important` overrides any inline `style="display:none"` the template
+   sets as a defensive default — that fallback is what keeps the page
+   usable when JS fails to load. When Alpine adds the `open` class it
+   has to win. */
+.cmdk-mask.open{display:flex !important}
 .cmdk{width:560px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);box-shadow:var(--shadow-xl);overflow:hidden;animation:cmdkin .15s ease}
 @keyframes cmdkin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .cmdk-input{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}

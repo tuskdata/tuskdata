@@ -6,7 +6,7 @@
    `tusk-cmdk-open` event so other components (Ask AI button on the
    homepage) can pop it with a preset mode. */
 
-window.cmdkPalette = function () {
+function _cmdkFactory() {
   const PAGES = [
     { kind: "page", title: "Home",      icon: "home",        url: "/home" },
     { kind: "page", title: "Studio",    icon: "terminal",    url: "/studio" },
@@ -198,4 +198,24 @@ window.cmdkPalette = function () {
       this.close();
     },
   };
-};
+}
+
+// Register the Alpine component the way Alpine recommends — wait for
+// `alpine:init` to fire and then expose `cmdkPalette` via `Alpine.data`.
+// This avoids the race where the inline `x-data="cmdkPalette()"` evaluates
+// before this script has run, which used to throw `cmdkPalette is not
+// defined` and leave the overlay stuck visible blocking the page.
+function _cmdkRegister() {
+  if (window.Alpine && window.Alpine.data) {
+    window.Alpine.data("cmdkPalette", _cmdkFactory);
+  }
+}
+if (window.Alpine) {
+  _cmdkRegister();
+} else {
+  document.addEventListener("alpine:init", _cmdkRegister);
+}
+// Defense-in-depth: also expose as a global so any pre-existing
+// `x-data="cmdkPalette()"` markup keeps working even if the
+// `alpine:init` listener fires too late (rare, but cheap).
+window.cmdkPalette = _cmdkFactory;

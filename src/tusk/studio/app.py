@@ -2,6 +2,7 @@
 
 import asyncio
 import secrets
+import shutil
 from pathlib import Path
 from litestar import Litestar, Request, Response
 from litestar.middleware.base import AbstractMiddleware
@@ -53,6 +54,7 @@ from tusk.plugins.templates import (
     setup_plugin_templates,
     setup_plugin_statics,
     cleanup_plugin_statics,
+    PLUGIN_STATIC_DIR,
 )
 
 # Paths
@@ -280,8 +282,16 @@ def on_startup() -> None:
         except Exception as e:
             log.error("Plugin startup failed", plugin=plugin.name, error=str(e))
 
-    # Setup plugin templates and statics
+    # Setup plugin templates and statics. Templates still live in the
+    # venv (consumed once at import time) but static assets relocate to
+    # PLUGIN_STATIC_DIR (~/.tusk/plugin_static by default) so Docker
+    # deploys don't require a rebuild on plugin asset changes.
     setup_plugin_templates(TEMPLATES_DIR)
+
+    # Nuke any legacy in-venv copy from previous versions so requests
+    # can't accidentally hit a stale file via the first StaticFilesConfig.
+    shutil.rmtree(STATIC_DIR / "plugins", ignore_errors=True)
+
     setup_plugin_statics(STATIC_DIR)
 
     # Start the task scheduler
@@ -444,7 +454,14 @@ app = Litestar(
         StaticFilesConfig(
             directories=[STATIC_DIR],
             path="/static",
-        )
+        ),
+        # Plugin static assets live outside the venv so a Docker deploy
+        # doesn't require a rebuild on asset changes. The URL contract
+        # `/static/plugins/{id}/foo.js` is preserved.
+        StaticFilesConfig(
+            directories=[PLUGIN_STATIC_DIR],
+            path="/static/plugins",
+        ),
     ],
     compression_config=CompressionConfig(
         backend="zstd",

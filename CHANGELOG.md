@@ -2,6 +2,50 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.4.1] - 2026-04-27 — Frontend hotfix: cmdk overlay + studio.js TDZ/ASI
+
+Three JS bugs that left v0.4.4 unusable in the browser:
+
+1. **cmdk overlay frozen on top of every page**. `cmdk.js` was loaded
+   with `defer`, so Alpine evaluated `x-data="cmdkPalette()"` before
+   the global was defined. Alpine then left the directive in a half-
+   initialized state and the `.cmdk-mask` rendered with no `display:none`
+   binding, blocking every page behind a 100% opacity overlay. Fix:
+   load `cmdk.js` non-deferred (it's tiny), register the component via
+   `Alpine.data` on `alpine:init`, add `style="display:none"` as a hard
+   fallback on the overlay, and `!important` on `.cmdk-mask.open`'s
+   `display:flex` so the open class still wins.
+
+2. **`Cannot access 'currentEngine' before initialization`** —
+   `let currentEngine` lived at line 2354, but functions further up
+   the file referenced it at module-load time. JS's TDZ rule throws.
+   Hoisted the declaration to the top of `studio.js`.
+
+3. **`(intermediate value)(...) is not a function`** — classic ASI
+   bug: a comment-block sat between two statements, the second one was
+   an IIFE `(function …)()`, and JS parsed the whole thing as calling
+   the previous expression with the IIFE as an argument. Added leading
+   semicolons before the two IIFEs in `studio.js`.
+
+### Also new — frontend smoke tests (Playwright)
+
+`tests/test_frontend_smoke.py` boots `tusk studio` on a free port,
+hits every page in a headless Chromium, and asserts:
+
+- HTTP 200
+- No JS console errors / pageerrors
+- `.cmdk-mask` has computed `display:none` at first paint (catches
+  the v0.4.4 frozen-overlay bug specifically)
+- The topnav search button is clickable (catches any future overlay
+  intercepting clicks)
+- ⌘K opens the palette and focuses the input
+- Homepage renders the greeting and three stat cards with computed
+  values (no template placeholders left behind)
+
+The 11 tests caught all three bugs above on the very first run. Going
+forward, any deploy gets blocked by `pytest tests/test_frontend_smoke.py`
+failing.
+
 ## [0.4.4] - 2026-04-27 — Homepage, AI Copilot, Schema/Explore/Scheduled, Security II
 
 The first version where the redesign actually *does things*. New

@@ -11,6 +11,16 @@ import {searchKeymap, highlightSelectionMatches, selectNextOccurrence} from "htt
 import {closeBrackets, closeBracketsKeymap, completionKeymap} from "https://esm.sh/@codemirror/autocomplete@6"
 import {toggleLineComment} from "https://esm.sh/@codemirror/commands@6"
 
+// ─── Top-level state ─────────────────────────────────────────────
+// `currentEngine` is referenced from many functions further down the
+// file. With `let` it's in the temporal dead zone until the declaration
+// line executes, so a function called during module load (or by another
+// script before studio.js fully evaluated) used to throw
+// `Cannot access 'currentEngine' before initialization`. Hoisting the
+// declaration to the top fixes that.
+let currentEngine = 'postgres'; // 'postgres' | 'sqlite' | 'duckdb'
+window.currentEngine = currentEngine;
+
 // ─── HTML escape helper (XSS guard for innerHTML / attribute interpolation) ─
 // Used to safely interpolate user-controlled strings (connection names,
 // saved query names, history snippets, file paths) into innerHTML and
@@ -2340,8 +2350,8 @@ setInterval(() => {
 // ============================================================================
 // Engine Selection (PostgreSQL vs DuckDB)
 // ============================================================================
-
-let currentEngine = 'postgres'; // 'postgres', 'sqlite', or 'duckdb'
+// `currentEngine` is declared at the top of the file (hoisted out of
+// the TDZ) so functions defined earlier can reference it safely.
 
 window.setEngine = function(engine) {
     currentEngine = engine;
@@ -3575,7 +3585,12 @@ window.exportGeoJSON = function() {
 // Drag the thin bar between the editor and the results to resize the
 // editor pane. The editor host (`#sql-editor`) gets an explicit pixel
 // height; the results pane fills the rest.
-(function initSplitter() {
+//
+// Leading semicolon: the previous statement might end without one and
+// JS would parse `(function ...)` as a call on whatever the previous
+// expression evaluated to — exactly the bug the v0.4.4 frontend smoke
+// test caught (`(intermediate value)(...) is not a function`).
+;(function initSplitter() {
     const splitter = document.getElementById('editor-results-splitter');
     const editorHost = document.getElementById('sql-editor');
     if (!splitter || !editorHost) return;
@@ -3614,7 +3629,7 @@ window.exportGeoJSON = function() {
 // ─── Mobile / responsive niceties ───────────────────────────────
 // On narrow viewports, the sidebar would push the editor offscreen.
 // Add a "Sidebar" toggle button + sticky overlay behavior.
-(function initResponsive() {
+;(function initResponsive() {
     if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
         const aside = document.querySelector('aside.sidebar');
         if (aside && !aside.dataset.collapsed) {

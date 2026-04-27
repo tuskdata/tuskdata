@@ -34,7 +34,11 @@
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/studio-redesign.css">
     <script src="/static/tusk-fetch.js"></script>
-    <script defer src="/static/cmdk.js"></script>
+    <script src="/static/tusk-utils.js"></script>
+    <!-- cmdk MUST register the Alpine component before alpine:init fires.
+         Loading non-deferred guarantees `cmdkPalette` is defined when
+         Alpine processes `x-data="cmdkPalette()"`. -->
+    <script src="/static/cmdk.js"></script>
     {% block head %}{% endblock %}
     {% block styles %}<style></style>{% endblock %}
 </head>
@@ -174,9 +178,16 @@
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Command palette (⌘K). Single global instance from base.html — every
-         page inherits it without wiring. -->
+         page inherits it without wiring.
+         Inline `style="display:none"` is a hard fallback so the overlay
+         stays hidden if `cmdkPalette()` ever fails to register — the bug
+         we hit in v0.4.4 left the entire homepage unusable behind a
+         frozen full-screen overlay. -->
     <div x-data="cmdkPalette()" x-init="init()" x-cloak>
-        <div class="cmdk-mask" :class="open ? 'open' : ''" @click="close()">
+        <div class="cmdk-mask"
+             :class="open ? 'open' : ''"
+             style="display:none"
+             @click="close()">
             <div class="cmdk" @click.stop>
                 <div class="cmdk-input">
                     <i data-lucide="search"></i>
