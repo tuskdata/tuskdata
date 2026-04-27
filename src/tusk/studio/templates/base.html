@@ -93,7 +93,7 @@
             {% block header_actions %}{% endblock %}
 
             <button class="kbd-search" type="button"
-                    @click="$dispatch('tusk-cmdk-open')"
+                    onclick="window.dispatchEvent(new CustomEvent('tusk-cmdk-open'))"
                     title="Search (⌘K)">
                 <i data-lucide="search"></i>
                 <span class="grow">Search or jump to…</span>

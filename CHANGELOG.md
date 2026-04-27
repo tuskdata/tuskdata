@@ -2,6 +2,21 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.4.2] - 2026-04-27 — Frontend hotfix: search button click
+
+The ⌘K shortcut opened the palette but clicking the topnav search
+button did nothing. The button used `@click="$dispatch('tusk-cmdk-open')"`,
+which is an Alpine directive that silently no-ops when the element
+has no `x-data` ancestor — and the topnav is rendered outside any
+Alpine component scope.
+
+Fix: switch to a plain `onclick` that calls
+`window.dispatchEvent(new CustomEvent('tusk-cmdk-open'))`. Same
+event, no Alpine dependency.
+
+Added `test_cmdk_opens_with_search_button` to the Playwright suite
+so this exact regression can't slip through again.
+
 ## [0.4.4.1] - 2026-04-27 — Frontend hotfix: cmdk overlay + studio.js TDZ/ASI
 
 Three JS bugs that left v0.4.4 unusable in the browser:

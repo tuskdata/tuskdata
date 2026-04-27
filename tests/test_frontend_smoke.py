@@ -173,6 +173,35 @@ def test_page_renders_without_js_errors(tusk_server, path, landmark):
     assert not errors, f"{path} produced JS errors:\n" + "\n".join(errors)
 
 
+def test_cmdk_opens_with_search_button(tusk_server):
+    """Clicking the search button in the topnav opens the palette.
+
+    Regression catch: in v0.4.4.1 the button used `@click="$dispatch(...)"`
+    which silently no-ops when the topnav has no Alpine x-data ancestor,
+    so only ⌘K worked. Switched to a plain `onclick` with
+    `window.dispatchEvent(new CustomEvent(...))`.
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(f"{tusk_server}/home", wait_until="networkidle")
+
+        page.locator(".kbd-search").first.click()
+
+        page.wait_for_function(
+            "() => { const el = document.querySelector('.cmdk-mask');"
+            "  return el && getComputedStyle(el).display !== 'none'; }",
+            timeout=2_000,
+        )
+        page.wait_for_function(
+            "() => document.activeElement && document.activeElement.tagName === 'INPUT'",
+            timeout=2_000,
+        )
+
+        page.keyboard.press("Escape")
+        browser.close()
+
+
 def test_cmdk_opens_with_keyboard(tusk_server):
     """⌘K / Ctrl+K opens the command palette."""
     with sync_playwright() as p:
