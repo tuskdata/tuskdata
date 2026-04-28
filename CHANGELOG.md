@@ -2,6 +2,62 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.7] - 2026-04-28 — AI Copilot: real schema + conversation memory
+
+The AI was hallucinating tables because every prompt got fed only
+the first 30 tables with column types — no PKs, no FKs, no row
+counts, no relationship between consecutive prompts.
+
+### Schema introspection that actually grounds the model
+
+`_schema_summary` rewritten to query `pg_catalog` directly:
+
+- One `SELECT … FROM pg_attribute JOIN pg_class JOIN pg_constraint`
+  pulls every column with its type, NOT NULL flag, primary-key
+  membership, and foreign-key target in a single round trip.
+- The output ships in two sections to the model:
+  1. **Available tables** — every table name with column count and
+    `pg_stat_user_tables.n_live_tup` row count, sorted largest-first
+    (up to 120 tables).
+  2. **Detailed schema** — full column list, PK/FK markers, NOT NULL
+    flags for tables whose name or column names match keywords from
+    the user's prompt, plus their FK-referenced neighbors (1-hop).
+- 3 KB cap on the detailed section so the prompt stays bounded for
+  8k-context models.
+- Stop-word list strips Spanish/English filler ("muestra", "todas",
+  "the", "for") so token matching only fires on real keywords.
+- System prompt now explicitly forbids inventing tables or columns:
+  "ONLY reference tables and columns that appear in the schema
+  reference below — never invent table or column names."
+
+### Conversation memory
+
+New `tusk.core.ai_memory` module — SQLite at
+`~/.tusk/ai_memory.db` with two tables (`conversations`,
+`conversation_meta`). API:
+
+- `add_turn(session_key, role, content)`
+- `get_recent_turns(session_key, limit=10)`
+- `clear_session(session_key)`
+- `prune_stale_sessions()` — runs daily, drops sessions untouched
+  for 30 days.
+
+Session keys are `u:{user_id}:c:{conn_id}` in multi-user mode and
+`csrf:{token[:16]}:c:{conn_id}` in single-user mode, so swapping
+connections gives a fresh thread but the same browser tab keeps
+context across reloads. Last 8 turns prepend the prompt for `/sql`
+and last 4 for `/explain`. Each turn capped at 400 chars; total
+conversation budget 1.2 KB.
+
+### UI
+
+The AI panel header grows an eraser button — "Forget this
+conversation". Calls `POST /api/ai/clear-memory` and replaces the
+body with a "Memory cleared" empty state.
+
+Scheduler hook `ai_memory_prune` runs daily so the local SQLite
+doesn't grow forever.
+
 ## [0.4.6.2] - 2026-04-27 — Editor "Mark decorations may not be empty" fix
 
 `highlightQueryError` could feed CodeMirror an empty range

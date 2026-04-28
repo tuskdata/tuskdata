@@ -325,6 +325,19 @@ def on_startup() -> None:
     except Exception as e:
         log.warning("Failed to register session cleanup", error=str(e))
 
+    # Prune AI conversation memory daily — drops sessions untouched
+    # for 30 days so the local SQLite doesn't grow forever.
+    try:
+        from tusk.core.ai_memory import prune_stale_sessions
+        scheduler.add_interval_job(
+            prune_stale_sessions,
+            job_id="ai_memory_prune",
+            name="Prune stale AI conversations",
+            hours=24,
+        )
+    except Exception as e:
+        log.warning("Failed to register AI memory prune job", error=str(e))
+
     # Schedule temp export + upload cleanup every 30 min
     import tempfile
     def cleanup_temp_files():

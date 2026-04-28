@@ -39,6 +39,10 @@
                     <i data-lucide="sparkles"></i>
                     <span class="title">Ask AI</span>
                     <span class="meta" id="tusk-ai-meta"></span>
+                    <button class="close" onclick="window.tuskAI.clearMemory()" title="Forget this conversation"
+                            style="margin-right:4px;width:auto;padding:0 8px;font-size:11px">
+                        <i data-lucide="eraser"></i>
+                    </button>
                     <button class="close" onclick="window.tuskAI.close()" title="Close (Esc)">
                         <i data-lucide="x"></i>
                     </button>
@@ -328,6 +332,25 @@
             });
             tuskToast("SQL inserted", "success");
             window.tuskAI.close();
+        },
+        async clearMemory() {
+            try {
+                await tuskFetchJSON("/api/ai/clear-memory", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        connection_id: _currentConnectionId(),
+                    }),
+                });
+                tuskToast("Conversation cleared", "success");
+                _renderBody(`
+                    <div class="tusk-ai-empty">
+                        <i data-lucide="check"></i>
+                        Memory cleared. Next prompt starts fresh.
+                    </div>
+                `);
+            } catch (e) {
+                tuskToast("Could not clear memory: " + e.message, "error");
+            }
         },
         replace() {
             const r = STATE.last_response;
