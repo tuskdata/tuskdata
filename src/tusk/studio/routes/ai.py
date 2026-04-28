@@ -167,7 +167,11 @@ class AICopilotController(Controller):
             "Generate concise, correct PostgreSQL by default unless the "
             "user specifies a different dialect. Respond with ONLY the "
             "SQL inside a fenced ```sql block, followed by a one-line "
-            "explanation prefixed with `-- `. No prose outside the block."
+            "explanation prefixed with `-- `. No prose outside the block. "
+            "Match the language of the user's prompt — if they wrote in "
+            "Spanish, write the `-- ` explanation in Spanish; if French, "
+            "in French; etc. SQL keywords stay in English (PostgreSQL "
+            "reserved words are not translated)."
         )
         full_prompt = (
             f"{prompt}\n\n"
@@ -198,7 +202,10 @@ class AICopilotController(Controller):
         system = (
             "Explain this SQL in 2–4 short sentences. Mention which "
             "tables are read, what filter/aggregate is applied, and any "
-            "performance gotchas. No code blocks."
+            "performance gotchas. No code blocks. "
+            "Respond in the same language the user is using — infer it "
+            "from any natural-language hint in the prompt; default to "
+            "English if there isn't one."
         )
         prompt = f"### SQL\n```sql\n{sql}\n```\n" + (f"\n### Schema\n{schema_text}\n" if schema_text else "")
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -481,11 +482,22 @@ async def compute_suggestions() -> list[dict]:
                     sql = (e.sql or "").strip().replace("\n", " ")[:120]
                     lines.append(f"- {e.execution_time_ms or 0:.0f}ms · {sql}")
                 history_text = "\n".join(lines)
+                # Pick the language: env override or auto-detect from
+                # the SQL comments / system locale. Defaults to whatever
+                # the user has been using in their queries — qwen and
+                # claude both read SQL comments fine, so a Spanish
+                # comment in history will pull a Spanish answer.
+                lang_hint = os.environ.get("TUSK_AI_LANG", "")
+                lang_line = (
+                    f"Respond in {lang_hint}." if lang_hint
+                    else "Match the language used in the SQL comments above; "
+                         "default to English if there are no comments."
+                )
                 insight = await provider.complete(
                     f"Here are my last queries (most recent first):\n{history_text}\n\n"
                     "Give me ONE short, specific observation about my workload — a slow "
                     "pattern, a missing index, a duplicated query, or a data-quality concern. "
-                    "≤30 words. No preamble. Plain text, no markdown.",
+                    f"≤30 words. No preamble. Plain text, no markdown. {lang_line}",
                     system="You are a database performance analyst. Be terse and specific.",
                     max_tokens=80,
                     temperature=0.3,

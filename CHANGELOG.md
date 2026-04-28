@@ -2,6 +2,16 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.6.1] - 2026-04-27 — AI Copilot speaks the user's language
+
+The system prompts hardcoded English-only output. The models can
+all speak Spanish (and many others) but I was forcing English
+through the system prompt. Updated all three prompts (sql, explain,
+homepage insight) to mirror the user's language. SQL keywords stay
+English (PostgreSQL reserved words aren't translated), explanations
+match the prompt language. Optional `TUSK_AI_LANG` env var pins the
+homepage-insight language explicitly.
+
 ## [0.4.6] - 2026-04-27 — Wire the AI Copilot to actually do things
 
 The plumbing was right but no UI consumed it. Fixed:
