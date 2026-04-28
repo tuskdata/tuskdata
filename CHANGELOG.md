@@ -2,6 +2,28 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.6.2] - 2026-04-27 — Editor "Mark decorations may not be empty" fix
+
+`highlightQueryError` could feed CodeMirror an empty range
+(from == to) when the server's error position fell at or past the
+end of the document. CodeMirror's `Decoration.mark` rejects empty
+ranges with `Mark decorations may not be empty`, which surfaced as
+a red banner in the results pane after running an AI-generated
+query that the server flagged.
+
+Two layers of defense:
+1. `highlightQueryError` clamps `offset` to `doc.length - 1`,
+   bumps `end` to `offset + 1` if equal, and bails if the doc is
+   empty or the range still ends up degenerate.
+2. The `queryErrorField` state-field reducer skips the
+   `Decoration.mark` call entirely when `to <= from` instead of
+   throwing.
+
+New regression test `test_studio_query_error_does_not_crash_editor`
+calls `highlightQueryError` with edge positions (0 / 1 / 9999 /
+past-end on an empty doc) and asserts no `Mark decorations` error
+makes it to the JS console.
+
 ## [0.4.6.1] - 2026-04-27 — AI Copilot speaks the user's language
 
 The system prompts hardcoded English-only output. The models can

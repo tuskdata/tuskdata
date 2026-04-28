@@ -50,9 +50,16 @@ const queryErrorField = StateField.define({
             if (e.is(clearQueryError)) deco = Decoration.none;
             else if (e.is(setQueryError)) {
                 const {from, to} = e.value;
-                deco = Decoration.set([
-                    Decoration.mark({class: "cm-query-error"}).range(from, to),
-                ]);
+                // Defensive: CodeMirror's `Decoration.mark` throws
+                // `Mark decorations may not be empty` when from >= to.
+                // The caller should never dispatch an empty range, but
+                // off-by-one bugs at end-of-doc used to slip through —
+                // skip rather than crash the editor.
+                if (typeof from === "number" && typeof to === "number" && to > from) {
+                    deco = Decoration.set([
+                        Decoration.mark({class: "cm-query-error"}).range(from, to),
+                    ]);
+                }
             }
         }
         // Auto-clear on any further edit
@@ -73,13 +80,21 @@ const queryErrorTheme = EditorView.theme({
 window.highlightQueryError = function(position) {
     if (!editor || !position) return;
     const doc = editor.state.doc;
-    const offset = Math.max(0, Math.min(doc.length, position - 1));
+    if (doc.length === 0) return;  // empty doc — nothing to highlight
+    let offset = Math.max(0, Math.min(doc.length - 1, position - 1));
     // Underline from offset to end of token (next whitespace/punctuation).
     const text = doc.toString();
     let end = offset;
     while (end < text.length && /[A-Za-z0-9_.]/.test(text[end])) end++;
-    if (end === offset) end = Math.min(text.length, offset + 1);
-    editor.dispatch({effects: setQueryError.of({from: offset, to: end})});
+    // Always keep `end > offset` so Decoration.mark gets a non-empty range.
+    if (end <= offset) end = Math.min(text.length, offset + 1);
+    if (end <= offset) {
+        // Last-resort: walk one back if we're at the very end.
+        offset = Math.max(0, end - 1);
+    }
+    if (end > offset) {
+        editor.dispatch({effects: setQueryError.of({from: offset, to: end})});
+    }
 };
 
 window.clearQueryErrorHighlight = function() {

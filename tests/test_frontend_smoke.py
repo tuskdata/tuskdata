@@ -298,6 +298,43 @@ def test_ai_provider_accepts_local_urls():
     assert provider.base_url == "http://10.0.0.188:11434"
 
 
+def test_studio_query_error_does_not_crash_editor(tusk_server):
+    """Highlighting a SQL parse-error position must never throw a
+    `Mark decorations may not be empty` from CodeMirror.
+
+    Regression catch: in v0.4.6.1 a query that ran fine but had an
+    error reported at position == doc.length crashed the editor with
+    that exact message — `highlightQueryError` produced an empty
+    Decoration.mark range.
+    """
+    errors: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        _collect_console_errors(page, errors)
+        page.goto(f"{tusk_server}/studio", wait_until="networkidle")
+
+        # Drive the highlight directly — server doesn't have a real
+        # connection in the test fixture, so we exercise the function
+        # the same way a real error response would.
+        page.wait_for_function("() => typeof window.highlightQueryError === 'function'", timeout=5_000)
+        for pos in [0, 1, 9999]:  # edges + past-end
+            page.evaluate(f"window.highlightQueryError({pos})")
+        # Force a doc that's empty + position past end — the original bug.
+        page.evaluate("""
+            if (window.editor) {
+                window.editor.dispatch({
+                    changes: { from: 0, to: window.editor.state.doc.length, insert: '' }
+                });
+            }
+            window.highlightQueryError(50);
+        """)
+        browser.close()
+
+    mark_errors = [e for e in errors if "Mark decorations may not be empty" in e]
+    assert not mark_errors, f"highlightQueryError crashed the editor:\n" + "\n".join(mark_errors)
+
+
 def test_homepage_renders_real_stats(tusk_server):
     """Homepage greeting + stat cards must render with computed values
     (not template literal placeholders)."""
