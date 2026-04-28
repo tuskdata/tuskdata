@@ -2,6 +2,15 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.7.1] - 2026-04-28 — Settings hub at /settings
+
+The AI settings page existed at `/settings/ai` since v0.4.4 but
+the only entry to it was typing the URL by hand — the topnav gear
+icon went straight to `/notifications/settings`, hiding everything
+else. New `/settings` hub page lists each settings category as a
+card (AI Copilot, Notifications, Profile, Users & Groups). The
+gear icon now opens the hub. Sub-pages keep their URLs.
+
 ## [0.4.7] - 2026-04-28 — AI Copilot: real schema + conversation memory
 
 The AI was hallucinating tables because every prompt got fed only

@@ -246,6 +246,13 @@ class PageController(TuskController):
             connections=connections,
         )
 
+    @get("/settings")
+    async def settings_hub(self) -> Template:
+        """Settings hub — lists every settings category in one place
+        (AI Copilot, notifications, anything plugins register later).
+        Reachable from the top-nav gear icon."""
+        return self.render("settings_hub.html", active_page="settings")
+
     @get("/login")
     async def login(self) -> Template:
         """Login page"""

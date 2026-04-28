@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Tusk{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <div class="settings-head">
+        <div>
+            <h1 class="settings-title">Settings</h1>
+            <p class="settings-sub">Configure Tusk's behaviour. Changes take effect immediately.</p>
+        </div>
+    </div>
+
+    <div class="settings-hub-grid">
+        <a class="settings-hub-card" href="/settings/ai">
+            <div class="settings-hub-icon" style="background:var(--brand-soft);color:var(--brand)">
+                <i data-lucide="sparkles"></i>
+            </div>
+            <div class="settings-hub-body">
+                <div class="settings-hub-title">AI Copilot</div>
+                <div class="settings-hub-desc">Pick a provider (Ollama, OpenAI, Anthropic) and the model used for SQL generation, query explanations, and homepage suggestions.</div>
+            </div>
+            <i data-lucide="chevron-right" class="settings-hub-chev"></i>
+        </a>
+
+        <a class="settings-hub-card" href="/notifications/settings">
+            <div class="settings-hub-icon" style="background:rgba(111,90,214,.10);color:var(--accent-violet)">
+                <i data-lucide="bell"></i>
+            </div>
+            <div class="settings-hub-body">
+                <div class="settings-hub-title">Notifications</div>
+                <div class="settings-hub-desc">Wire up Slack, Discord, email, or custom webhooks. Pick which events fire which channel.</div>
+            </div>
+            <i data-lucide="chevron-right" class="settings-hub-chev"></i>
+        </a>
+
+        <a class="settings-hub-card" href="/profile">
+            <div class="settings-hub-icon" style="background:rgba(13,138,114,.10);color:var(--accent-teal)">
+                <i data-lucide="user"></i>
+            </div>
+            <div class="settings-hub-body">
+                <div class="settings-hub-title">Profile</div>
+                <div class="settings-hub-desc">Display name, password, theme. Multi-user mode also shows your group memberships and permissions.</div>
+            </div>
+            <i data-lucide="chevron-right" class="settings-hub-chev"></i>
+        </a>
+
+        <a class="settings-hub-card" href="/users">
+            <div class="settings-hub-icon" style="background:rgba(176,119,0,.10);color:var(--accent-amber)">
+                <i data-lucide="users"></i>
+            </div>
+            <div class="settings-hub-body">
+                <div class="settings-hub-title">Users &amp; Groups</div>
+                <div class="settings-hub-desc">Multi-user only. Invite teammates, manage groups, assign per-connection permissions.</div>
+            </div>
+            <i data-lucide="chevron-right" class="settings-hub-chev"></i>
+        </a>
+    </div>
+</div>
+{% endblock %}

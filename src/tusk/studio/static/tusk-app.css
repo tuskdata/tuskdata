@@ -555,3 +555,14 @@ body[data-theme="dark"] .btn-primary{background:var(--fg);color:var(--ink)}
 .tusk-ai-result-head .chip svg{width:11px;height:11px}
 .tusk-ai-sql{margin:0;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:"Geist Mono";font-size:12.5px;line-height:1.5;color:var(--fg);overflow-x:auto;white-space:pre-wrap}
 .tusk-ai-explanation{padding:10px 12px;background:var(--surface-2);border-radius:6px;font-size:12.5px;color:var(--fg-2);line-height:1.55}
+
+/* ============ SETTINGS HUB ============ */
+.settings-hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+.settings-hub-card{display:flex;align-items:center;gap:14px;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);text-decoration:none;color:var(--fg);transition:all .12s;cursor:pointer}
+.settings-hub-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm);transform:translateY(-1px)}
+.settings-hub-icon{width:40px;height:40px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.settings-hub-icon svg{width:18px;height:18px}
+.settings-hub-body{flex:1;min-width:0}
+.settings-hub-title{font-size:14px;font-weight:600;color:var(--fg);margin-bottom:2px}
+.settings-hub-desc{font-size:12.5px;color:var(--fg-3);line-height:1.4}
+.settings-hub-chev{width:14px;height:14px;color:var(--fg-4);flex-shrink:0}
