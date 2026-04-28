@@ -465,9 +465,43 @@ async def compute_suggestions() -> list[dict]:
     except Exception as e:
         log.debug("suggestion: repeated queries skipped", error=str(e))
 
-    # 2. AI-disabled hint (only when there's no provider, so users see
-    #    something on first run instead of a blank panel).
-    if get_provider() is None:
+    provider = get_provider()
+
+    # 2. AI-generated insight (only when a provider IS configured).
+    #    Feed the model the last 50 history rows + a couple of stats and
+    #    ask for one concrete observation. Cheap (<200 tokens, ~1s).
+    if provider is not None:
+        try:
+            from tusk.core.history import get_history
+            h = get_history()
+            recent = h.get_recent(limit=50)
+            if recent:
+                lines = []
+                for e in recent[:30]:
+                    sql = (e.sql or "").strip().replace("\n", " ")[:120]
+                    lines.append(f"- {e.execution_time_ms or 0:.0f}ms · {sql}")
+                history_text = "\n".join(lines)
+                insight = await provider.complete(
+                    f"Here are my last queries (most recent first):\n{history_text}\n\n"
+                    "Give me ONE short, specific observation about my workload — a slow "
+                    "pattern, a missing index, a duplicated query, or a data-quality concern. "
+                    "≤30 words. No preamble. Plain text, no markdown.",
+                    system="You are a database performance analyst. Be terse and specific.",
+                    max_tokens=80,
+                    temperature=0.3,
+                )
+                insight = (insight or "").strip()
+                if insight:
+                    out.append({
+                        "kind": "ai",
+                        "icon": "sparkles",
+                        "message": insight,
+                    })
+        except Exception as e:
+            log.debug("suggestion: AI insight skipped", error=str(e))
+    else:
+        # AI-disabled hint (only when there's no provider, so users see
+        # something on first run instead of a blank panel).
         out.append({
             "kind": "config",
             "icon": "sparkles",

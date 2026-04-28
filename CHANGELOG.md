@@ -2,6 +2,46 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.6] - 2026-04-27 — Wire the AI Copilot to actually do things
+
+The plumbing was right but no UI consumed it. Fixed:
+
+### Studio "Ask AI" panel
+
+New `Ask AI` button in the editor toolbar (next to the renamed
+`Plan` button — clearer split: Plan = Postgres EXPLAIN, Ask AI =
+LLM). `Cmd/Ctrl+I` opens it from anywhere.
+
+The panel sits as an overlay on top of any page (loaded once from
+`base.html`) and:
+- detects whether the editor is empty or has SQL,
+- offers presets ("Explain current SQL", "Optimize current SQL"),
+- accepts free-form prompts → POST `/api/ai/sql` → renders the
+  generated SQL with **Insert** (append at cursor) and **Replace**
+  (overwrite editor) buttons,
+- routes "explain"-style prompts to `/api/ai/explain` and renders
+  the explanation,
+- shows the configured provider/model in the header so you know
+  which model just answered,
+- 412 from the API → renders a "Configure AI" empty state with a
+  link to `/settings/ai` instead of failing silently.
+
+### Homepage AI insights
+
+`compute_suggestions()` now actually calls the configured provider:
+feeds the model the last ~30 history rows and asks for a single
+specific observation about the workload (slow pattern, missing
+index, duplicated query). Bounded at 80 tokens, ~1s. Skipped when
+no provider is set up — the existing "Configure AI" hint shows
+instead.
+
+### cmdk → Ask AI inline
+
+When the cmdk palette returns "Ask AI: …" and the user is already
+on a page where `tuskAI` is loaded (i.e. anything that extends
+`base.html`), it now opens the AI panel inline with the prompt
+pre-filled instead of full-page-navigating to `/studio?ai=…`.
+
 ## [0.4.5.3] - 2026-04-27 — AI Copilot: drop httpx for stdlib urllib
 
 After 0.4.5.2 the container still rejected `httpx.post(json=...)` with

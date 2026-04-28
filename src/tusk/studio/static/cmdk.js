@@ -189,10 +189,21 @@ function _cmdkFactory() {
         return;
       }
       if (action && action.type === "ai") {
-        // Inline AI prompt — needs a connection context to be truly useful.
-        // For v0.4.4 we route to Studio with a query parameter that the
-        // Studio can render the AI panel for.
-        window.location.href = `/studio?ai=${encodeURIComponent(action.prompt)}`;
+        // If we're already on Studio with the editor + AI panel
+        // available, open the panel inline. Otherwise navigate there
+        // and the prompt is preserved in the query string for the
+        // Studio bootstrap to pick up.
+        this.close();
+        if (window.tuskAI && typeof window.tuskAI.open === "function") {
+          await window.tuskAI.open();
+          const input = document.getElementById("tusk-ai-input");
+          if (input) {
+            input.value = action.prompt;
+            input.focus();
+          }
+        } else {
+          window.location.href = `/studio?ai=${encodeURIComponent(action.prompt)}`;
+        }
         return;
       }
       this.close();

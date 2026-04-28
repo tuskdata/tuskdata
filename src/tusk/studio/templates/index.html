@@ -123,8 +123,11 @@
                             </span>
                         </div>
                         <div class="right">
-                            <button class="btn btn-sm btn-ghost icon-coral" onclick="explainCurrentQuery()" title="EXPLAIN this query">
-                                <i data-lucide="sparkles"></i>Explain
+                            <button class="btn btn-sm btn-ghost icon-coral" onclick="window.tuskAI.open()" title="Ask AI to explain or generate SQL (Cmd+I)">
+                                <i data-lucide="sparkles"></i>Ask AI
+                            </button>
+                            <button class="btn btn-sm btn-ghost" onclick="explainCurrentQuery()" title="EXPLAIN PLAN — Postgres query plan">
+                                <i data-lucide="activity"></i>Plan
                             </button>
                             <button class="btn btn-sm btn-ghost" onclick="formatCurrentQuery()" title="Pretty-print the SQL">
                                 <i data-lucide="wand-2"></i>Format
