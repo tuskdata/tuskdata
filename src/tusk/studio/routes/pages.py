@@ -335,7 +335,23 @@ class PageController(TuskController):
             )
             raise NotFoundException("plugin asset not found")
 
-        media_type, _ = mimetypes.guess_type(str(target))
+        # Force correct MIME for types `mimetypes.guess_type` misses on
+        # some Python builds. `.mjs` returning `application/octet-stream`
+        # would make browsers reject `<script type="module">` imports
+        # (BI plugin ships ESM); `.wasm` would similarly fail.
+        suffix = target.suffix.lower()
+        _MIME_OVERRIDES = {
+            ".mjs": "text/javascript",
+            ".js":  "text/javascript",
+            ".css": "text/css",
+            ".wasm": "application/wasm",
+            ".svg": "image/svg+xml",
+            ".json": "application/json",
+            ".map": "application/json",
+        }
+        media_type = _MIME_OVERRIDES.get(suffix)
+        if not media_type:
+            media_type, _ = mimetypes.guess_type(str(target))
         return File(
             path=target,
             media_type=media_type or "application/octet-stream",

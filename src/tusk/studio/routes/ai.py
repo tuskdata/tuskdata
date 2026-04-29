@@ -12,6 +12,8 @@ from litestar import Controller, Request, get, post
 from litestar.params import Body
 from litestar.response import Template
 
+import msgspec
+
 from tusk.core.ai import (
     PROVIDER_DEFAULTS,
     AIConfig,
@@ -24,9 +26,33 @@ from tusk.core.ai import (
     load_config,
     save_config,
 )
+from tusk.core.ai_struct import complete_struct
 from tusk.core.crypto import is_encrypted
 from tusk.core.logging import get_logger
 from tusk.studio.routes.base import TuskController
+
+
+# ──────────────────────── Structured response shapes ────────────────────────
+
+
+class SQLResponse(msgspec.Struct):
+    """Schema-validated reply to /api/ai/sql.
+
+    The model is asked to return JSON with these exact fields. A small
+    model that ignores prose-format instructions can still hit this,
+    because msgspec rejects anything that doesn't match the schema and
+    `complete_struct` retries once with a remediation note.
+    """
+    sql: str  # the generated PostgreSQL statement, no fences, no comments
+    explanation: str  # one-line natural-language summary in user's language
+    confidence: str = "medium"  # "high" | "medium" | "low" — model's self-grade
+
+
+class ExplainResponse(msgspec.Struct):
+    """Schema-validated reply to /api/ai/explain."""
+    explanation: str  # 2-4 short sentences in user's language
+    tables: list[str] = []  # tables the SQL reads/writes
+    warnings: list[str] = []  # performance gotchas, locks, full table scans, etc.
 
 log = get_logger("ai_routes")
 
@@ -155,6 +181,9 @@ class AICopilotController(Controller):
         prompt = str(data.get("prompt", "")).strip()
         if not prompt:
             return {"error": "prompt required", "code": 400}
+        # Cap to keep token cost (and ai_memory.db size) bounded.
+        if len(prompt) > 8_000:
+            return {"error": "prompt too long (max 8000 chars)", "code": 400}
 
         connection_id = data.get("connection_id")
         schema_text = ""
@@ -170,20 +199,43 @@ class AICopilotController(Controller):
             max_chars=1200,
         )
 
+        # Few-shot examples — small models (qwen 3b/7b) ignore format
+        # instructions written in prose; concrete examples FIX it.
+        # Two shots: one EN, one ES, one with a "table doesn't exist"
+        # case so the model learns to admit when it can't answer.
+        few_shots = (
+            "### Examples\n"
+            "Question: List the 5 most recent orders\n"
+            "→ {\"sql\":\"SELECT id, customer_id, total, created_at FROM orders ORDER BY created_at DESC LIMIT 5\","
+            "\"explanation\":\"Returns the five most recently created orders.\","
+            "\"confidence\":\"high\"}\n\n"
+            "Pregunta: cuántas discotecas hay por sector\n"
+            "→ {\"sql\":\"SELECT sector, COUNT(*) AS total FROM geo_pois "
+            "WHERE subcategoria = 'nightclub' GROUP BY sector ORDER BY total DESC\","
+            "\"explanation\":\"Cuenta los POIs marcados como nightclub agrupados por sector.\","
+            "\"confidence\":\"high\"}\n\n"
+            "Question: which patients have high blood pressure\n"
+            "→ {\"sql\":\"-- the schema doesn't include a patients or vitals table; "
+            "ask which dataset to use\",\"explanation\":\"No patient or vital-sign tables in this schema. "
+            "Tell me which connection holds the medical data.\",\"confidence\":\"low\"}"
+        )
+
         system = (
             "You are a SQL assistant for the Tusk data platform. "
             "Generate concise, correct PostgreSQL by default unless the "
             "user specifies a different dialect. "
-            "ONLY reference tables and columns that appear in the "
-            "schema reference below — never invent table or column "
-            "names. If the user's question can't be answered from the "
-            "available schema, respond with a fenced sql block "
-            "containing a single comment explaining what's missing. "
-            "Respond with the SQL inside a fenced ```sql block, "
-            "followed by a one-line explanation prefixed with `-- `. "
-            "No prose outside the block. "
-            "Match the language of the user's prompt for the `-- ` "
-            "explanation. SQL keywords stay in English."
+            "ONLY reference tables and columns that appear in the schema "
+            "reference below — never invent table or column names. If "
+            "the user's question can't be answered from the available "
+            "schema, return a `sql` field starting with `-- ` that "
+            "explains what's missing, and set `confidence` to `low`. "
+            "Match the language of the user's prompt for the "
+            "`explanation` field. SQL keywords stay in English. "
+            "The `sql` field must be ONLY the SQL statement — no fences, "
+            "no leading prose. Set `confidence` honestly: high when the "
+            "schema directly answers the question, medium when you're "
+            "guessing at table relationships, low when you can't fully "
+            "answer.\n\n" + few_shots
         )
         parts: list[str] = []
         if history_text:
@@ -194,23 +246,29 @@ class AICopilotController(Controller):
         full_prompt = "\n\n".join(parts)
 
         try:
-            text = await provider.complete(full_prompt, system=system, max_tokens=800)
+            response = await complete_struct(
+                provider, full_prompt, SQLResponse,
+                system=system, max_tokens=800, temperature=0.2,
+            )
+            sql_text = response.sql.strip()
+            explanation_text = response.explanation.strip()
+            confidence = response.confidence
+            raw_for_memory = msgspec.json.encode(response).decode()
         except Exception as e:
+            log.warning("structured AI call failed", error=str(e))
             return {"error": str(e), "code": 502}
-
-        sql, explanation = _parse_sql_response(text)
 
         # Persist this exchange so follow-ups have context.
         try:
             ai_memory.add_turn(session_key, "user", prompt)
-            ai_memory.add_turn(session_key, "assistant", text)
+            ai_memory.add_turn(session_key, "assistant", raw_for_memory)
         except Exception:
             pass
 
         return {
-            "sql": sql,
-            "explanation": explanation,
-            "raw": text,
+            "sql": sql_text,
+            "explanation": explanation_text,
+            "confidence": confidence,
             "session_key": session_key,
             "schema_chars": len(schema_text),
         }
@@ -226,6 +284,8 @@ class AICopilotController(Controller):
         sql = str(data.get("sql", "")).strip()
         if not sql:
             return {"error": "sql required", "code": 400}
+        if len(sql) > 16_000:
+            return {"error": "sql too long (max 16000 chars)", "code": 400}
 
         connection_id = data.get("connection_id")
         # The "prompt" for schema-keyword matching is the SQL itself —
@@ -238,11 +298,13 @@ class AICopilotController(Controller):
         )
 
         system = (
-            "Explain this SQL in 2–4 short sentences. Mention which "
-            "tables are read, what filter/aggregate is applied, and any "
-            "performance gotchas. No code blocks. "
-            "Respond in the same language the user has been using; "
-            "default to English if you can't tell."
+            "Explain this SQL in 2-4 short sentences. List the tables "
+            "the query reads or writes (`tables`) and any performance "
+            "gotchas (`warnings`) — full table scans, missing index "
+            "hints, lock risks, etc. Respond in the same language the "
+            "user has been using; default to English if you can't tell. "
+            "Set `tables` and `warnings` to empty arrays if there's "
+            "nothing to add — they are required fields."
         )
         parts: list[str] = []
         if history_text:
@@ -253,17 +315,27 @@ class AICopilotController(Controller):
         prompt = "\n\n".join(parts)
 
         try:
-            text = await provider.complete(prompt, system=system, max_tokens=400)
+            response = await complete_struct(
+                provider, prompt, ExplainResponse,
+                system=system, max_tokens=400, temperature=0.2,
+            )
+            explanation_text = response.explanation.strip()
+            raw_for_memory = msgspec.json.encode(response).decode()
         except Exception as e:
+            log.warning("structured AI explain failed", error=str(e))
             return {"error": str(e), "code": 502}
 
         try:
             ai_memory.add_turn(session_key, "user", f"Explain this SQL:\n{sql}")
-            ai_memory.add_turn(session_key, "assistant", text)
+            ai_memory.add_turn(session_key, "assistant", raw_for_memory)
         except Exception:
             pass
 
-        return {"explanation": text}
+        return {
+            "explanation": explanation_text,
+            "tables": response.tables,
+            "warnings": response.warnings,
+        }
 
     @post("/clear-memory")
     async def clear_memory(self, request: Request, data: dict = Body()) -> dict:
@@ -527,8 +599,14 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
 
         return "\n".join(out_lines)
     except Exception as e:
-        log.debug("_schema_summary failed", error=str(e))
-        return ""
+        # Surface the failure to the model rather than silently feeding
+        # an empty schema — that used to make the model hallucinate
+        # wildly because the system prompt said "ONLY reference tables
+        # that appear below" and "below" was empty. With this comment
+        # the model knows the schema is unknown and asks the user to
+        # specify, instead of inventing.
+        log.warning("_schema_summary failed", error=str(e))
+        return f"### Schema\n# (schema fetch failed: {str(e)[:200]} — ask the user which tables they mean before generating SQL)"
 
 
 def _parse_sql_response(text: str) -> tuple[str, str]:

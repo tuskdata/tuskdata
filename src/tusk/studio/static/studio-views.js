@@ -56,13 +56,16 @@ window.loadExplainPlan = async function() {
         });
         const data = await res.json();
         if (data.error) {
-            el.innerHTML = `<div class="inline-error plan-error"><i data-lucide="alert-circle"></i><pre>${data.error}</pre></div>`;
+            // tuskEscapeHtml: PG error messages echo the offending SQL
+            // fragment, so a query containing `<img onerror=…>` would
+            // ship raw HTML through the EXPLAIN endpoint into the DOM.
+            el.innerHTML = `<div class="inline-error plan-error"><i data-lucide="alert-circle"></i><pre>${tuskEscapeHtml(data.error)}</pre></div>`;
             if (window.lucide) lucide.createIcons();
             return;
         }
         el.textContent = JSON.stringify(data.plan, null, 2);
     } catch (e) {
-        el.innerHTML = `<div class="inline-error plan-error"><pre>${e.message}</pre></div>`;
+        el.innerHTML = `<div class="inline-error plan-error"><pre>${tuskEscapeHtml(e.message)}</pre></div>`;
     }
 };
 

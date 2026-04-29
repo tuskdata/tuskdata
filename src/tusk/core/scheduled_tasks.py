@@ -511,9 +511,22 @@ async def _handle_query(payload: dict) -> None:
         raise RuntimeError(result.error)
     if save_results_as:
         # Persist to ~/.tusk/scheduled_results/{name}.json so other tabs can pick it up.
+        # Path-traversal guard: alphanumeric + dash + underscore only.
+        # `..` / `/` / NUL would let a malicious editor (multi-user) overwrite
+        # arbitrary files (e.g. ~/.ssh/authorized_keys via the JSON dump).
+        import re
+        if not re.match(r"^[A-Za-z0-9_-]{1,64}$", save_results_as):
+            raise ValueError(
+                "save_results_as must be 1-64 chars of [A-Za-z0-9_-]; "
+                f"got {save_results_as!r}"
+            )
         out_dir = TUSK_DIR / "scheduled_results"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{save_results_as}.json"
+        out_path = (out_dir / f"{save_results_as}.json").resolve()
+        # Defense-in-depth: even with the regex above, verify the resolved
+        # path stays inside out_dir.
+        if not str(out_path).startswith(str(out_dir.resolve()) + "/"):
+            raise ValueError("save_results_as escapes the output directory")
         out_path.write_text(json.dumps(result.to_dict(), default=str))
 
 

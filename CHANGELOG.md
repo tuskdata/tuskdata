@@ -2,6 +2,83 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.8] - 2026-04-28 — Structured AI output + audit fixes
+
+The user reported the AI was producing rambling, format-broken output
+on small models (qwen2.5-coder:3b would emit explanation-then-sql in
+prose, ignoring the fenced-block instruction). Fixed two ways: switch
+the model to a real one (their existing `qwen3.5:9b`), and force
+structured output via msgspec so format compliance no longer depends
+on the model's prose-following.
+
+### `tusk.core.ai_struct` — DIY structured output
+
+New module, ~150 lines, zero new dependencies (msgspec was already in
+core). Sister-shaped to the `instructor` package but without the
+~50MB transitive deps:
+
+- `schema_for(StructCls)` → JSON schema (msgspec built-in).
+- `complete_struct(provider, prompt, StructCls)` → typed instance.
+- Tolerant JSON extraction handles `\`\`\`json` fences, balanced-brace
+  detection, leading/trailing prose. Models that wrap their JSON in
+  "Sure! Here's the response:" preamble still parse cleanly.
+- One automatic retry on parse failure, with remediation note that
+  shows the model what went wrong on the previous turn.
+- Smoke-tested against `qwen3.5:9b` on a real Ollama: `confidence: high`
+  responses come back valid the first try.
+
+### `/api/ai/sql` and `/api/ai/explain` use structured output
+
+Replaced the regex-based fenced-block parser with `complete_struct`
+returning typed `SQLResponse` and `ExplainResponse` shapes:
+
+- `SQLResponse{sql, explanation, confidence}` — `confidence` is
+  "high"/"medium"/"low" so the UI can warn when the model isn't sure.
+- `ExplainResponse{explanation, tables, warnings}` — `warnings` is the
+  surprise-perf flags the model spots.
+
+Few-shot examples added to both system prompts (English + Spanish +
+"can't answer" cases). Small models follow concrete examples even
+when they ignore prose instructions.
+
+### Audit fixes (from the v0.4.x hidden-bug pass)
+
+- **CRITICAL**: path traversal in scheduled `save_results_as` —
+  regex-validated to `[A-Za-z0-9_-]{1,64}` plus `Path.resolve()`
+  containment check. Was: a malicious editor in multi-user mode
+  could set `save_results_as="../../../home/user/.ssh/authorized_keys"`
+  and overwrite arbitrary files with the JSON dump.
+- **HIGH**: XSS in EXPLAIN error rendering — `studio-views.js` was
+  feeding raw PG error messages (which echo SQL fragments) into
+  `innerHTML`. Wrapped with `tuskEscapeHtml`.
+- **HIGH**: `execute_query_paginated` and `fetch_geometries` had no
+  auto-reconnect — extracted the retry pattern from `execute_query`
+  to a shared `_with_reconnect(config, fn)` helper and applied to all
+  three. Network blips now also self-heal in the data table pager
+  and the map view.
+- **HIGH**: race in `_reset_connection` pool sweep — added
+  `_reset_lock` so two concurrent failing queries can't mutate
+  `_pools` mid-iteration. Switched to exact `host:port` matching so
+  `db` doesn't accidentally drop pools for `db1` / `db-prod`.
+- **HIGH**: AI prompt unbounded — capped `/sql` prompts at 8000 chars
+  and `/explain` SQL at 16000 chars. Was a DoS / token-spend vector.
+- **MEDIUM**: AI memory SQLite — added `PRAGMA journal_mode=WAL`,
+  `busy_timeout=5000`, `synchronous=NORMAL`. Was hitting "database is
+  locked" when `/sql` and `/explain` fired in parallel from the same
+  browser.
+- **MEDIUM**: `_schema_summary` swallowed errors as empty schema —
+  now surfaces failures to the model so it asks the user instead of
+  hallucinating.
+- **MEDIUM**: `_is_transient_connection_error` was over-eager —
+  removed bare class-name match on `OperationalError` (caught bad
+  passwords / missing DBs as "transient" and wasted a reset cycle).
+  Removed `"connection refused"` from the hint list (permanent, not
+  transient).
+- **MEDIUM**: `serve_plugin_asset` MIME map for `.mjs` / `.wasm` —
+  some Python builds return `None` for those, breaking
+  `<script type="module">` imports in plugins. Forced `text/javascript`
+  / `application/wasm` / `text/css` / `image/svg+xml` overrides.
+
 ## [0.4.7.2] - 2026-04-28 — Auto-recover from network blips
 
 When the network dropped between Tusk and a remote Postgres (Wi-Fi

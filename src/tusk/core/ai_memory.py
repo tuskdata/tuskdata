@@ -46,9 +46,20 @@ _SESSION_TTL_SECONDS = 30 * 24 * 3600
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the AI memory DB with WAL + busy_timeout so concurrent
+    writers (e.g. /api/ai/sql and /api/ai/explain firing at the same
+    time from the same browser) don't trip on `database is locked`."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
+    # WAL is set once per database and persists; setting it on every
+    # connect is cheap because SQLite skips the no-op.
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.Error:
+        pass
     return conn
 
 

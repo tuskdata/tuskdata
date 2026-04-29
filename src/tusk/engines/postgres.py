@@ -147,14 +147,20 @@ async def _connect(dsn: str):
 # still holding dead handles. Catching these and recycling the pool +
 # tunnel is the difference between "Tusk needs a restart" and "Tusk
 # self-heals after a network blip".
+#
+# Notable exclusions:
+# - "connection refused" — that's PERMANENT (DB down, port wrong); a
+#   reconnect won't help, and retrying just doubles the wait before
+#   the user sees the error.
+# - bare class-name match on "OperationalError" — too broad (bad
+#   password, missing DB, fatal startup messages all subclass it).
 _TRANSIENT_ERROR_HINTS = (
     "server closed the connection",
     "connection is closed",
     "connection is bad",
     "consumed connection",
-    "connection refused",
     "broken pipe",
-    "EOF detected",
+    "eof detected",
     "no connection to the server",
     "ssl syscall error",
     "could not receive data from server",
@@ -163,38 +169,72 @@ _TRANSIENT_ERROR_HINTS = (
 
 
 def _is_transient_connection_error(err: Exception) -> bool:
+    """True if the error looks like a stale-handle situation that a
+    pool+tunnel reset can fix. Conservative on purpose — false
+    negatives just surface the original error to the user; false
+    positives waste a reset cycle and double the failure latency."""
     msg = str(err).lower()
-    if any(hint in msg for hint in _TRANSIENT_ERROR_HINTS):
-        return True
-    # psycopg flags it explicitly when the pool returns a dead conn.
-    cls = type(err).__name__
-    return cls in {"OperationalError", "InterfaceError", "ConnectionTimeout"}
+    return any(hint in msg for hint in _TRANSIENT_ERROR_HINTS)
+
+
+_reset_lock: asyncio.Lock | None = None
 
 
 async def _reset_connection(config: ConnectionConfig) -> None:
     """Drop the cached pool + SSH tunnel for this connection so the
     next attempt builds fresh sockets. Used by the auto-retry path
-    AND the explicit /reconnect endpoint."""
-    try:
-        from tusk.core.ssh_tunnel import close_tunnel
-        await close_tunnel(config.id)
-    except Exception as e:
-        log.debug("ssh_tunnel.close_tunnel ignored", error=str(e))
-    if _HAS_POOL:
+    AND the explicit /reconnect endpoint.
+
+    Two concurrent failing queries can both try to reset at once; the
+    `_reset_lock` serializes them so the pool dict isn't mutated mid-
+    iteration and the second caller is a no-op once the first finished.
+    """
+    global _reset_lock
+    if _reset_lock is None:
+        _reset_lock = asyncio.Lock()
+
+    async with _reset_lock:
+        try:
+            from tusk.core.ssh_tunnel import close_tunnel
+            await close_tunnel(config.id)
+        except Exception as e:
+            log.debug("ssh_tunnel.close_tunnel ignored", error=str(e))
+
+        if not _HAS_POOL:
+            return
+
         # The DSN we stored the pool under depends on the tunnel state,
         # so re-derive it; if the tunnel just got nuked, get_tunneled_dsn
         # may build a fresh forward — but we still need to drop ANY pool
-        # that was keyed off the old port. Sweep them all for this conn.
+        # that was keyed off the old port.
         try:
             current_dsn = await get_tunneled_dsn(config)
             await close_pool_for_dsn(current_dsn)
         except Exception:
             pass
-        # Also walk every pool and drop ones that reference this conn's
-        # host/port pair (covers stale forwards on different local ports).
-        host = (config.host or "localhost").lower()
+
+        # Walk every pool and drop ones that target this connection's
+        # host:port (covers stale forwards on different local ports).
+        # Use exact host+port match to avoid `db` matching `db1`/`db-prod`.
+        target_host = (config.host or "localhost").lower()
+        target_port = str(config.port) if config.port else ""
+
+        def _matches(dsn: str) -> bool:
+            d = dsn.lower()
+            # SSH tunnel: pool DSN is `postgresql://user@127.0.0.1:<localport>/db`.
+            # Direct: `postgresql://user@<host>:<port>/db`.
+            if f"@{target_host}:{target_port}/" in d or (
+                target_host == "localhost" and "@127.0.0.1:" in d
+            ):
+                return True
+            # Catch-all for any DSN that references the actual SSH-tunnel
+            # local-side (we just nuked the tunnel so the local port is
+            # gone; pools holding a forward to it are dead).
+            return "@127.0.0.1:" in d and config.uses_ssh_tunnel
+
+        # Snapshot keys under our lock so iteration is safe.
         for dsn in list(_pools.keys()):
-            if host in dsn.lower() or f"@127.0.0.1:" in dsn:
+            if _matches(dsn):
                 await close_pool_for_dsn(dsn)
 
 
@@ -258,21 +298,41 @@ async def execute_query(
                     execution_time_ms=round(elapsed, 2),
                 )
 
+    return await _with_reconnect(config, _run_once, on_error=lambda e: QueryResult.from_error(str(e), position=_error_position(e)))
+
+
+async def _with_reconnect(config: ConnectionConfig, fn, *, on_error=None):
+    """Run `fn` once. On transient connection errors, reset the pool +
+    SSH tunnel for `config` and retry exactly once. Used by every
+    function that talks to Postgres on behalf of a `config` —
+    `execute_query`, `execute_query_paginated`, `fetch_geometries`,
+    `get_schema`, `get_row_counts`, `test_connection`. Centralizes the
+    retry policy so we don't duplicate the try/except dance everywhere.
+
+    `on_error` (optional) lets the caller convert a final exception
+    into a typed result (e.g. `QueryResult.from_error`). When omitted,
+    the exception is re-raised so callers using `try/except` keep
+    working unchanged.
+    """
     try:
-        return await _run_once()
+        return await fn()
     except Exception as e:
-        if _is_transient_connection_error(e):
-            log.info(
-                "Transient connection error — recycling pool + tunnel",
-                connection=config.id,
-                error=str(e),
-            )
-            await _reset_connection(config)
-            try:
-                return await _run_once()
-            except Exception as e2:
-                return QueryResult.from_error(str(e2), position=_error_position(e2))
-        return QueryResult.from_error(str(e), position=_error_position(e))
+        if not _is_transient_connection_error(e):
+            if on_error is not None:
+                return on_error(e)
+            raise
+        log.info(
+            "Transient connection error — recycling pool + tunnel",
+            connection=config.id,
+            error=str(e),
+        )
+        await _reset_connection(config)
+        try:
+            return await fn()
+        except Exception as e2:
+            if on_error is not None:
+                return on_error(e2)
+            raise
 
 
 _HEX_WKB_RE = re.compile(r'^(01|00)[0-9a-fA-F]{8,}$')
@@ -368,7 +428,7 @@ async def execute_query_paginated(
     """
     start = time.perf_counter()
 
-    try:
+    async def _run_once() -> QueryResult:
         async with _connect(await get_tunneled_dsn(config)) as conn:
             if request_id:
                 backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
@@ -422,8 +482,10 @@ async def execute_query_paginated(
                     page_size=page_size,
                 )
 
-    except Exception as e:
-        return QueryResult.from_error(str(e), position=_error_position(e))
+    return await _with_reconnect(
+        config, _run_once,
+        on_error=lambda e: QueryResult.from_error(str(e), position=_error_position(e)),
+    )
 
 
 async def fetch_geometries(
@@ -446,7 +508,7 @@ async def fetch_geometries(
     """
     start = time.perf_counter()
 
-    try:
+    async def _run_once() -> dict:
         async with _connect(await get_tunneled_dsn(config)) as conn:
             if QUERY_TIMEOUT_SEC > 0:
                 async with conn.cursor() as cur:
@@ -570,9 +632,11 @@ async def fetch_geometries(
                 "execution_time_ms": round(elapsed, 2),
             }
 
-    except Exception as e:
+    def _err(e: Exception) -> dict:
         log.error("Failed to fetch geometries", error=str(e))
         return {"error": str(e), "features": [], "total_count": 0, "truncated": False}
+
+    return await _with_reconnect(config, _run_once, on_error=_err)
 
 
 # In-process schema cache. The /api/connections/{id}/schema endpoint runs
