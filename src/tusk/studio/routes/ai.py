@@ -190,12 +190,12 @@ class AICopilotController(Controller):
         if connection_id:
             schema_text = await _schema_summary(connection_id, prompt)
 
-        # Conversation memory keyed by (user, connection). Falls back
-        # to a session id we mint from the CSRF cookie so single-user
-        # mode still has a stable per-tab thread.
+        # Conversation memory keyed by (user, connection). _session_key
+        # returns None when no stable identity is available — skip
+        # memory in that case rather than risk cross-session bleed.
         session_key = _session_key(request, connection_id)
         history_text = ai_memory.format_for_prompt(
-            ai_memory.get_recent_turns(session_key, limit=8),
+            ai_memory.get_recent_turns(session_key, limit=8) if session_key else [],
             max_chars=1200,
         )
 
@@ -258,12 +258,15 @@ class AICopilotController(Controller):
             log.warning("structured AI call failed", error=str(e))
             return {"error": str(e), "code": 502}
 
-        # Persist this exchange so follow-ups have context.
-        try:
-            ai_memory.add_turn(session_key, "user", prompt)
-            ai_memory.add_turn(session_key, "assistant", raw_for_memory)
-        except Exception:
-            pass
+        # Persist this exchange so follow-ups have context. Only when
+        # we have a real, identity-bound session key — anonymous
+        # callers don't get memory.
+        if session_key:
+            try:
+                ai_memory.add_turn(session_key, "user", prompt)
+                ai_memory.add_turn(session_key, "assistant", raw_for_memory)
+            except Exception:
+                pass
 
         return {
             "sql": sql_text,
@@ -293,7 +296,7 @@ class AICopilotController(Controller):
         schema_text = await _schema_summary(connection_id, sql) if connection_id else ""
         session_key = _session_key(request, connection_id)
         history_text = ai_memory.format_for_prompt(
-            ai_memory.get_recent_turns(session_key, limit=4),
+            ai_memory.get_recent_turns(session_key, limit=4) if session_key else [],
             max_chars=600,
         )
 
@@ -325,11 +328,12 @@ class AICopilotController(Controller):
             log.warning("structured AI explain failed", error=str(e))
             return {"error": str(e), "code": 502}
 
-        try:
-            ai_memory.add_turn(session_key, "user", f"Explain this SQL:\n{sql}")
-            ai_memory.add_turn(session_key, "assistant", raw_for_memory)
-        except Exception:
-            pass
+        if session_key:
+            try:
+                ai_memory.add_turn(session_key, "user", f"Explain this SQL:\n{sql}")
+                ai_memory.add_turn(session_key, "assistant", raw_for_memory)
+            except Exception:
+                pass
 
         return {
             "explanation": explanation_text,
@@ -344,6 +348,8 @@ class AICopilotController(Controller):
 
         connection_id = data.get("connection_id") if isinstance(data, dict) else None
         session_key = _session_key(request, connection_id)
+        if not session_key:
+            return {"ok": True, "removed": 0}
         removed = ai_memory.clear_session(session_key)
         return {"ok": True, "removed": removed}
 
@@ -396,13 +402,20 @@ class AISettingsPageController(TuskController):
 # ──────────────────────── Helpers ────────────────────────
 
 
-def _session_key(request: Request, connection_id: str | None) -> str:
+def _session_key(request: Request, connection_id: str | None) -> str | None:
     """Stable session identifier for AI memory.
 
     Multi-user: keyed on the actual user id + connection so each user
     has their own thread per database. Single-user: keyed on the CSRF
-    cookie so a single browser session stays consistent across reloads
-    but a different browser starts fresh.
+    cookie (which the middleware sets on every response) so a single
+    browser session stays consistent across reloads but a different
+    browser starts fresh.
+
+    Returns `None` when no stable identity can be built — caller MUST
+    skip persisting memory in that case. Before v0.4.8.1 the fallback
+    was the literal string `"anon"`, which collapsed every cookie-less
+    request into a single shared thread (memory bleed across
+    incognito tabs and unrelated visitors in single-user mode).
     """
     cid = connection_id or "_no_conn"
     try:
@@ -418,9 +431,17 @@ def _session_key(request: Request, connection_id: str | None) -> str:
                     user = get_user_by_id(session.user_id)
                     if user:
                         return f"u:{user.id}:c:{cid}"
+            # Multi-user without a session cookie shouldn't even reach
+            # this code path (auth middleware rejects), but if it does
+            # we refuse to invent a key.
+            return None
     except Exception:
         pass
-    csrf = request.cookies.get("tusk_csrf") or "anon"
+    csrf = request.cookies.get("tusk_csrf")
+    if not csrf or len(csrf) < 16:
+        # No CSRF cookie yet (first request from a brand-new client).
+        # Skip persistence rather than cross-pollinate memory.
+        return None
     return f"csrf:{csrf[:16]}:c:{cid}"
 
 

@@ -649,20 +649,37 @@ _SCHEMA_TTL = 30.0
 
 
 def invalidate_schema_cache(connection_id: str | None = None) -> None:
-    """Drop a cached schema. Pass None to clear everything."""
+    """Drop cached schemas. Pass None to clear everything; pass a
+    connection_id to drop every per-user variant for that connection."""
     if connection_id is None:
         _schema_cache.clear()
-    else:
-        _schema_cache.pop(connection_id, None)
+        return
+    # Cache keys may be either bare `connection_id` (single-user) or
+    # `connection_id:u:user_id` (multi-user). Wipe both shapes.
+    prefix = f"{connection_id}:u:"
+    for k in list(_schema_cache.keys()):
+        if k == connection_id or k.startswith(prefix):
+            _schema_cache.pop(k, None)
 
 
-async def get_schema(config: ConnectionConfig) -> dict:
+async def get_schema(config: ConnectionConfig, *, db_user: str | None = None) -> dict:
     """Get database schema (tables and columns with PK/FK info).
 
-    Cached in-process for `_SCHEMA_TTL` seconds keyed by connection id.
+    Cached in-process for `_SCHEMA_TTL` seconds. The cache key includes
+    the DB user when known so two users with different `GRANT`s on the
+    same connection don't read each other's filtered view of the schema
+    (multi-user data leak fix from the v0.4.7 audit).
+
+    `db_user` defaults to `config.user`. Pass an override when the
+    actual session user differs from the connection's static config —
+    e.g. row-level security via `SET ROLE`.
+
     Errors are not cached — they bubble through and the next call retries.
     """
     cache_key = config.id
+    user = db_user or getattr(config, "user", None)
+    if user:
+        cache_key = f"{config.id}:u:{user}"
     now = time.monotonic()
     cached = _schema_cache.get(cache_key)
     if cached and (now - cached[0]) < _SCHEMA_TTL:

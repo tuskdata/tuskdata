@@ -2,6 +2,43 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.8.1] - 2026-04-28 — Two remaining HIGH/MED audit fixes
+
+The v0.4.8 release shipped 9 of 15 audit findings. Two of the
+remaining six were grave enough to warrant a hotfix instead of
+deferring to v0.4.9.
+
+### #6 (HIGH): anonymous AI session collapse
+
+`_session_key` used to fall back to the literal string `"anon"`
+when no CSRF cookie was present, so every cookie-less visitor in
+single-user mode shared one AI thread. Two anon tabs from different
+people would each see the other's prompts and SQL responses.
+
+Fix: the helper now returns `None` when no stable identity can be
+built. Every caller skips memory reads/writes when the key is
+`None` — the AI still answers, but nothing is persisted. New
+clients get a CSRF cookie on the first response, so the very next
+request has an identity and starts a real thread.
+
+### #8 (MEDIUM): schema cache cross-user leak
+
+`get_schema(config)` cached results keyed on `config.id` only. In
+multi-user mode, user A with broad SELECT grants populates the
+cache; user B with narrower grants reads A's payload and sees
+tables they don't have rights to.
+
+Fix: cache key is now `f"{config.id}:u:{db_user}"` whenever a user
+is known (defaults to `config.user`, override via the new `db_user`
+kwarg for `SET ROLE` setups). `invalidate_schema_cache(conn_id)`
+sweeps every per-user variant for that connection.
+
+### Deferred to v0.4.9
+
+#10 (schema viewer cap), #11 (`_handle_pipeline` no-op), #12 (SSH
+tunnel close leak), #15 (test coverage gaps). None are exploitable
+or user-visible enough to block on.
+
 ## [0.4.8] - 2026-04-28 — Structured AI output + audit fixes
 
 The user reported the AI was producing rambling, format-broken output
