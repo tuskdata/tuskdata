@@ -2,6 +2,35 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.8.3] - 2026-04-29 — Backup works through SSH tunnels
+
+User reported "el backup no me dejó" on a Coolify-deployed Tusk
+talking to a remote Postgres via SSH tunnel. The Docker image
+already shipped `postgresql-client` (so `pg_dump` was findable on
+PATH) but the binary tried to TCP-connect to `config.host` — the
+remote bastion-side IP, not reachable from the container.
+
+Fix: new `_resolve_tunnel(config)` helper in
+`tusk.admin.backup`. For SSH-tunneled connections it opens (or
+reuses) the asyncssh tunnel and returns the local-forward
+address (`127.0.0.1:<localport>`). For direct connections it
+returns `config.host:config.port` unchanged. Applied to every call
+site that shells out to a PG binary:
+
+- `create_backup` (pg_dump)
+- `restore_backup` (psql + pg_restore)
+- `create_database` (createdb)
+- `create_database_from_backup` (createdb + pg_restore)
+
+`_pg_env` grew matching `effective_host` / `effective_port` kwargs
+so the .pgpass entry matches the actual connection address —
+otherwise pg_dump would silently fall back to "no password
+supplied" on a tunneled connection.
+
+UI: small note in the admin Backups partial that says backups
+live at `~/.tusk/backups` and survive on the `tusk-home` Docker
+volume.
+
 ## [0.4.8.2] - 2026-04-28 — Last 4 audit findings closed
 
 Closing the remaining items from the v0.4.7 audit. After this every

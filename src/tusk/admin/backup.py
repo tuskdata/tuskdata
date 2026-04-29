@@ -16,12 +16,61 @@ log = structlog.get_logger("backup")
 BACKUP_DIR = TUSK_DIR / "backups"
 
 
-def _pg_env(config: ConnectionConfig) -> tuple[dict, Path | None]:
+def _resolve_tunnel(config: ConnectionConfig) -> tuple[str, int]:
+    """For SSH-tunneled connections, return the local forward
+    (`127.0.0.1`, local_port) that pg_dump / psql / pg_restore should
+    connect to. For direct connections, return `(config.host,
+    config.port)`. Used by every backup/restore call site so the
+    binary tools work the same way regardless of deployment topology
+    (Coolify-with-bastion vs local-postgres).
+
+    The function is sync but `get_tunneled_dsn` is async; we bridge
+    via `asyncio.run` if we're not already in a loop, or via a worker
+    thread if we are. Either way the SSH tunnel registry is
+    process-global so the resolved local port is valid for the
+    pg_dump child process.
+    """
+    if not config.uses_ssh_tunnel:
+        return (config.host or "localhost"), config.port
+
+    import asyncio
+    from urllib.parse import urlparse
+    from tusk.core.ssh_tunnel import get_tunneled_dsn
+
+    try:
+        asyncio.get_running_loop()
+        # Inside a loop already → spin a worker thread to avoid
+        # "cannot run nested event loop".
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as ex:
+            future = ex.submit(asyncio.run, get_tunneled_dsn(config))
+            tunneled_dsn = future.result(timeout=30)
+    except RuntimeError:
+        tunneled_dsn = asyncio.run(get_tunneled_dsn(config))
+
+    parsed = urlparse(tunneled_dsn)
+    return (parsed.hostname or "127.0.0.1"), (parsed.port or config.port)
+
+
+def _pg_env(
+    config: ConnectionConfig,
+    *,
+    effective_host: str | None = None,
+    effective_port: int | None = None,
+) -> tuple[dict, Path | None]:
     """Create environment for pg_dump/psql with secure password handling.
 
     Uses a temporary .pgpass file instead of PGPASSWORD env var.
     Returns (env_dict, pgpass_path_or_None).
     Caller must delete pgpass_path when done.
+
+    `effective_host` / `effective_port` override `config.host` / `config.port`
+    in the pgpass entry. Used by the SSH-tunneled backup path so the
+    pgpass record matches the local-forward address pg_dump actually
+    connects to (`127.0.0.1:<localport>`), not the remote bastion-side
+    address. Without this override, pg_dump on a tunneled connection
+    fails with "no password supplied" because the pgpass file says one
+    host and the connection ends up on another.
     """
     env = os.environ.copy()
     pgpass_path = None
@@ -31,8 +80,10 @@ def _pg_env(config: ConnectionConfig) -> tuple[dict, Path | None]:
         fd, pgpass_path = tempfile.mkstemp(prefix="tusk_pgpass_")
         pgpass_file = Path(pgpass_path)
         # Escape colons and backslashes in pgpass fields
-        host = (config.host or "localhost").replace("\\", "\\\\").replace(":", "\\:")
-        port = str(config.port)
+        host_value = effective_host if effective_host else (config.host or "localhost")
+        port_value = effective_port if effective_port else config.port
+        host = host_value.replace("\\", "\\\\").replace(":", "\\:")
+        port = str(port_value)
         db = (config.database or "*").replace("\\", "\\\\").replace(":", "\\:")
         user = (config.user or "postgres").replace("\\", "\\\\").replace(":", "\\:")
         pw = config.password.replace("\\", "\\\\").replace(":", "\\:")
@@ -195,10 +246,17 @@ def create_backup(
 
     pg_dump = get_pg_dump_path()
 
+    try:
+        effective_host, effective_port = _resolve_tunnel(config)
+        if config.uses_ssh_tunnel:
+            _progress(f"tunnel ready at {effective_host}:{effective_port}")
+    except Exception as e:
+        return False, f"SSH tunnel setup failed: {e}", None
+
     cmd = [
         pg_dump,
-        "-h", config.host or "localhost",
-        "-p", str(config.port),
+        "-h", effective_host,
+        "-p", str(effective_port),
         "-U", config.user or "postgres",
         "-d", config.database or "postgres",
     ]
@@ -214,7 +272,7 @@ def create_backup(
         for t in tables:
             cmd.extend(["-t", t])
 
-    env, pgpass_path = _pg_env(config)
+    env, pgpass_path = _pg_env(config, effective_host=effective_host, effective_port=effective_port)
     _progress("dumping")
 
     tmp_dir: Path | None = None
@@ -457,15 +515,19 @@ def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
         return False, f"Backup file not found: {filename}"
 
     fmt = _format_from_filename(filename)
-    env, pgpass_path = _pg_env(config)
+    try:
+        effective_host, effective_port = _resolve_tunnel(config)
+    except Exception as e:
+        return False, f"SSH tunnel setup failed: {e}"
+    env, pgpass_path = _pg_env(config, effective_host=effective_host, effective_port=effective_port)
 
     try:
         if fmt == "plain":
             psql = get_psql_path()
             cmd = [
                 psql,
-                "-h", config.host or "localhost",
-                "-p", str(config.port),
+                "-h", effective_host,
+                "-p", str(effective_port),
                 "-U", config.user or "postgres",
                 "-d", config.database or "postgres",
             ]
@@ -493,8 +555,8 @@ def restore_backup(config: ConnectionConfig, filename: str) -> tuple[bool, str]:
         pg_restore = _find_pg_binary("pg_restore")
         cmd = [
             pg_restore,
-            "-h", config.host or "localhost",
-            "-p", str(config.port),
+            "-h", effective_host,
+            "-p", str(effective_port),
             "-U", config.user or "postgres",
             "-d", config.database or "postgres",
             "--no-owner",
@@ -548,11 +610,15 @@ def create_database(config: ConnectionConfig, db_name: str, owner: str | None = 
         owner: Optional owner for the database
     """
     createdb = get_createdb_path()
+    try:
+        effective_host, effective_port = _resolve_tunnel(config)
+    except Exception as e:
+        return False, f"SSH tunnel setup failed: {e}"
 
     cmd = [
         createdb,
-        "-h", config.host or "localhost",
-        "-p", str(config.port),
+        "-h", effective_host,
+        "-p", str(effective_port),
         "-U", config.user or "postgres",
     ]
 
@@ -561,7 +627,7 @@ def create_database(config: ConnectionConfig, db_name: str, owner: str | None = 
 
     cmd.append(db_name)
 
-    env, pgpass_path = _pg_env(config)
+    env, pgpass_path = _pg_env(config, effective_host=effective_host, effective_port=effective_port)
 
     try:
         result = subprocess.run(
