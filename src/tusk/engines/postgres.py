@@ -96,12 +96,32 @@ try:
         _pools.clear()
         log.info("All connection pools closed")
 
+    async def close_pool_for_dsn(dsn: str) -> bool:
+        """Close + remove a single pool keyed by its DSN.
+        Returns True if a pool was closed, False if there was none.
+        Used by the reconnect endpoint and by the auto-retry path so a
+        stale pool from a network blip can be replaced without
+        restarting the whole server.
+        """
+        pool = _pools.pop(dsn, None)
+        if pool is None:
+            return False
+        try:
+            await pool.close()
+        except Exception as e:
+            log.debug("close_pool_for_dsn ignored", error=str(e))
+        log.info("Connection pool closed", dsn=_redact_dsn(dsn))
+        return True
+
     _HAS_POOL = True
 except ImportError:
     _HAS_POOL = False
 
     async def close_pools() -> None:
         pass
+
+    async def close_pool_for_dsn(dsn: str) -> bool:  # type: ignore[override]
+        return False
 
 
 # Query timeout in seconds (0 = no timeout). Set via TUSK_QUERY_TIMEOUT env var.
@@ -123,6 +143,61 @@ async def _connect(dsn: str):
             yield conn
 
 
+# Errors where the connection (TCP / SSH) is gone and a stale pool is
+# still holding dead handles. Catching these and recycling the pool +
+# tunnel is the difference between "Tusk needs a restart" and "Tusk
+# self-heals after a network blip".
+_TRANSIENT_ERROR_HINTS = (
+    "server closed the connection",
+    "connection is closed",
+    "connection is bad",
+    "consumed connection",
+    "connection refused",
+    "broken pipe",
+    "EOF detected",
+    "no connection to the server",
+    "ssl syscall error",
+    "could not receive data from server",
+    "could not send data to server",
+)
+
+
+def _is_transient_connection_error(err: Exception) -> bool:
+    msg = str(err).lower()
+    if any(hint in msg for hint in _TRANSIENT_ERROR_HINTS):
+        return True
+    # psycopg flags it explicitly when the pool returns a dead conn.
+    cls = type(err).__name__
+    return cls in {"OperationalError", "InterfaceError", "ConnectionTimeout"}
+
+
+async def _reset_connection(config: ConnectionConfig) -> None:
+    """Drop the cached pool + SSH tunnel for this connection so the
+    next attempt builds fresh sockets. Used by the auto-retry path
+    AND the explicit /reconnect endpoint."""
+    try:
+        from tusk.core.ssh_tunnel import close_tunnel
+        await close_tunnel(config.id)
+    except Exception as e:
+        log.debug("ssh_tunnel.close_tunnel ignored", error=str(e))
+    if _HAS_POOL:
+        # The DSN we stored the pool under depends on the tunnel state,
+        # so re-derive it; if the tunnel just got nuked, get_tunneled_dsn
+        # may build a fresh forward — but we still need to drop ANY pool
+        # that was keyed off the old port. Sweep them all for this conn.
+        try:
+            current_dsn = await get_tunneled_dsn(config)
+            await close_pool_for_dsn(current_dsn)
+        except Exception:
+            pass
+        # Also walk every pool and drop ones that reference this conn's
+        # host/port pair (covers stale forwards on different local ports).
+        host = (config.host or "localhost").lower()
+        for dsn in list(_pools.keys()):
+            if host in dsn.lower() or f"@127.0.0.1:" in dsn:
+                await close_pool_for_dsn(dsn)
+
+
 async def execute_query(
     config: ConnectionConfig,
     sql: str,
@@ -132,6 +207,12 @@ async def execute_query(
 ) -> QueryResult:
     """Execute SQL query and return results.
 
+    Auto-recovers from transient connection errors (network blip,
+    bastion reset, idle TCP dropped) by closing the stale pool +
+    tunnel and retrying once. The retry is silent on success; on
+    failure the original error reaches the caller so the UI shows
+    the real cause.
+
     Args:
         config: Connection configuration
         sql: SQL query (use %s placeholders for params)
@@ -140,7 +221,7 @@ async def execute_query(
     """
     start = time.perf_counter()
 
-    try:
+    async def _run_once() -> QueryResult:
         async with _connect(await get_tunneled_dsn(config)) as conn:
             if request_id:
                 backend_pid = getattr(conn.info, "backend_pid", None) if hasattr(conn, "info") else None
@@ -177,7 +258,20 @@ async def execute_query(
                     execution_time_ms=round(elapsed, 2),
                 )
 
+    try:
+        return await _run_once()
     except Exception as e:
+        if _is_transient_connection_error(e):
+            log.info(
+                "Transient connection error — recycling pool + tunnel",
+                connection=config.id,
+                error=str(e),
+            )
+            await _reset_connection(config)
+            try:
+                return await _run_once()
+            except Exception as e2:
+                return QueryResult.from_error(str(e2), position=_error_position(e2))
         return QueryResult.from_error(str(e), position=_error_position(e))
 
 

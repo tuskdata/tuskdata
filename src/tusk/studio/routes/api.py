@@ -266,6 +266,30 @@ class APIController(Controller):
 
         return {"success": success, "message": message}
 
+    @post("/connections/{conn_id:str}/reconnect")
+    async def reconnect_conn(self, conn_id: str) -> dict:
+        """Drop the cached connection pool + SSH tunnel for this
+        connection and re-test. Use this after a network blip when
+        Tusk is still holding stale handles to a server that came
+        back. The auto-retry inside `execute_query` handles the
+        common case automatically; this endpoint is the manual
+        "fix it now" button for the sidebar."""
+        config = get_connection(conn_id)
+        if not config:
+            return {"success": False, "error": "Connection not found"}
+
+        if config.type == "postgres":
+            try:
+                await postgres._reset_connection(config)
+            except Exception as e:
+                return {"success": False, "error": f"reset failed: {e}"}
+            success, message = await postgres.test_connection(config)
+            return {"success": success, "message": message, "recycled": True}
+
+        # Non-postgres connections don't have pools or SSH tunnels;
+        # fall back to a plain test.
+        return await self.test_conn(conn_id)
+
     @get("/connections/{conn_id:str}/schema")
     async def get_conn_schema(self, conn_id: str) -> dict:
         """Get schema for a connection"""

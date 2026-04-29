@@ -2,6 +2,32 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.7.2] - 2026-04-28 — Auto-recover from network blips
+
+When the network dropped between Tusk and a remote Postgres (Wi-Fi
+flap, VPN reconnect, EC2 reboot), Tusk kept holding stale handles
+in the psycopg pool and the asyncssh tunnel cache. Plain SSH from
+the same host worked fine, but Tusk would error every query until
+the container was restarted. Useless when the deploy is on a
+server you can't reach with `docker compose restart`.
+
+Two fixes:
+
+1. **Auto-retry on transient errors** in `engines.postgres.execute_query`.
+   Catches `OperationalError`, `InterfaceError`, and a list of
+   server-closed / EOF / SSL-syscall hints; closes the pool +
+   tunnel for that connection; runs the query once more. The retry
+   is silent on success — a network blip becomes invisible.
+
+2. **Manual `Reconnect` endpoint** at `POST /api/connections/{id}/reconnect`.
+   Drops the pool + tunnel and re-tests. New "♻" recycle button on
+   each connection row in the Studio sidebar (between Edit and
+   Delete). Use when the auto-retry didn't kick in (e.g. the user
+   gave up before clicking Run again).
+
+`postgres._reset_connection(config)` is the new internal helper
+that does the closing — used by both paths.
+
 ## [0.4.7.1] - 2026-04-28 — Settings hub at /settings
 
 The AI settings page existed at `/settings/ai` since v0.4.4 but
