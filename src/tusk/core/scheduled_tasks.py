@@ -503,6 +503,18 @@ async def _handle_query(payload: dict) -> None:
     save_results_as = payload.get("save_results_as")
     if not connection_id or not sql:
         raise ValueError("query payload missing connection_id or sql")
+
+    # Validate save_results_as BEFORE the connection lookup so
+    # path-traversal attempts surface immediately and don't depend
+    # on whether the connection happens to exist (audit #1).
+    if save_results_as:
+        import re
+        if not re.match(r"^[A-Za-z0-9_-]{1,64}$", save_results_as):
+            raise ValueError(
+                "save_results_as must be 1-64 chars of [A-Za-z0-9_-]; "
+                f"got {save_results_as!r}"
+            )
+
     config = get_connection(connection_id)
     if not config:
         raise ValueError(f"connection {connection_id} not found")
@@ -536,6 +548,13 @@ async def _handle_pipeline(payload: dict) -> None:
     A pipeline is identified by a (workspace, dataset_id) pair from
     :mod:`tusk.core.workspace`. We re-load the dataset definition and
     re-apply transforms via the existing data engine helpers.
+
+    NOTE: deep integration with the Data tab's pipeline runner lives
+    behind Phase 10 (visual pipeline canvas). Until then, this handler
+    validates the dataset exists and explicitly fails — the alternative
+    was a silent no-op that recorded ``last_run_status='ok'`` without
+    actually running any transform, which had a user looking at green
+    runs assuming their ETL was working when it wasn't.
     """
     from tusk.core.workspace import load_workspace
 
@@ -549,12 +568,12 @@ async def _handle_pipeline(payload: dict) -> None:
     matches = [d for d in state.datasets if d.id == pipeline_id]
     if not matches:
         raise ValueError(f"pipeline (dataset) '{pipeline_id}' not found")
-    # The Data tab's actual execution is in studio.routes.data; for the
-    # scheduler we just touch the workspace timestamp to record a "run"
-    # and leave deeper integration to the v0.4 pipeline canvas (Phase 10).
-    from tusk.core.workspace import save_workspace  # noqa: WPS433 — local
-
-    save_workspace(state)
+    raise NotImplementedError(
+        f"pipeline execution not yet wired to scheduler — "
+        f"dataset '{pipeline_id}' exists in workspace '{workspace}' but "
+        "Phase 10 (visual pipeline canvas) is the prerequisite for "
+        "deep run integration. Track in v0.5 roadmap."
+    )
 
 
 async def _handle_plugin(payload: dict) -> None:

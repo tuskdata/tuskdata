@@ -2,6 +2,53 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.8.2] - 2026-04-28 — Last 4 audit findings closed
+
+Closing the remaining items from the v0.4.7 audit. After this every
+finding from that round is shipped — nothing deferred to v0.4.9.
+
+### #10 (MED): schema viewer cap
+
+`/api/connections/{id}/schema-graph` now caps the response at 500
+tables, sorted by FK degree desc so the kept set is the
+relationally-interesting one. FKs to dropped tables are filtered
+out so the frontend doesn't draw lines to non-existent nodes.
+Response includes `truncated: true` + `total_tables: N` so the UI
+can render a "schema truncated" badge. Real impact: 1000-table DBs
+no longer hang the SVG renderer.
+
+### #11 (MED): `_handle_pipeline` no-op surfaced as failure
+
+The handler was a workspace-touch only — it recorded
+`last_run_status="ok"` without actually running any transform, so
+users could leave a pipeline scheduled and assume their ETL was
+working. Now raises `NotImplementedError` with a pointer to Phase
+10 (visual pipeline canvas) as the prerequisite for real
+integration. Better to fail loud than fake green.
+
+### #12 (LOW): SSH tunnel close path leak
+
+`test_ssh_connection` had two layers of `try/except: pass` around
+cleanup that masked listener leaks if `wait_closed()` raised
+mid-cleanup. Replaced with an explicit `finally` block that closes
+forward → conn → wait_closed independently, each guarded so a
+failure in one step doesn't skip the next.
+
+### #15 (LOW): test coverage for the audit fixes
+
+Added three regression tests:
+
+- `test_plugin_static_path_traversal_blocked` — confirms
+  `/static/plugins/bi/../../../../etc/passwd` and friends never
+  return /etc/passwd content.
+- `test_ai_prompt_length_validation` — POST /api/ai/sql with a
+  10000-char prompt must return an error matching the cap message.
+- `test_schedule_save_results_as_traversal_blocked` — every
+  filename containing `..`, `/`, `\\` must trip the regex or the
+  `relative_to()` containment check.
+
+Suite is now 18 tests.
+
 ## [0.4.8.1] - 2026-04-28 — Two remaining HIGH/MED audit fixes
 
 The v0.4.8 release shipped 9 of 15 audit findings. Two of the

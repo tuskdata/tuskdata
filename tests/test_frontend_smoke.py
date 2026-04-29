@@ -335,6 +335,105 @@ def test_studio_query_error_does_not_crash_editor(tusk_server):
     assert not mark_errors, f"highlightQueryError crashed the editor:\n" + "\n".join(mark_errors)
 
 
+def test_plugin_static_path_traversal_blocked(tusk_server):
+    """`/static/plugins/{id}/{path:path}` must reject `..` segments.
+
+    Regression catch: the `serve_plugin_asset` handler uses
+    `Path.resolve()` + `relative_to()` containment, but a bug here
+    would let an authenticated user read arbitrary files via a URL
+    like `/static/plugins/bi/../../../../etc/passwd`. This test
+    confirms the guard fires.
+    """
+    import urllib.error
+    import urllib.request
+
+    payloads = [
+        "/static/plugins/bi/../../../../etc/passwd",
+        "/static/plugins/bi/../bi/bi.css",  # backs up then forward — still inside, but suspicious
+        "/static/plugins/..../etc/passwd",
+        "/static/plugins/bi%2F..%2F..%2F..%2Fetc%2Fpasswd",
+    ]
+    for path in payloads:
+        req = urllib.request.Request(f"{tusk_server}{path}")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = resp.read()
+                # The benign "bi/../bi/bi.css" form might 200 because it
+                # resolves back inside; that's fine — what matters is
+                # we never serve a 200 with /etc/passwd content.
+                assert b"root:x:" not in body, f"{path} leaked /etc/passwd"
+        except urllib.error.HTTPError as e:
+            # Expected: 404 or 400 for traversal attempts.
+            assert e.code in (400, 404), f"{path} returned unexpected {e.code}"
+
+
+def test_ai_prompt_length_validation(tusk_server):
+    """`/api/ai/sql` must reject oversized prompts (DoS / token-spend
+    guard). Regression catch for audit finding #5."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    # Prime the CSRF cookie.
+    cookie_jar: dict[str, str] = {}
+    with urllib.request.urlopen(f"{tusk_server}/api/auth/status", timeout=5) as resp:
+        for h in resp.headers.get_all("Set-Cookie") or []:
+            for part in h.split(";"):
+                if "=" in part:
+                    k, v = part.strip().split("=", 1)
+                    if k in ("tusk_csrf", "tusk_session"):
+                        cookie_jar[k] = v
+    cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_jar.items())
+
+    huge_prompt = "x" * 10_000  # over the 8000-char cap
+    body = json.dumps({"prompt": huge_prompt}).encode()
+    req = urllib.request.Request(
+        f"{tusk_server}/api/ai/sql",
+        data=body,
+        method="POST",
+        headers={
+            "content-type": "application/json",
+            "x-csrf-token": cookie_jar.get("tusk_csrf", ""),
+            "cookie": cookie_header,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            assert data.get("error") and "too long" in data["error"].lower(), \
+                f"oversized prompt accepted: {data}"
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        assert e.code in (400, 413), f"unexpected {e.code}: {body}"
+
+
+def test_schedule_save_results_as_traversal_blocked():
+    """Path-traversal regression for `save_results_as` (audit #1)."""
+    import asyncio
+    from tusk.core.scheduled_tasks import _handle_query
+
+    async def go(name: str):
+        try:
+            await _handle_query({
+                "connection_id": "no-such-connection",  # will fail on connection lookup
+                "sql": "SELECT 1",
+                "save_results_as": name,
+            })
+        except Exception as e:
+            return e
+        return None
+
+    # Names that should be REJECTED by the regex BEFORE the
+    # connection-lookup path runs. We're checking that the error
+    # message complains about the name, not about a missing connection.
+    for evil in ["../../etc/foo", "/etc/foo", "foo/bar", "foo\\bar", ".."]:
+        err = asyncio.run(go(evil))
+        assert err is not None, f"evil name {evil!r} did not raise"
+        msg = str(err).lower()
+        assert "save_results_as" in msg or "escapes" in msg, \
+            f"name {evil!r} did NOT trip the regex/containment guard: {err}"
+
+
 def test_homepage_renders_real_stats(tusk_server):
     """Homepage greeting + stat cards must render with computed values
     (not template literal placeholders)."""

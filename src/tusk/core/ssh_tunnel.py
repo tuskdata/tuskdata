@@ -258,7 +258,15 @@ async def close_all_tunnels() -> None:
 
 
 async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
-    """Quick probe: open the tunnel, close it. Used by the test-connection UI."""
+    """Quick probe: open the tunnel, close it. Used by the test-connection UI.
+
+    Uses an explicit close-stack so a failure mid-cleanup (e.g.
+    `wait_closed()` raising because the SSH child already died) doesn't
+    leak the listener or the connection. The previous version had two
+    layers of `try/except: pass` around close which masked exactly this
+    leak — small surface in practice (the test UI is a manual click)
+    but irritating when it happened in tests.
+    """
     if not config.uses_ssh_tunnel:
         return True, "no SSH tunnel configured"
     if not HAS_ASYNCSSH:
@@ -269,20 +277,27 @@ async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
     except Exception as e:
         return False, f"SSH connect failed: {e}"
 
+    forward = None
     try:
-        forward = await _open_forward(conn, config)
-        await _close_forward(forward)
-    except Exception as e:
+        try:
+            forward = await _open_forward(conn, config)
+        except Exception as e:
+            return False, f"port forward failed: {e}"
+        return True, "SSH + port forward OK"
+    finally:
+        # Best-effort close of every resource we opened, in reverse
+        # order. Each step is independently guarded — failure of one
+        # never skips the next.
+        if forward is not None:
+            try:
+                await _close_forward(forward)
+            except Exception as e:
+                log.debug("test_ssh_connection: forward close failed", error=str(e))
         try:
             conn.close()
+        except Exception as e:
+            log.debug("test_ssh_connection: conn.close failed", error=str(e))
+        try:
             await conn.wait_closed()
-        except Exception:
-            pass
-        return False, f"port forward failed: {e}"
-
-    try:
-        conn.close()
-        await conn.wait_closed()
-    except Exception:
-        pass
-    return True, "SSH + port forward OK"
+        except Exception as e:
+            log.debug("test_ssh_connection: wait_closed failed", error=str(e))

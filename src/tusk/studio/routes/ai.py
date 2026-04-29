@@ -174,16 +174,19 @@ class AICopilotController(Controller):
         """
         from tusk.core import ai_memory
 
-        provider = get_provider()
-        if not provider:
-            return {"error": "AI provider not configured", "code": 412}
-
+        # Validate inputs FIRST so cheap rejection fires before the
+        # provider lookup. Otherwise an unconfigured-provider response
+        # masks the input error and makes the API harder to use.
         prompt = str(data.get("prompt", "")).strip()
         if not prompt:
             return {"error": "prompt required", "code": 400}
         # Cap to keep token cost (and ai_memory.db size) bounded.
         if len(prompt) > 8_000:
             return {"error": "prompt too long (max 8000 chars)", "code": 400}
+
+        provider = get_provider()
+        if not provider:
+            return {"error": "AI provider not configured", "code": 412}
 
         connection_id = data.get("connection_id")
         schema_text = ""
@@ -280,15 +283,16 @@ class AICopilotController(Controller):
     async def explain_sql(self, request: Request, data: dict = Body()) -> dict:
         from tusk.core import ai_memory
 
-        provider = get_provider()
-        if not provider:
-            return {"error": "AI provider not configured", "code": 412}
-
+        # Validate inputs first; cheap rejection before provider lookup.
         sql = str(data.get("sql", "")).strip()
         if not sql:
             return {"error": "sql required", "code": 400}
         if len(sql) > 16_000:
             return {"error": "sql too long (max 16000 chars)", "code": 400}
+
+        provider = get_provider()
+        if not provider:
+            return {"error": "AI provider not configured", "code": 412}
 
         connection_id = data.get("connection_id")
         # The "prompt" for schema-keyword matching is the SQL itself —

@@ -423,6 +423,25 @@ class APIController(Controller):
 
         tables = list(tables_map.values())
 
+        # Cap the response so massive schemas don't lock up the SVG
+        # renderer (1000+ tables = 10000+ FK paths in the DOM, the
+        # browser hangs). Sort by FK degree first so the kept set is
+        # the relationally-interesting one. The frontend shows a
+        # "schema truncated" badge when this kicks in.
+        SCHEMA_TABLE_CAP = 500
+        truncated = len(tables) > SCHEMA_TABLE_CAP
+        if truncated:
+            fk_degree: dict[str, int] = {}
+            for fk in fks:
+                fk_degree[fk["from_table"]] = fk_degree.get(fk["from_table"], 0) + 1
+                fk_degree[fk["to_table"]] = fk_degree.get(fk["to_table"], 0) + 1
+            tables.sort(key=lambda t: (-fk_degree.get(t["name"], 0), t["name"]))
+            kept_names = {t["name"] for t in tables[:SCHEMA_TABLE_CAP]}
+            tables = tables[:SCHEMA_TABLE_CAP]
+            # Drop FKs that point to tables we removed — otherwise the
+            # frontend tries to draw lines to non-existent nodes.
+            fks = [f for f in fks if f["from_table"] in kept_names and f["to_table"] in kept_names]
+
         # Layout — load saved, else deterministic grid sorted by FK count desc.
         layout_dir = Path.home() / ".tusk" / "schema_layouts"
         layout_dir.mkdir(parents=True, exist_ok=True)
@@ -463,6 +482,8 @@ class APIController(Controller):
             "tables": tables,
             "fks": fks,
             "layout": layout,
+            "truncated": truncated,
+            "total_tables": len(tables_map) if truncated else len(tables),
         }
 
     @post("/connections/{conn_id:str}/schema-layout")
