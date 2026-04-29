@@ -59,6 +59,13 @@
                     <span :class="run.className" :style="'height:' + run.height + 'px'"></span>
                 </template>
             </div>
+            <template x-if="job.kind === 'pipeline'">
+                <button class="text-xs underline"
+                        style="color:var(--fg-3);background:none;border:0;cursor:pointer;padding:0"
+                        @click="openPipelineRuns(job)" title="View pipeline materializations">
+                    View runs
+                </button>
+            </template>
             <span class="text-xs text-fg-3 mono" x-text="nextRunLabel(job)"></span>
             <button class="icon-btn" @click="runNow(job.id)" title="Run now">
                 <i data-lucide="play"></i>
@@ -241,6 +248,61 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pipeline runs drawer -->
+    <div x-show="pipelineRunsOpen" x-cloak
+         x-on:keydown.escape.window="pipelineRunsOpen = false"
+         class="cmdk-mask" :class="pipelineRunsOpen ? 'open' : ''"
+         style="display:flex;align-items:center;justify-content:center;padding:0">
+        <div class="cmdk" style="width:640px" @click.stop>
+            <div class="cmdk-input">
+                <i data-lucide="git-branch"></i>
+                <span style="font-weight:600">Pipeline runs</span>
+                <span style="margin-left:8px;color:var(--fg-3);font-size:12px"
+                      x-text="pipelineRunsJob ? pipelineRunsJob.name : ''"></span>
+                <button class="icon-btn" style="margin-left:auto" @click="pipelineRunsOpen = false">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div style="padding:18px;max-height:480px;overflow-y:auto">
+                <div x-show="pipelineRunsLoading" x-cloak
+                     style="text-align:center;color:var(--fg-3);padding:24px">
+                    Loading runs…
+                </div>
+                <div x-show="!pipelineRunsLoading && pipelineRuns.length === 0" x-cloak
+                     style="text-align:center;color:var(--fg-3);padding:24px">
+                    No pipeline runs yet. Trigger this job manually or wait for the next scheduled fire.
+                </div>
+                <template x-for="run in pipelineRuns" :key="run.id">
+                    <div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                        <div style="flex:1">
+                            <div style="font-size:13px;color:var(--fg)" x-text="formatRunTime(run.started_at)"></div>
+                            <div style="font-size:11.5px;color:var(--fg-3);margin-top:2px">
+                                <template x-if="run.error">
+                                    <span style="color:var(--danger,#f87171)" x-text="'Error: ' + run.error"></span>
+                                </template>
+                                <template x-if="!run.error">
+                                    <span>
+                                        <span x-text="(run.rows_written ?? 0).toLocaleString() + ' rows'"></span>
+                                        <span x-show="run.output_path"> · </span>
+                                        <span x-show="run.output_path" class="mono"
+                                              style="font-size:10.5px;color:var(--fg-4)"
+                                              x-text="run.output_path"></span>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                        <template x-if="run.output_path && !run.error">
+                            <a class="btn btn-sm" :href="'/api/scheduler/pipeline-runs/' + run.id + '/download'"
+                               download>
+                                <i data-lucide="download"></i>Parquet
+                            </a>
+                        </template>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

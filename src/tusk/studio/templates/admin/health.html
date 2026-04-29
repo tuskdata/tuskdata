@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Health — Tusk{% endblock %}
+
+{% block content %}
+<main class="dash-page" style="flex:1;overflow:auto" id="health-root">
+    <div class="dash-head">
+        <div>
+            <div class="dash-title">System Health</div>
+            <div class="dash-desc">
+                Live snapshot of PostgreSQL pools, SSH tunnels, the AI provider,
+                installed plugins, and the background scheduler. Auto-refreshes
+                every 10 seconds.
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button class="btn"
+                    hx-get="/admin/health"
+                    hx-target="#health-cards"
+                    hx-swap="outerHTML">
+                <i data-lucide="refresh-cw"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <div id="health-cards"
+         hx-get="/admin/health"
+         hx-trigger="every 10s"
+         hx-swap="outerHTML">
+        {% include "admin/health_cards.html" %}
+    </div>
+</main>
+
+<script>
+    // Re-render Lucide icons after each HTMX swap so the refreshed
+    // cards keep their icons.
+    document.body.addEventListener('htmx:afterSwap', function() {
+        if (window.lucide) { lucide.createIcons(); }
+    });
+</script>
+{% endblock %}

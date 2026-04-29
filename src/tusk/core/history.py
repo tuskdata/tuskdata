@@ -18,6 +18,7 @@ class QueryHistoryEntry(msgspec.Struct):
     row_count: int | None = None
     error: str | None = None
     status: Literal["success", "error"] = "success"
+    owner_id: str = ""
 
 
 class SavedQuery(msgspec.Struct):
@@ -29,6 +30,7 @@ class SavedQuery(msgspec.Struct):
     created_at: str
     updated_at: str
     folder: str | None = None
+    owner_id: str = ""
 
 
 class QueryHistory:
@@ -82,6 +84,16 @@ class QueryHistory:
                 CREATE INDEX IF NOT EXISTS idx_saved_name
                 ON saved_queries(name)
             """)
+            # v0.4.9 — per-user isolation: idempotent ALTER to add owner_id.
+            # owner_id == '' means legacy / single-user / no owner — visible to everyone.
+            try:
+                conn.execute("ALTER TABLE query_history ADD COLUMN owner_id TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            try:
+                conn.execute("ALTER TABLE saved_queries ADD COLUMN owner_id TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass  # column already exists
             conn.commit()
 
     def add(
@@ -91,41 +103,68 @@ class QueryHistory:
         sql: str,
         execution_time_ms: float,
         row_count: int | None = None,
-        error: str | None = None
+        error: str | None = None,
+        owner_id: str | None = None,
     ) -> int:
-        """Add a query to history, returns the entry ID"""
+        """Add a query to history, returns the entry ID.
+
+        ``owner_id`` is the logged-in user's id in multi-user mode, or '' in
+        single-user mode (means 'unowned/global'). None is normalized to ''.
+        """
         status = "error" if error else "success"
         executed_at = datetime.now(timezone.utc).isoformat()
+        owner = owner_id or ""
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO query_history
-                (connection_id, connection_name, sql, executed_at, execution_time_ms, row_count, error, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (connection_id, connection_name, sql, executed_at, execution_time_ms, row_count, error, status))
+                (connection_id, connection_name, sql, executed_at, execution_time_ms, row_count, error, status, owner_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (connection_id, connection_name, sql, executed_at, execution_time_ms, row_count, error, status, owner))
             conn.commit()
             return cursor.lastrowid
 
-    def get_recent(self, limit: int = 50, connection_id: str | None = None) -> list[QueryHistoryEntry]:
-        """Get recent queries, optionally filtered by connection"""
+    def get_recent(
+        self,
+        limit: int = 50,
+        connection_id: str | None = None,
+        for_user_id: str | None = None,
+    ) -> list[QueryHistoryEntry]:
+        """Get recent queries, optionally filtered by connection.
+
+        When ``for_user_id`` is non-None and non-empty, only rows owned by
+        that user OR legacy unowned rows (owner_id='') are returned. Pass
+        None to see everything (admin / single-user mode).
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
+            where: list[str] = []
+            params: list = []
             if connection_id:
-                cursor = conn.execute("""
-                    SELECT * FROM query_history
-                    WHERE connection_id = ?
-                    ORDER BY executed_at DESC
-                    LIMIT ?
-                """, (connection_id, limit))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM query_history
-                    ORDER BY executed_at DESC
-                    LIMIT ?
-                """, (limit,))
+                where.append("connection_id = ?")
+                params.append(connection_id)
+            if for_user_id:
+                where.append("owner_id IN (?, '')")
+                params.append(for_user_id)
 
+            sql = "SELECT * FROM query_history"
+            if where:
+                sql += " WHERE " + " AND ".join(where)
+            sql += " ORDER BY executed_at DESC LIMIT ?"
+            params.append(limit)
+
+            cursor = conn.execute(sql, params)
             return [QueryHistoryEntry(**dict(row)) for row in cursor.fetchall()]
+
+    def get_entry(self, entry_id: int) -> QueryHistoryEntry | None:
+        """Get a single history entry by id (used for permission checks)."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM query_history WHERE id = ?", (entry_id,)
+            ).fetchone()
+            return QueryHistoryEntry(**dict(row)) if row else None
 
     def search(self, query: str, limit: int = 50) -> list[QueryHistoryEntry]:
         """Search queries by SQL text"""
@@ -162,36 +201,53 @@ class QueryHistory:
         name: str,
         sql: str,
         connection_id: str | None = None,
-        folder: str | None = None
+        folder: str | None = None,
+        owner_id: str | None = None,
     ) -> int:
-        """Save a query, returns the entry ID"""
+        """Save a query, returns the entry ID.
+
+        ``owner_id`` is the logged-in user's id in multi-user mode, or '' in
+        single-user mode. None is normalized to ''.
+        """
         now = datetime.now(timezone.utc).isoformat()
+        owner = owner_id or ""
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                INSERT INTO saved_queries (name, sql, connection_id, folder, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (name, sql, connection_id, folder, now, now))
+                INSERT INTO saved_queries (name, sql, connection_id, folder, created_at, updated_at, owner_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (name, sql, connection_id, folder, now, now, owner))
             conn.commit()
             return cursor.lastrowid
 
-    def get_saved_queries(self, connection_id: str | None = None) -> list[SavedQuery]:
-        """Get all saved queries, optionally filtered by connection"""
+    def get_saved_queries(
+        self,
+        connection_id: str | None = None,
+        for_user_id: str | None = None,
+    ) -> list[SavedQuery]:
+        """Get all saved queries, optionally filtered by connection.
+
+        When ``for_user_id`` is non-None and non-empty, only rows owned by
+        that user OR legacy unowned rows (owner_id='') are returned.
+        """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
+            where: list[str] = []
+            params: list = []
             if connection_id:
-                cursor = conn.execute("""
-                    SELECT * FROM saved_queries
-                    WHERE connection_id = ? OR connection_id IS NULL
-                    ORDER BY folder NULLS FIRST, name
-                """, (connection_id,))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM saved_queries
-                    ORDER BY folder NULLS FIRST, name
-                """)
+                where.append("(connection_id = ? OR connection_id IS NULL)")
+                params.append(connection_id)
+            if for_user_id:
+                where.append("owner_id IN (?, '')")
+                params.append(for_user_id)
 
+            sql = "SELECT * FROM saved_queries"
+            if where:
+                sql += " WHERE " + " AND ".join(where)
+            sql += " ORDER BY folder NULLS FIRST, name"
+
+            cursor = conn.execute(sql, params)
             return [SavedQuery(**dict(row)) for row in cursor.fetchall()]
 
     def get_saved_query(self, query_id: int) -> SavedQuery | None:

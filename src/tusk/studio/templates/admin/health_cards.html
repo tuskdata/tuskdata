@@ -1,0 +1,121 @@
+<div id="health-cards"
+     class="dash-grid"
+     hx-get="/admin/health"
+     hx-trigger="every 10s"
+     hx-swap="outerHTML">
+
+    {# ── Postgres pools ────────────────────────────────────────── #}
+    <div class="dash-card span-6">
+        <div class="dash-card-h">
+            <div class="l">PostgreSQL pools</div>
+            <i data-lucide="database" style="width:16px;height:16px;color:var(--fg-3)"></i>
+        </div>
+        {% if postgres_pools %}
+        <div style="display:flex;flex-direction:column;gap:8px">
+            {% for p in postgres_pools %}
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:12.5px">
+                <span style="font-family:var(--font-mono,monospace);color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ p.dsn }}">{{ p.dsn }}</span>
+                <span style="color:var(--fg-3);white-space:nowrap">
+                    {{ p.size_active }}/{{ p.size_used }} active
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="color:var(--fg-3);font-size:13px">No active connection pools.</div>
+        {% endif %}
+        {% if postgres_error %}
+        <div style="color:var(--red);font-size:12px">Error: {{ postgres_error }}</div>
+        {% endif %}
+    </div>
+
+    {# ── SSH tunnels ───────────────────────────────────────────── #}
+    <div class="dash-card span-6">
+        <div class="dash-card-h">
+            <div class="l">SSH tunnels</div>
+            <i data-lucide="terminal" style="width:16px;height:16px;color:var(--fg-3)"></i>
+        </div>
+        {% if ssh_tunnels %}
+        <div style="display:flex;flex-direction:column;gap:8px">
+            {% for s in ssh_tunnels %}
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:12.5px">
+                <span style="font-family:var(--font-mono,monospace)">{{ s.ssh_host }}</span>
+                <span style="color:var(--fg-3)">
+                    {{ s.forwards }} forward{% if s.forwards != 1 %}s{% endif %},
+                    {{ s.consumers }} consumer{% if s.consumers != 1 %}s{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="color:var(--fg-3);font-size:13px">No active SSH tunnels.</div>
+        {% endif %}
+        {% if ssh_error %}
+        <div style="color:var(--red);font-size:12px">Error: {{ ssh_error }}</div>
+        {% endif %}
+    </div>
+
+    {# ── AI provider ──────────────────────────────────────────── #}
+    <div class="dash-card span-4">
+        <div class="dash-card-h">
+            <div class="l">AI provider</div>
+            <i data-lucide="sparkles" style="width:16px;height:16px;color:var(--fg-3)"></i>
+        </div>
+        {% if ai_provider.configured %}
+            {% if ai_provider.ok %}
+                <div class="dash-card-v" style="color:var(--green);font-size:24px">OK</div>
+                <div style="font-size:12px;color:var(--fg-3)">Probe took {{ ai_provider.elapsed_ms }}ms</div>
+            {% else %}
+                <div class="dash-card-v" style="color:var(--red);font-size:24px">FAIL</div>
+                <div style="font-size:12px;color:var(--fg-3)">{{ ai_provider.error or 'health check failed' }}</div>
+            {% endif %}
+        {% else %}
+            <div class="dash-card-v" style="color:var(--fg-3);font-size:24px">—</div>
+            <div style="font-size:12px;color:var(--fg-3)">Not configured</div>
+        {% endif %}
+    </div>
+
+    {# ── Scheduler ────────────────────────────────────────────── #}
+    <div class="dash-card span-4">
+        <div class="dash-card-h">
+            <div class="l">Scheduler</div>
+            <i data-lucide="clock" style="width:16px;height:16px;color:var(--fg-3)"></i>
+        </div>
+        <div class="dash-card-v" style="font-size:24px;color:{% if scheduler.running %}var(--green){% else %}var(--red){% endif %}">
+            {% if scheduler.running %}RUNNING{% else %}STOPPED{% endif %}
+        </div>
+        <div style="font-size:12px;color:var(--fg-3)">{{ scheduler.jobs }} job{% if scheduler.jobs != 1 %}s{% endif %} registered</div>
+        {% if scheduler.last_failed %}
+        <div style="font-size:12px;color:var(--red);margin-top:6px">
+            Last failed: {{ scheduler.last_failed.job_id }} — {{ scheduler.last_failed.error }}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Plugins ──────────────────────────────────────────────── #}
+    <div class="dash-card span-4">
+        <div class="dash-card-h">
+            <div class="l">Plugins</div>
+            <i data-lucide="plug-2" style="width:16px;height:16px;color:var(--fg-3)"></i>
+        </div>
+        {% if plugins %}
+        <div style="display:flex;flex-direction:column;gap:6px">
+            {% for p in plugins %}
+            <div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px">
+                <span>{{ p.name }} <span style="color:var(--fg-3);font-size:11px">v{{ p.version }}</span></span>
+                <span style="color:var(--fg-3)">
+                    {% if p.db_size %}
+                        {{ "%.1f"|format(p.db_size / 1024) }} KB
+                    {% else %}
+                        —
+                    {% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="color:var(--fg-3);font-size:13px">No plugins installed.</div>
+        {% endif %}
+    </div>
+
+</div>

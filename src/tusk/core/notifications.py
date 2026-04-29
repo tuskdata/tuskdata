@@ -724,6 +724,7 @@ class NotificationService:
             ("core.user.created", "core", "User Created", "A new user has been created"),
             ("core.download.completed", "core", "Download Completed", "A scheduled download has completed"),
             ("core.download.failed", "core", "Download Failed", "A scheduled download has failed"),
+            ("scheduler.job.error", "core", "Scheduled Job Failed", "A scheduled job raised an exception"),
         ]
         for event_key, plugin_id, label, desc in core_events:
             self.register_event(event_key, plugin_id, label, desc)
@@ -736,3 +737,37 @@ class NotificationService:
 def get_notification_service(db_path: Path | None = None) -> NotificationService:
     """Get the singleton notification service."""
     return NotificationService.get_instance(db_path)
+
+
+def dispatch_event(event_key: str, context: dict | None = None, *, message: str | None = None,
+                   title: str | None = None, variant: str = "info", icon: str = "bell",
+                   link: str = "") -> int:
+    """Module-level convenience to fire a notification event.
+
+    Wraps `get_notification_service().send(...)` so callers in
+    `core/scheduler.py` etc. don't need to construct the service. The
+    `context` dict is rendered into the message when no explicit
+    `message` is supplied — useful for ad-hoc events like
+    `scheduler.job.error` whose context carries `job_id`, `error`, etc.
+    """
+    try:
+        svc = get_notification_service()
+        if message is None:
+            if context:
+                # Compact message from the context payload — keeps the
+                # in-app notification readable without a custom template
+                # for every event.
+                pieces = [f"{k}={v}" for k, v in context.items() if v is not None]
+                message = "; ".join(pieces) or event_key
+            else:
+                message = event_key
+        return svc.send(
+            event_key, message,
+            context=context, title=title,
+            icon=icon, variant=variant, link=link,
+        )
+    except Exception as e:
+        # Notifications must never break the caller (a scheduler hook,
+        # a request handler, etc.). Log and swallow.
+        log.warning("dispatch_event failed", event_key=event_key, error=str(e))
+        return 0

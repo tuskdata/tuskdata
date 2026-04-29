@@ -26,6 +26,11 @@ from tusk.core.geo import detect_geometry_columns, rows_to_geojson, to_dict as g
 from tusk.core import query_tracker
 from tusk.engines import postgres, sqlite
 from tusk.engines import duckdb_engine
+from tusk.studio.routes.base import (
+    _current_user_id,
+    _can_modify,
+    _filter_user_id,
+)
 
 
 # Keywords that change schema/structure — used to drop the schema cache after
@@ -305,12 +310,13 @@ class APIController(Controller):
             return sqlite.get_schema(config)
 
     @get("/connections/{conn_id:str}/schema-graph")
-    async def get_schema_graph(self, conn_id: str) -> dict:
+    async def get_schema_graph(self, request: Request, conn_id: str) -> dict:
         """Return a graph-shaped schema (tables, columns, FKs) plus a layout.
 
-        Layout is loaded from ~/.tusk/schema_layouts/{conn_id}.json if present;
-        otherwise we compute a deterministic grid keyed off FK count so the
-        diagram doesn't reshuffle on every load.
+        Layout is loaded from ~/.tusk/schema_layouts/{conn_id}/{user_id_or_global}.json
+        if present (v0.4.9 per-user layouts); otherwise we compute a
+        deterministic grid keyed off FK count so the diagram doesn't
+        reshuffle on every load.
         """
         config = get_connection(conn_id)
         if not config:
@@ -443,9 +449,22 @@ class APIController(Controller):
             fks = [f for f in fks if f["from_table"] in kept_names and f["to_table"] in kept_names]
 
         # Layout — load saved, else deterministic grid sorted by FK count desc.
-        layout_dir = Path.home() / ".tusk" / "schema_layouts"
+        # v0.4.9: layouts are per-user. Path: ~/.tusk/schema_layouts/{conn_id}/{uid}.json
+        # In single-user mode we use 'global' as the suffix.
+        user_id = _current_user_id(request)
+        layout_suffix = user_id if user_id else "global"
+        layout_dir = Path.home() / ".tusk" / "schema_layouts" / conn_id
         layout_dir.mkdir(parents=True, exist_ok=True)
-        layout_path = layout_dir / f"{conn_id}.json"
+        layout_path = layout_dir / f"{layout_suffix}.json"
+
+        # Back-compat: migrate from the legacy single-file layout if present.
+        legacy_path = Path.home() / ".tusk" / "schema_layouts" / f"{conn_id}.json"
+        if not layout_path.is_file() and legacy_path.is_file():
+            try:
+                layout_path.write_text(legacy_path.read_text())
+            except Exception:
+                pass
+
         layout: dict[str, dict[str, float]] = {}
         if layout_path.is_file():
             try:
@@ -487,8 +506,14 @@ class APIController(Controller):
         }
 
     @post("/connections/{conn_id:str}/schema-layout")
-    async def save_schema_layout(self, conn_id: str, data: dict = Body()) -> dict:
-        """Persist the user's drag-positioned layout to ~/.tusk/schema_layouts/{conn_id}.json."""
+    async def save_schema_layout(
+        self, request: Request, conn_id: str, data: dict = Body()
+    ) -> dict:
+        """Persist the user's drag-positioned layout.
+
+        v0.4.9: stored at ~/.tusk/schema_layouts/{conn_id}/{user_id_or_global}.json
+        so users in multi-user mode don't overwrite each other's layouts.
+        """
         config = get_connection(conn_id)
         if not config:
             return {"error": "Connection not found"}
@@ -509,9 +534,11 @@ class APIController(Controller):
                 continue
             clean[name] = {"x": x, "y": y}
 
-        layout_dir = Path.home() / ".tusk" / "schema_layouts"
+        user_id = _current_user_id(request)
+        layout_suffix = user_id if user_id else "global"
+        layout_dir = Path.home() / ".tusk" / "schema_layouts" / conn_id
         layout_dir.mkdir(parents=True, exist_ok=True)
-        layout_path = layout_dir / f"{conn_id}.json"
+        layout_path = layout_dir / f"{layout_suffix}.json"
         layout_path.write_text(json.dumps(clean, indent=2))
         return {"saved": True, "tables": len(clean)}
 
@@ -552,7 +579,7 @@ class APIController(Controller):
             return {"online": False, "error": str(e)}
 
     @post("/query")
-    async def run_query(self, data: dict = Body()) -> dict:
+    async def run_query(self, request: Request, data: dict = Body()) -> dict:
         """Execute a query.
 
         Optional pagination params (PostgreSQL only):
@@ -569,6 +596,7 @@ class APIController(Controller):
         page = data.get("page")  # Optional: for server-side pagination
         page_size = data.get("page_size", 100)
         request_id = data.get("request_id") or uuid.uuid4().hex
+        owner_id = _current_user_id(request)
 
         if not sql:
             return {"error": "No SQL provided"}
@@ -621,7 +649,8 @@ class APIController(Controller):
                 sql=sql,
                 execution_time_ms=execution_time_ms,
                 row_count=result_dict.get("total_count") or result_dict.get("row_count"),
-                error=result_dict.get("error")
+                error=result_dict.get("error"),
+                owner_id=owner_id,
             )
 
             return result_dict
@@ -634,7 +663,8 @@ class APIController(Controller):
                 connection_name=config.name,
                 sql=sql,
                 execution_time_ms=execution_time_ms,
-                error=str(e)
+                error=str(e),
+                owner_id=owner_id,
             )
             return {"error": str(e), "request_id": request_id}
 
@@ -738,10 +768,23 @@ class APIController(Controller):
         )
 
     @get("/history")
-    async def get_query_history(self, connection_id: str | None = None, limit: int = 50) -> dict:
-        """Get query history"""
+    async def get_query_history(
+        self,
+        request: Request,
+        connection_id: str | None = None,
+        limit: int = 50,
+    ) -> dict:
+        """Get query history.
+
+        In multi-user mode non-admin users only see their own rows + legacy
+        unowned rows (owner_id=''). Admins (and single-user mode) see all.
+        """
         history = get_history()
-        entries = history.get_recent(limit=limit, connection_id=connection_id)
+        entries = history.get_recent(
+            limit=limit,
+            connection_id=connection_id,
+            for_user_id=_filter_user_id(request),
+        )
         return {
             "history": [
                 {
@@ -760,26 +803,64 @@ class APIController(Controller):
         }
 
     @delete("/history/{entry_id:int}", status_code=200)
-    async def delete_history_entry(self, entry_id: int) -> dict:
-        """Delete a history entry"""
+    async def delete_history_entry(self, request: Request, entry_id: int) -> dict:
+        """Delete a history entry. Owner or admin only."""
         history = get_history()
+        entry = history.get_entry(entry_id)
+        if entry is None:
+            return {"deleted": False, "error": "not found"}
+        if not _can_modify(request, entry.owner_id):
+            return Response(content={"error": "forbidden"}, status_code=403)
         history.delete(entry_id)
         return {"deleted": True}
 
     @delete("/history", status_code=200)
-    async def clear_history(self, connection_id: str | None = None) -> dict:
-        """Clear query history"""
+    async def clear_history(self, request: Request, connection_id: str | None = None) -> dict:
+        """Clear query history.
+
+        Multi-user non-admins only clear their own rows; admins clear all
+        matching rows. Single-user mode clears everything (no owner concept).
+        """
         history = get_history()
-        history.clear(connection_id=connection_id)
+        from tusk.core.config import get_config
+        if get_config().auth_mode != "multi":
+            history.clear(connection_id=connection_id)
+            return {"cleared": True}
+
+        # Multi-user — clear only this user's rows (or all if admin).
+        from tusk.studio.routes.base import _current_user_is_admin
+        user_id = _current_user_id(request)
+        if _current_user_is_admin(request):
+            history.clear(connection_id=connection_id)
+            return {"cleared": True}
+        if not user_id:
+            return Response(content={"error": "forbidden"}, status_code=403)
+        # Only clear rows owned by this user. We do this in raw SQL since
+        # `clear()` doesn't support an owner filter.
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(history.db_path) as conn:
+            if connection_id:
+                conn.execute(
+                    "DELETE FROM query_history WHERE connection_id = ? AND owner_id = ?",
+                    (connection_id, user_id),
+                )
+            else:
+                conn.execute("DELETE FROM query_history WHERE owner_id = ?", (user_id,))
+            conn.commit()
         return {"cleared": True}
 
     # Saved Queries endpoints
 
     @get("/saved-queries")
-    async def list_saved_queries(self, connection_id: str | None = None) -> dict:
-        """Get all saved queries"""
+    async def list_saved_queries(
+        self, request: Request, connection_id: str | None = None
+    ) -> dict:
+        """Get all saved queries (filtered to current user in multi-user)."""
         history = get_history()
-        queries = history.get_saved_queries(connection_id=connection_id)
+        queries = history.get_saved_queries(
+            connection_id=connection_id,
+            for_user_id=_filter_user_id(request),
+        )
         return {
             "queries": [
                 {
@@ -796,8 +877,8 @@ class APIController(Controller):
         }
 
     @post("/saved-queries")
-    async def save_query(self, data: dict = Body()) -> dict:
-        """Save a new query"""
+    async def save_query(self, request: Request, data: dict = Body()) -> dict:
+        """Save a new query (stamped with the current user's id)."""
         name = data.get("name")
         sql = data.get("sql")
 
@@ -809,19 +890,29 @@ class APIController(Controller):
             name=name,
             sql=sql,
             connection_id=data.get("connection_id"),
-            folder=data.get("folder")
+            folder=data.get("folder"),
+            owner_id=_current_user_id(request),
         )
 
         return {"id": query_id, "name": name}
 
     @get("/saved-queries/{query_id:int}")
-    async def get_saved_query(self, query_id: int) -> dict:
-        """Get a specific saved query"""
+    async def get_saved_query(self, request: Request, query_id: int) -> dict:
+        """Get a specific saved query (own or legacy unowned, or admin)."""
         history = get_history()
         query = history.get_saved_query(query_id)
 
         if not query:
             return {"error": "Query not found"}
+
+        # Read-side check: same as listing — own rows + legacy + admin.
+        from tusk.core.config import get_config
+        if get_config().auth_mode == "multi":
+            from tusk.studio.routes.base import _current_user_is_admin
+            user_id = _current_user_id(request)
+            if not _current_user_is_admin(request):
+                if query.owner_id and query.owner_id != user_id:
+                    return Response(content={"error": "forbidden"}, status_code=403)
 
         return {
             "id": query.id,
@@ -834,9 +925,16 @@ class APIController(Controller):
         }
 
     @put("/saved-queries/{query_id:int}")
-    async def update_saved_query(self, query_id: int, data: dict = Body()) -> dict:
-        """Update a saved query"""
+    async def update_saved_query(
+        self, request: Request, query_id: int, data: dict = Body()
+    ) -> dict:
+        """Update a saved query. Owner or admin only."""
         history = get_history()
+        existing = history.get_saved_query(query_id)
+        if existing is None:
+            return {"error": "Failed to update query"}
+        if not _can_modify(request, existing.owner_id):
+            return Response(content={"error": "forbidden"}, status_code=403)
 
         success = history.update_saved_query(
             query_id=query_id,
@@ -850,9 +948,14 @@ class APIController(Controller):
         return {"error": "Failed to update query"}
 
     @delete("/saved-queries/{query_id:int}", status_code=200)
-    async def delete_saved_query(self, query_id: int) -> dict:
-        """Delete a saved query"""
+    async def delete_saved_query(self, request: Request, query_id: int) -> dict:
+        """Delete a saved query. Owner or admin only."""
         history = get_history()
+        existing = history.get_saved_query(query_id)
+        if existing is None:
+            return {"deleted": False, "error": "not found"}
+        if not _can_modify(request, existing.owner_id):
+            return Response(content={"error": "forbidden"}, status_code=403)
         history.delete_saved_query(query_id)
         return {"deleted": True}
 

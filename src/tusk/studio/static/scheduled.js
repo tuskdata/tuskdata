@@ -36,6 +36,11 @@
             newModalOpen: false,
             step: "kind",
             form: defaultForm(),
+            // Pipeline runs drawer state
+            pipelineRunsOpen: false,
+            pipelineRunsLoading: false,
+            pipelineRuns: [],
+            pipelineRunsJob: null,
             kindOptions: [
                 { id: "query", label: "SQL query", icon: "code", desc: "Run SQL on a connection" },
                 { id: "pipeline", label: "Pipeline", icon: "git-branch", desc: "Run a saved Data pipeline" },
@@ -153,6 +158,37 @@
                 return runs
                     .map((r) => `${r.started_at}: ${r.status}${r.duration_ms ? ` (${r.duration_ms}ms)` : ""}`)
                     .join("\n");
+            },
+
+            // ── Pipeline runs drawer ───────────────────────────
+            async openPipelineRuns(job) {
+                this.pipelineRunsJob = job;
+                this.pipelineRunsOpen = true;
+                this.pipelineRunsLoading = true;
+                this.pipelineRuns = [];
+                try {
+                    const data = await window.tuskFetchJSON(
+                        `/api/scheduler/jobs/${job.id}/pipeline-runs`
+                    );
+                    this.pipelineRuns = data.runs || [];
+                } catch (e) {
+                    if (window.tuskToast) {
+                        window.tuskToast(`Failed to load runs: ${e.message}`, "error");
+                    }
+                } finally {
+                    this.pipelineRunsLoading = false;
+                    this.$nextTick(() => window.lucide && window.lucide.createIcons());
+                }
+            },
+
+            formatRunTime(iso) {
+                if (!iso) return "—";
+                try {
+                    const dt = new Date(iso);
+                    return dt.toLocaleString();
+                } catch (_) {
+                    return iso;
+                }
             },
 
             // ── Modal flow ─────────────────────────────────────

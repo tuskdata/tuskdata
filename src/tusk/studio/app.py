@@ -22,6 +22,7 @@ from tusk.studio.routes import (
     PageController,
     APIController,
     AdminController,
+    HealthController,
     SettingsController,
     FilesController,
     DuckDBController,
@@ -43,7 +44,8 @@ from tusk.studio.routes import (
     metrics,
 )
 from tusk.core.connection import load_connections_from_file
-from tusk.core.logging import setup_logging, get_logger
+from tusk.core.logging import setup_logging, get_logger, _correlation_id
+from tusk.core.otel import init_otel
 from tusk.core.scheduler import get_scheduler
 from tusk.plugins.registry import (
     discover_plugins,
@@ -139,6 +141,53 @@ class CSRFMiddleware(AbstractMiddleware):
         await self.app(scope, receive, send_with_csrf)
 
 
+class CorrelationIDMiddleware(AbstractMiddleware):
+    """Attach an `X-Correlation-ID` to every HTTP request/response.
+
+    Reads the incoming `X-Correlation-ID` header (any value the caller
+    sent) and falls back to a freshly generated 16-hex-char id when
+    absent or empty. The id is stashed in the `_correlation_id`
+    contextvar so the structlog processor in `core.logging` can attach
+    it to every log line emitted while the request is in flight, then
+    echoed back on the outgoing response so the caller can correlate
+    server logs with client traces.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Pull the header out of the raw ASGI scope (case-insensitive).
+        incoming = ""
+        for name, value in scope.get("headers") or ():
+            if name.lower() == b"x-correlation-id":
+                try:
+                    incoming = value.decode("ascii", errors="replace").strip()
+                except Exception:
+                    incoming = ""
+                break
+
+        cid = incoming or secrets.token_hex(8)
+        token = _correlation_id.set(cid)
+
+        cid_bytes = cid.encode("ascii", errors="replace")
+
+        async def send_with_correlation(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers") or [])
+                # Drop any pre-existing header so we don't ship duplicates.
+                headers = [(n, v) for (n, v) in headers if n.lower() != b"x-correlation-id"]
+                headers.append((b"x-correlation-id", cid_bytes))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_correlation)
+        finally:
+            _correlation_id.reset(token)
+
+
 class SessionRequiredMiddleware(AbstractMiddleware):
     """Require a valid session cookie in multi-user mode.
 
@@ -221,6 +270,7 @@ def get_route_handlers() -> list:
         PageController,
         APIController,
         AdminController,
+        HealthController,
         SettingsController,
         FilesController,
         DuckDBController,
@@ -254,6 +304,14 @@ def on_startup() -> None:
     setup_logging(debug=debug)
     log = get_logger("studio")
     log.info("Starting Tusk Studio")
+
+    # Initialize OpenTelemetry as early as possible so request spans
+    # captured by the Litestar instrumentation cover the whole boot
+    # window. Returns False quickly when TUSK_OTEL_ENDPOINT is unset.
+    try:
+        init_otel()
+    except Exception as e:
+        log.warning("OTEL init failed (non-fatal)", error=str(e))
 
     # Load connections
     load_connections_from_file()
@@ -487,7 +545,7 @@ app = Litestar(
         backend="zstd",
         minimum_size=500,  # Compress responses larger than 500 bytes
     ),
-    middleware=[SessionRequiredMiddleware, CSRFMiddleware],
+    middleware=[SessionRequiredMiddleware, CorrelationIDMiddleware, CSRFMiddleware],
     # Litestar's default OpenAPI controller registers at `/schema`, which
     # collides with our user-facing Schema viewer page. Move it under
     # `/api/openapi` so `/schema` is free for the application UI.

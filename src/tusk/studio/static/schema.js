@@ -38,6 +38,7 @@
 
         els.picker = document.getElementById('schema-conn-picker');
         els.summary = document.getElementById('schema-summary');
+        els.truncateBadge = document.getElementById('schema-truncate-badge');
         els.viewport = document.getElementById('schema-viewport');
         els.svg = document.getElementById('schema-svg');
         els.entitiesLayer = document.getElementById('schema-entities');
@@ -123,11 +124,27 @@
         state.tables = data.tables || [];
         state.fks = data.fks || [];
         state.layout = data.layout || {};
+        state.truncated = !!data.truncated;
+        state.totalTables = data.total_tables || state.tables.length;
         state.sizes = {};
         state.selected = null;
         render();
         if (els.summary) {
-            els.summary.textContent = `${state.tables.length} tables · ${state.fks.length} FKs`;
+            const summary = `${state.tables.length} tables · ${state.fks.length} FKs`;
+            els.summary.textContent = summary;
+        }
+        // Render the truncate badge in the toolbar. Backend caps the
+        // schema-graph response at 500 tables (v0.4.8.2 audit #10);
+        // when that fires we tell the user how many were dropped so
+        // they don't think they have a bug.
+        if (els.truncateBadge) {
+            if (state.truncated) {
+                els.truncateBadge.textContent =
+                    `Showing ${state.tables.length} of ${state.totalTables} tables`;
+                els.truncateBadge.style.display = '';
+            } else {
+                els.truncateBadge.style.display = 'none';
+            }
         }
         setStatus(`Loaded ${state.tables.length} tables, ${state.fks.length} foreign keys`);
     }

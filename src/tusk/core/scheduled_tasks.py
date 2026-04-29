@@ -55,6 +55,10 @@ class JobSpec(msgspec.Struct):
         (also accepts ``"cron": "0 2 * * *"``)
       - ``{"type": "interval", "hours": 0, "minutes": 5, "seconds": 0}``
       - ``{"type": "date", "run_date": "2026-04-30T10:00:00"}``
+
+    ``owner_id`` is the logged-in user id in multi-user mode (v0.4.9), or
+    '' in single-user mode (means 'unowned/global'). Listing helpers can
+    filter by ``for_user_id``; admins pass None to see everything.
     """
 
     id: str
@@ -65,6 +69,7 @@ class JobSpec(msgspec.Struct):
     enabled: bool = True
     notify_on_success: bool = False
     notify_on_failure: bool = True
+    owner_id: str = ""
 
 
 # ─────────────────────────────────────────────────────────────
@@ -118,6 +123,31 @@ def _init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_job_runs_job_id ON job_runs(job_id, started_at DESC)"
         )
+        # Per-pipeline materialization records. Separate from ``job_runs``
+        # (the generic dispatcher audit trail) so the parquet output
+        # paths + row counts don't bloat every other job kind's history.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT NOT NULL,
+                output_path TEXT,
+                rows_written INTEGER,
+                error TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pipeline_runs_job ON pipeline_runs(job_id, id DESC)"
+        )
+        # v0.4.9 — per-user isolation: idempotent ALTER to add owner_id.
+        try:
+            conn.execute("ALTER TABLE scheduled_jobs ADD COLUMN owner_id TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         conn.commit()
     finally:
         conn.close()
@@ -130,8 +160,8 @@ def save_job(spec: JobSpec) -> None:
         conn.execute(
             """
             INSERT INTO scheduled_jobs
-                (id, kind, name, payload, trigger, enabled, notify_on_success, notify_on_failure, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, kind, name, payload, trigger, enabled, notify_on_success, notify_on_failure, created_at, owner_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 kind=excluded.kind,
                 name=excluded.name,
@@ -139,7 +169,8 @@ def save_job(spec: JobSpec) -> None:
                 trigger=excluded.trigger,
                 enabled=excluded.enabled,
                 notify_on_success=excluded.notify_on_success,
-                notify_on_failure=excluded.notify_on_failure
+                notify_on_failure=excluded.notify_on_failure,
+                owner_id=excluded.owner_id
             """,
             (
                 spec.id,
@@ -151,6 +182,7 @@ def save_job(spec: JobSpec) -> None:
                 1 if spec.notify_on_success else 0,
                 1 if spec.notify_on_failure else 0,
                 datetime.now(timezone.utc).isoformat(),
+                spec.owner_id or "",
             ),
         )
         conn.commit()
@@ -159,6 +191,13 @@ def save_job(spec: JobSpec) -> None:
 
 
 def _row_to_spec(row: sqlite3.Row) -> JobSpec:
+    # owner_id column is added by an idempotent ALTER. On databases created
+    # before v0.4.9 the row may not expose it via row.keys() if a partial
+    # init ran — defend with a try/except.
+    try:
+        owner_id = row["owner_id"] or ""
+    except (KeyError, IndexError):
+        owner_id = ""
     return JobSpec(
         id=row["id"],
         kind=JobKind(row["kind"]),
@@ -168,6 +207,7 @@ def _row_to_spec(row: sqlite3.Row) -> JobSpec:
         enabled=bool(row["enabled"]),
         notify_on_success=bool(row["notify_on_success"]),
         notify_on_failure=bool(row["notify_on_failure"]),
+        owner_id=owner_id,
     )
 
 
@@ -181,14 +221,27 @@ def get_job(job_id: str) -> JobSpec | None:
         conn.close()
 
 
-def list_jobs() -> list[dict]:
-    """Return jobs joined with execution metadata for the UI."""
+def list_jobs(for_user_id: str | None = None) -> list[dict]:
+    """Return jobs joined with execution metadata for the UI.
+
+    When ``for_user_id`` is non-None and non-empty, only jobs owned by
+    that user OR legacy unowned jobs (owner_id='') are returned. Pass
+    None to see everything (admin / single-user mode).
+    """
     _init_db()
     conn = _connect()
     try:
-        rows = conn.execute(
-            "SELECT * FROM scheduled_jobs ORDER BY created_at DESC"
-        ).fetchall()
+        if for_user_id:
+            rows = conn.execute(
+                "SELECT * FROM scheduled_jobs "
+                "WHERE owner_id IN (?, '') "
+                "ORDER BY created_at DESC",
+                (for_user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM scheduled_jobs ORDER BY created_at DESC"
+            ).fetchall()
     finally:
         conn.close()
 
@@ -205,6 +258,7 @@ def list_jobs() -> list[dict]:
                 "enabled": spec.enabled,
                 "notify_on_success": spec.notify_on_success,
                 "notify_on_failure": spec.notify_on_failure,
+                "owner_id": spec.owner_id,
                 "created_at": r["created_at"],
                 "last_run_at": r["last_run_at"],
                 "last_run_status": r["last_run_status"],
@@ -220,6 +274,7 @@ def delete_job(job_id: str) -> bool:
     try:
         cur = conn.execute("DELETE FROM scheduled_jobs WHERE id=?", (job_id,))
         conn.execute("DELETE FROM job_runs WHERE job_id=?", (job_id,))
+        conn.execute("DELETE FROM pipeline_runs WHERE job_id=?", (job_id,))
         conn.commit()
         return cur.rowcount > 0
     finally:
@@ -295,6 +350,79 @@ def get_runs(job_id: str, limit: int = 10) -> list[dict]:
             (job_id, max(1, min(limit, 100))),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def record_pipeline_run(
+    job_id: str,
+    started_at: datetime,
+    ended_at: datetime,
+    output_path: str | None,
+    rows_written: int | None,
+    error: str | None = None,
+) -> int:
+    """Persist a pipeline materialization record; returns the new row id."""
+    _init_db()
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO pipeline_runs
+                (job_id, started_at, ended_at, output_path, rows_written, error, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                started_at.isoformat(),
+                ended_at.isoformat(),
+                output_path,
+                rows_written,
+                error,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid or 0)
+    finally:
+        conn.close()
+
+
+def get_pipeline_runs(job_id: str, limit: int = 10) -> list[dict]:
+    """Return last ``limit`` pipeline runs for a job, newest first."""
+    _init_db()
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, job_id, started_at, ended_at, output_path,
+                   rows_written, error, created_at
+            FROM pipeline_runs
+            WHERE job_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (job_id, max(1, min(limit, 100))),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_pipeline_run(run_id: int) -> dict | None:
+    """Return a single pipeline run row by its primary key."""
+    _init_db()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, job_id, started_at, ended_at, output_path,
+                   rows_written, error, created_at
+            FROM pipeline_runs WHERE id=?
+            """,
+            (run_id,),
+        ).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 
@@ -399,8 +527,17 @@ async def _run_job(spec_id: str) -> None:
     started = datetime.now(timezone.utc)
     error: str | None = None
     status = "ok"
+    # Inject run-context into the payload so handlers that need it (e.g.
+    # `_handle_pipeline`, which writes per-job parquet artifacts) can
+    # read ``_job_id`` / ``_job_name`` without changing the handler
+    # signature contract. Built-in handlers ignore unknown keys.
+    runtime_payload = {
+        **spec.payload,
+        "_job_id": spec.id,
+        "_job_name": spec.name,
+    }
     try:
-        await handler(spec.payload)
+        await handler(runtime_payload)
     except Exception as exc:  # noqa: BLE001 — generic dispatcher
         error = f"{type(exc).__name__}: {exc}"
         status = "error"
@@ -542,37 +679,133 @@ async def _handle_query(payload: dict) -> None:
         out_path.write_text(json.dumps(result.to_dict(), default=str))
 
 
+def _dataset_to_pipeline(dataset, pipeline_id: str):
+    """Translate a workspace ``DatasetState`` into a Polars ``Pipeline``.
+
+    The dataset itself is the primary source; any ``join_sources`` ride
+    along so JOIN / CONCAT transforms can resolve them. Transform dicts
+    go through the same ``_parse_transform`` parser that ``/api/data/*``
+    routes use, so behaviour stays in lockstep with the Data tab.
+    """
+    from tusk.engines.polars_engine import DataSource, Pipeline
+    from tusk.studio.routes.data import _parse_transform
+
+    sources = [
+        DataSource(
+            id=dataset.id,
+            name=dataset.name,
+            source_type=dataset.source_type,
+            path=dataset.path,
+            connection_id=dataset.connection_id,
+            query=dataset.query,
+            osm_layer=dataset.osm_layer,
+        )
+    ]
+    for js in dataset.join_sources or []:
+        sources.append(
+            DataSource(
+                id=js.get("id", ""),
+                name=js.get("name", "Unnamed"),
+                source_type=js.get("source_type", "csv"),
+                path=js.get("path"),
+                connection_id=js.get("connection_id"),
+                query=js.get("query"),
+                osm_layer=js.get("osm_layer"),
+            )
+        )
+
+    transforms = []
+    for t in dataset.transforms or []:
+        parsed = _parse_transform(t)
+        if parsed is not None:
+            transforms.append(parsed)
+
+    return Pipeline(
+        id=pipeline_id,
+        name=dataset.name,
+        sources=sources,
+        transforms=transforms,
+        output_source_id=dataset.id,
+    )
+
+
 async def _handle_pipeline(payload: dict) -> None:
     """Run a saved Data tab pipeline.
 
-    A pipeline is identified by a (workspace, dataset_id) pair from
-    :mod:`tusk.core.workspace`. We re-load the dataset definition and
-    re-apply transforms via the existing data engine helpers.
+    A pipeline is identified by a ``(workspace, dataset_id)`` pair from
+    :mod:`tusk.core.workspace`. The dataset definition is re-loaded and
+    converted into a Polars :class:`Pipeline`, executed via the same
+    ``_run_pipeline`` helper that powers ``/api/data/*``, and the
+    resulting DataFrame is materialized to
+    ``~/.tusk/pipeline_runs/{job_id}/{utc_timestamp}.parquet``.
 
-    NOTE: deep integration with the Data tab's pipeline runner lives
-    behind Phase 10 (visual pipeline canvas). Until then, this handler
-    validates the dataset exists and explicitly fails — the alternative
-    was a silent no-op that recorded ``last_run_status='ok'`` without
-    actually running any transform, which had a user looking at green
-    runs assuming their ETL was working when it wasn't.
+    A row is recorded in the ``pipeline_runs`` table on success **and**
+    on failure — callers can audit which runs produced output even
+    after a partial failure.
     """
+    import asyncio
+
     from tusk.core.workspace import load_workspace
+    from tusk.engines.polars_engine import _run_pipeline
 
     workspace = payload.get("workspace") or "default"
     pipeline_id = payload.get("pipeline_id")
+    # ``_job_id`` is injected by ``_run_job`` before dispatch. When the
+    # handler is called directly (tests, CLI) we fall back to the dataset
+    # id so the parquet directory is still keyed by something stable.
+    job_id = payload.get("_job_id") or pipeline_id
     if not pipeline_id:
         raise ValueError("pipeline payload missing pipeline_id")
+
     state = load_workspace(workspace)
     if state is None:
         raise ValueError(f"workspace '{workspace}' not found")
     matches = [d for d in state.datasets if d.id == pipeline_id]
     if not matches:
         raise ValueError(f"pipeline (dataset) '{pipeline_id}' not found")
-    raise NotImplementedError(
-        f"pipeline execution not yet wired to scheduler — "
-        f"dataset '{pipeline_id}' exists in workspace '{workspace}' but "
-        "Phase 10 (visual pipeline canvas) is the prerequisite for "
-        "deep run integration. Track in v0.5 roadmap."
+    dataset = matches[0]
+
+    pipeline = _dataset_to_pipeline(dataset, pipeline_id)
+
+    started = datetime.now(timezone.utc)
+    out_dir = TUSK_DIR / "pipeline_runs" / job_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = started.strftime("%Y%m%d_%H%M%S")
+    out_path = out_dir / f"{timestamp}.parquet"
+
+    try:
+        # Pipeline execution can take seconds (file I/O, joins, network
+        # for SQL sources) — keep it off the event loop.
+        df = await asyncio.to_thread(_run_pipeline, pipeline, None)
+        rows_written = int(df.height)
+        await asyncio.to_thread(df.write_parquet, out_path)
+    except Exception as exc:
+        ended = datetime.now(timezone.utc)
+        record_pipeline_run(
+            job_id=job_id,
+            started_at=started,
+            ended_at=ended,
+            output_path=None,
+            rows_written=None,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        raise
+
+    ended = datetime.now(timezone.utc)
+    record_pipeline_run(
+        job_id=job_id,
+        started_at=started,
+        ended_at=ended,
+        output_path=str(out_path),
+        rows_written=rows_written,
+        error=None,
+    )
+    log.info(
+        "pipeline_run_complete",
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        rows_written=rows_written,
+        output_path=str(out_path),
     )
 
 
@@ -673,6 +906,7 @@ def add_backup_schedule(
     minute: int = 0,
     day_of_week: str = "*",
     backup_dir: str | None = None,
+    owner_id: str | None = None,
 ) -> str:
     spec = JobSpec(
         id=f"backup_{connection_id}",
@@ -685,6 +919,7 @@ def add_backup_schedule(
             "minute": minute,
             "day_of_week": day_of_week,
         },
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 
@@ -695,6 +930,7 @@ def add_vacuum_schedule(
     minute: int = 0,
     day_of_week: str = "sun",
     full: bool = False,
+    owner_id: str | None = None,
 ) -> str:
     spec = JobSpec(
         id=f"vacuum_{connection_id}",
@@ -707,6 +943,7 @@ def add_vacuum_schedule(
             "minute": minute,
             "day_of_week": day_of_week,
         },
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 
@@ -715,6 +952,7 @@ def add_analyze_schedule(
     connection_id: str,
     hour: int = 4,
     minute: int = 0,
+    owner_id: str | None = None,
 ) -> str:
     spec = JobSpec(
         id=f"analyze_{connection_id}",
@@ -722,6 +960,7 @@ def add_analyze_schedule(
         name=f"ANALYZE {connection_id}",
         payload={"connection_id": connection_id},
         trigger={"type": "cron", "hour": hour, "minute": minute, "day_of_week": "*"},
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 
@@ -732,6 +971,7 @@ def add_query_job(
     sql: str,
     trigger: dict,
     save_results_as: str | None = None,
+    owner_id: str | None = None,
 ) -> str:
     spec = JobSpec(
         id=_new_id("query"),
@@ -743,28 +983,44 @@ def add_query_job(
             "save_results_as": save_results_as,
         },
         trigger=trigger,
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 
 
-def add_pipeline_job(name: str, pipeline_id: str, trigger: dict, workspace: str = "default") -> str:
+def add_pipeline_job(
+    name: str,
+    pipeline_id: str,
+    trigger: dict,
+    workspace: str = "default",
+    owner_id: str | None = None,
+) -> str:
     spec = JobSpec(
         id=_new_id("pipeline"),
         kind=JobKind.PIPELINE,
         name=name,
         payload={"pipeline_id": pipeline_id, "workspace": workspace},
         trigger=trigger,
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 
 
-def add_plugin_job(name: str, plugin_id: str, kind: str, payload: dict, trigger: dict) -> str:
+def add_plugin_job(
+    name: str,
+    plugin_id: str,
+    kind: str,
+    payload: dict,
+    trigger: dict,
+    owner_id: str | None = None,
+) -> str:
     spec = JobSpec(
         id=_new_id(f"plugin_{plugin_id}"),
         kind=JobKind.PLUGIN,
         name=name,
         payload={"plugin_id": plugin_id, "kind": kind, "payload": payload},
         trigger=trigger,
+        owner_id=owner_id or "",
     )
     return add_job(spec)
 

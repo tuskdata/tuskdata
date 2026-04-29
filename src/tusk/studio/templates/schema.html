@@ -22,6 +22,8 @@
                 {% endfor %}
             </select>
             <span id="schema-summary" class="chip chip-neutral">—</span>
+            <span id="schema-truncate-badge" class="chip chip-amber" style="display:none"
+                  title="Backend capped the schema graph at 500 tables to keep the SVG renderer responsive."></span>
         </div>
         <button id="schema-autolayout" class="btn btn-sm" title="Recompute deterministic grid layout">
             <i data-lucide="layout-grid"></i>Auto-layout

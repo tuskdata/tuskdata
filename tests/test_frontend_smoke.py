@@ -434,6 +434,49 @@ def test_schedule_save_results_as_traversal_blocked():
             f"name {evil!r} did NOT trip the regex/containment guard: {err}"
 
 
+def test_correlation_id_propagates(tusk_server):
+    """`X-Correlation-ID` sent by the client must come back unchanged
+    on the response so external traces line up with server logs."""
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"{tusk_server}/api/auth/status",
+        headers={"X-Correlation-ID": "abc123"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        cid = resp.headers.get("X-Correlation-ID")
+        assert cid == "abc123", f"expected echoed correlation id, got {cid!r}"
+
+
+def test_correlation_id_generated_when_missing(tusk_server):
+    """When the client omits the header, the middleware mints a
+    16-hex-char id and ships it back so callers can capture it."""
+    import re
+    import urllib.request
+
+    req = urllib.request.Request(f"{tusk_server}/api/auth/status")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        cid = resp.headers.get("X-Correlation-ID")
+        assert cid, "no X-Correlation-ID header on response"
+        assert re.match(r"^[0-9a-f]{16}$", cid), f"unexpected correlation id format: {cid!r}"
+
+
+def test_admin_health_renders(tusk_server):
+    """`/admin/health` returns 200 in single-user mode (loopback is the
+    default admin allowance) and the page body contains the dashboard
+    landmark."""
+    import urllib.request
+
+    req = urllib.request.Request(f"{tusk_server}/admin/health")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        body = resp.read().decode("utf-8", errors="replace")
+        assert "health-cards" in body, "health page missing #health-cards landmark"
+        assert "System Health" in body, "health page missing title"
+
+
 def test_homepage_renders_real_stats(tusk_server):
     """Homepage greeting + stat cards must render with computed values
     (not template literal placeholders)."""
@@ -456,3 +499,159 @@ def test_homepage_renders_real_stats(tusk_server):
         assert "{{" not in body or body.count("{{") < 5, "template placeholders leaked into rendered HTML"
 
         browser.close()
+
+
+# ─────────────────────────────────────────────────────────────────
+# v0.4.9 — Per-user isolation
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_history_owner_isolation_in_history_layer():
+    """Per-user isolation (v0.4.9): a row stamped with owner_id='u1' must
+    NOT show up when another user queries with for_user_id='u2'.
+
+    Unit test on the history layer — multi-user spawn-and-login E2E is
+    expensive in this fixture, so we exercise the same code path the
+    routes use.
+    """
+    import tempfile
+    from pathlib import Path
+    from tusk.core.history import QueryHistory
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "history.db"
+        h = QueryHistory(db)
+
+        # User 1 saves a query and runs one.
+        h.save_query(name="u1-only", sql="SELECT 1", owner_id="u1")
+        h.add(connection_id="c", connection_name="C", sql="SELECT 1",
+              execution_time_ms=1.0, owner_id="u1")
+
+        # User 2 saves a query and runs one.
+        h.save_query(name="u2-only", sql="SELECT 2", owner_id="u2")
+        h.add(connection_id="c", connection_name="C", sql="SELECT 2",
+              execution_time_ms=1.0, owner_id="u2")
+
+        # Legacy unowned (single-user / pre-migration) — visible to all.
+        h.save_query(name="legacy", sql="SELECT 0", owner_id="")
+        h.add(connection_id="c", connection_name="C", sql="SELECT 0",
+              execution_time_ms=1.0, owner_id="")
+
+        # u1 sees only their own + legacy.
+        u1_saved = {q.name for q in h.get_saved_queries(for_user_id="u1")}
+        assert u1_saved == {"u1-only", "legacy"}, f"u1 saw: {u1_saved}"
+
+        # u2 sees only their own + legacy.
+        u2_saved = {q.name for q in h.get_saved_queries(for_user_id="u2")}
+        assert u2_saved == {"u2-only", "legacy"}, f"u2 saw: {u2_saved}"
+
+        # Admin (no for_user_id) sees everything.
+        all_saved = {q.name for q in h.get_saved_queries()}
+        assert all_saved == {"u1-only", "u2-only", "legacy"}, f"admin saw: {all_saved}"
+
+        # Same isolation on history.
+        u1_hist = {e.sql for e in h.get_recent(for_user_id="u1")}
+        assert u1_hist == {"SELECT 1", "SELECT 0"}, f"u1 history saw: {u1_hist}"
+        u2_hist = {e.sql for e in h.get_recent(for_user_id="u2")}
+        assert u2_hist == {"SELECT 2", "SELECT 0"}, f"u2 history saw: {u2_hist}"
+
+
+def test_legacy_unowned_history_visible_in_single_user():
+    """Single-user mode (no for_user_id passed) shows owner_id='' rows fine.
+
+    Backwards-compat regression: rows persisted before v0.4.9 have
+    owner_id='' (the DEFAULT) — the listing must not hide them.
+    """
+    import tempfile
+    from pathlib import Path
+    from tusk.core.history import QueryHistory
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "history.db"
+        h = QueryHistory(db)
+
+        h.add(connection_id="c", connection_name="C", sql="legacy SQL",
+              execution_time_ms=1.0)  # no owner_id — defaults to ''
+        h.save_query(name="legacy-saved", sql="SELECT 1")
+
+        # Single-user mode passes for_user_id=None → see everything.
+        rows = h.get_recent()
+        assert any(e.sql == "legacy SQL" for e in rows), \
+            "legacy unowned row not visible in single-user listing"
+        saved = h.get_saved_queries()
+        assert any(q.name == "legacy-saved" for q in saved), \
+            "legacy unowned saved query not visible in single-user listing"
+
+
+def test_scheduled_jobs_owner_isolation():
+    """Scheduled jobs follow the same owner_id filter contract as history."""
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+    import tusk.core.scheduled_tasks as st
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Redirect the SCHEDULER_DB to a temp path for this test only.
+        with patch.object(st, "SCHEDULER_DB", Path(tmp) / "scheduler.db"), \
+             patch.object(st, "TUSK_DIR", Path(tmp)):
+            spec_a = st.JobSpec(
+                id="job_a",
+                kind=st.JobKind.QUERY,
+                name="A",
+                payload={"connection_id": "c", "sql": "SELECT 1", "save_results_as": None},
+                trigger={"type": "interval", "minutes": 5},
+                enabled=False,  # don't actually wire APScheduler
+                owner_id="u1",
+            )
+            spec_b = st.JobSpec(
+                id="job_b",
+                kind=st.JobKind.QUERY,
+                name="B",
+                payload={"connection_id": "c", "sql": "SELECT 2", "save_results_as": None},
+                trigger={"type": "interval", "minutes": 5},
+                enabled=False,
+                owner_id="u2",
+            )
+            spec_legacy = st.JobSpec(
+                id="job_legacy",
+                kind=st.JobKind.QUERY,
+                name="legacy",
+                payload={"connection_id": "c", "sql": "SELECT 0", "save_results_as": None},
+                trigger={"type": "interval", "minutes": 5},
+                enabled=False,
+                owner_id="",
+            )
+            st.save_job(spec_a)
+            st.save_job(spec_b)
+            st.save_job(spec_legacy)
+
+            u1_jobs = {j["id"] for j in st.list_jobs(for_user_id="u1")}
+            assert u1_jobs == {"job_a", "job_legacy"}, f"u1 saw: {u1_jobs}"
+            u2_jobs = {j["id"] for j in st.list_jobs(for_user_id="u2")}
+            assert u2_jobs == {"job_b", "job_legacy"}, f"u2 saw: {u2_jobs}"
+            all_jobs = {j["id"] for j in st.list_jobs()}
+            assert all_jobs == {"job_a", "job_b", "job_legacy"}, f"admin saw: {all_jobs}"
+
+
+def test_owner_id_migration_idempotent():
+    """Running _init_db on a DB that already has owner_id must not error.
+
+    Catches the case where Tusk restarts and the ALTER TABLE would fail
+    because the column already exists — the try/except sqlite3.OperationalError
+    must swallow that.
+    """
+    import tempfile
+    from pathlib import Path
+    from tusk.core.history import QueryHistory
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "history.db"
+        # First init creates the schema + adds owner_id.
+        QueryHistory(db)
+        # Second init must be a no-op (idempotent ALTER).
+        QueryHistory(db)
+        # And third for good measure.
+        h = QueryHistory(db)
+        # And it should still work end-to-end.
+        h.save_query(name="test", sql="SELECT 1", owner_id="u1")
+        assert len(h.get_saved_queries(for_user_id="u1")) == 1

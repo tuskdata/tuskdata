@@ -30,6 +30,99 @@ from tusk.plugins.registry import get_plugin_tabs
 from tusk.studio.htmx import is_htmx
 
 
+# ─────────────────────────────────────────────────────────────
+# v0.4.9 — Per-user isolation helpers
+# ─────────────────────────────────────────────────────────────
+
+
+def _current_user_id(request: Request) -> str:
+    """Resolve the logged-in user's id from the session cookie.
+
+    Returns '' in single-user mode (means 'unowned/global'). Always returns a
+    string — never raises — so callers can safely pass the result straight to
+    persistence helpers as ``owner_id``.
+    """
+    from tusk.core.config import get_config
+
+    if get_config().auth_mode != "multi":
+        return ""
+
+    from tusk.core.auth import get_session, get_user_by_id
+
+    session_id = request.cookies.get("tusk_session")
+    if not session_id:
+        return ""
+    session = get_session(session_id)
+    if not session:
+        return ""
+    user = get_user_by_id(session.user_id)
+    return user.id if user else ""
+
+
+def _current_user_is_admin(request: Request) -> bool:
+    """True if the request is from an authenticated admin user.
+
+    In single-user mode this is always True (the local operator owns the
+    process). In multi-user mode it requires a valid session whose user has
+    ``is_admin``.
+    """
+    from tusk.core.config import get_config
+
+    if get_config().auth_mode != "multi":
+        return True
+
+    from tusk.core.auth import get_session, get_user_by_id
+
+    session_id = request.cookies.get("tusk_session")
+    if not session_id:
+        return False
+    session = get_session(session_id)
+    if not session:
+        return False
+    user = get_user_by_id(session.user_id)
+    return bool(user and user.is_admin)
+
+
+def _can_modify(request: Request, owner_id: str) -> bool:
+    """True if the current user owns the resource or is an admin.
+
+    - Single-user mode: always True (local operator).
+    - Multi-user mode:
+        * Owner of the row → True.
+        * Admin → True (can mutate anything, including legacy unowned rows).
+        * Otherwise → False (incl. legacy unowned rows for non-admins,
+          since "unowned" is admin-only mutate territory).
+    """
+    from tusk.core.config import get_config
+
+    if get_config().auth_mode != "multi":
+        return True
+
+    user_id = _current_user_id(request)
+    if not user_id:
+        # Multi-user mode but no valid session — never allow mutations.
+        return False
+    if owner_id == user_id:
+        return True
+    return _current_user_is_admin(request)
+
+
+def _filter_user_id(request: Request) -> str | None:
+    """For listings: return the user id to filter by, or None for 'see all'.
+
+    Admins see everything (returns None). Regular users only see their own
+    rows + legacy unowned rows (returns their user id). Single-user mode
+    returns None (one-user-fits-all).
+    """
+    from tusk.core.config import get_config
+
+    if get_config().auth_mode != "multi":
+        return None
+    if _current_user_is_admin(request):
+        return None
+    return _current_user_id(request) or None
+
+
 def _use_cdn() -> bool:
     """Check if CDN mode is enabled.
 

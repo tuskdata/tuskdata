@@ -91,6 +91,179 @@ def _check_admin_auth(connection: Request, _: object) -> None:
 
     if not user.is_admin:
         raise NotAuthorizedException("Admin access required")
+async def _gather_health_snapshot() -> dict:
+    """Build the data the /admin/health page (and its HTMX poll) renders.
+
+    Every section is best-effort — a failure in one shouldn't blank the
+    whole dashboard. Sections that error out are still rendered with an
+    `error` field so the operator can see what's wrong.
+    """
+    snapshot: dict[str, object] = {}
+
+    # Postgres pools — read the live `_pools` dict from the postgres
+    # engine. The pool dict is small (one entry per active DSN) so the
+    # iteration is cheap.
+    pg_pools: list[dict] = []
+    try:
+        from tusk.engines import postgres as _pg
+        if getattr(_pg, "_HAS_POOL", False):
+            for dsn, pool in (_pg._pools or {}).items():
+                # `pool.get_stats()` returns a dict with `pool_size`,
+                # `pool_available`, `requests_waiting`, etc. Different
+                # psycopg-pool versions expose different attribute names
+                # so we go through getattr with sensible fallbacks.
+                size_used = 0
+                size_active = 0
+                try:
+                    stats = pool.get_stats() if hasattr(pool, "get_stats") else {}
+                    size_used = int(
+                        stats.get("pool_size", stats.get("pool_max", 0)) or 0
+                    )
+                    size_active = int(
+                        stats.get("pool_size", 0) - stats.get("pool_available", 0)
+                    )
+                    if size_active < 0:
+                        size_active = 0
+                except Exception:
+                    size_used = getattr(pool, "max_size", 0) or 0
+                    size_active = 0
+                pg_pools.append({
+                    "dsn": _pg._redact_dsn(dsn),
+                    "size_used": size_used,
+                    "size_active": size_active,
+                })
+    except Exception as e:
+        snapshot["postgres_error"] = str(e)
+    snapshot["postgres_pools"] = pg_pools
+
+    # SSH tunnels.
+    ssh_sessions: list[dict] = []
+    try:
+        from tusk.core import ssh_tunnel as _ssh
+        for fp, session in (_ssh._sessions or {}).items():
+            # Fingerprint format is `host|port|user|key`. First token
+            # is the SSH host — good enough for a label.
+            ssh_host = fp.split("|", 1)[0] if "|" in fp else fp
+            ssh_sessions.append({
+                "ssh_host": ssh_host or "unknown",
+                "forwards": len(session.forwards or {}),
+                "consumers": len(session.consumers or {}),
+            })
+    except Exception as e:
+        snapshot["ssh_error"] = str(e)
+    snapshot["ssh_tunnels"] = ssh_sessions
+
+    # AI provider health.
+    ai_status = {"configured": False, "ok": False, "elapsed_ms": 0, "error": None}
+    try:
+        from tusk.core.ai import get_provider
+        provider = get_provider()
+        if provider is not None:
+            ai_status["configured"] = True
+            import asyncio as _asyncio
+            import time as _time
+            t0 = _time.monotonic()
+            try:
+                ok = await _asyncio.wait_for(provider.health(), timeout=3.0)
+                ai_status["ok"] = bool(ok)
+            except _asyncio.TimeoutError:
+                ai_status["error"] = "timeout"
+            except Exception as he:
+                ai_status["error"] = str(he)
+            ai_status["elapsed_ms"] = int((_time.monotonic() - t0) * 1000)
+    except Exception as e:
+        ai_status["error"] = str(e)
+    snapshot["ai_provider"] = ai_status
+
+    # Plugins.
+    plugins: list[dict] = []
+    try:
+        from tusk.plugins.registry import get_all_plugins
+        from tusk.plugins.storage import get_plugin_db_path
+        for plugin in get_all_plugins():
+            db_size = 0
+            try:
+                db_path = get_plugin_db_path(plugin.name)
+                if db_path.exists():
+                    db_size = db_path.stat().st_size
+            except Exception:
+                pass
+            plugins.append({
+                "name": plugin.name,
+                "version": getattr(plugin, "version", "?"),
+                "db_size": db_size,
+            })
+    except Exception as e:
+        snapshot["plugins_error"] = str(e)
+    snapshot["plugins"] = plugins
+
+    # Scheduler.
+    sched_info = {"running": False, "jobs": 0, "last_failed": None}
+    try:
+        from tusk.core.scheduler import get_scheduler
+        sched = get_scheduler()
+        underlying = sched._scheduler
+        sched_info["running"] = bool(getattr(underlying, "running", False))
+        try:
+            sched_info["jobs"] = len(underlying.get_jobs())
+        except Exception:
+            sched_info["jobs"] = 0
+    except Exception as e:
+        sched_info["error"] = str(e)
+
+    # Best-effort last-failed lookup from a `job_runs` table when one
+    # exists. The pipeline-runs work writes such a table; if absent we
+    # silently report None.
+    try:
+        import sqlite3 as _sqlite3
+        from tusk.core.connection import TUSK_DIR
+        runs_db = TUSK_DIR / "scheduler.db"
+        if runs_db.exists():
+            conn = _sqlite3.connect(runs_db)
+            try:
+                cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='job_runs'")
+                if cur.fetchone():
+                    row = conn.execute(
+                        "SELECT job_id, error, started_at FROM job_runs WHERE error IS NOT NULL AND error != '' "
+                        "ORDER BY started_at DESC LIMIT 1"
+                    ).fetchone()
+                    if row:
+                        sched_info["last_failed"] = {
+                            "job_id": row[0],
+                            "error": row[1],
+                            "started_at": row[2],
+                        }
+            finally:
+                conn.close()
+    except Exception:
+        pass
+    snapshot["scheduler"] = sched_info
+
+    return snapshot
+
+
+class HealthController(Controller):
+    """`/admin/health` dashboard — admin-gated overview of internal
+    state (PG pools, SSH tunnels, AI provider, plugins, scheduler)."""
+
+    path = "/admin"
+    guards = [_check_admin_auth]
+
+    @get("/health")
+    async def health_dashboard(self, request: Request) -> Template:
+        """Full page (extends base.html) on a normal navigation; HTMX
+        partial when the cards self-poll every 10s."""
+        snapshot = await _gather_health_snapshot()
+        if is_htmx(request):
+            return Template("admin/health_cards.html", context=snapshot)
+        # Full-page render needs the base context (active_page, plugins,
+        # use_cdn, etc.) — pull it from the same helper PageController
+        # uses.
+        from tusk.studio.routes.base import get_base_context
+        ctx = get_base_context(active_page="admin", **snapshot)
+        return Template("admin/health.html", context=ctx)
+
+
 from tusk.admin.stats import get_server_stats, ServerStats
 from tusk.admin.processes import (
     get_active_queries, kill_query, ActiveQuery,

@@ -6,11 +6,53 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.events import EVENT_JOB_ERROR
 from datetime import datetime, timezone
 from typing import Callable, Any
 import msgspec
 
 log = structlog.get_logger()
+
+
+def _on_job_error(event) -> None:
+    """APScheduler error listener — fires a `scheduler.job.error`
+    notification so admins find out about failed jobs without grepping
+    the logs.
+
+    Wrapped in a try/except so a notification failure never bubbles back
+    into APScheduler's executor (which would mark the listener bad and
+    silently drop subsequent error events).
+    """
+    try:
+        job_id = getattr(event, "job_id", "unknown")
+        exc = getattr(event, "exception", None)
+        traceback = getattr(event, "traceback", None) or ""
+
+        # Truncate traceback so the in-app notification doesn't blow up.
+        tb_short = ""
+        if traceback:
+            tb_short = traceback if len(traceback) <= 600 else traceback[:600] + "…"
+
+        context = {
+            "job_id": job_id,
+            "error": str(exc) if exc else "unknown error",
+            "traceback": tb_short,
+        }
+
+        from tusk.core.notifications import dispatch_event
+
+        dispatch_event(
+            "scheduler.job.error",
+            context=context,
+            title=f"Scheduled job failed: {job_id}",
+            message=f"{job_id}: {exc}",
+            variant="error",
+            icon="alert-triangle",
+        )
+        log.warning("scheduler_job_failed", job_id=job_id, error=str(exc))
+    except Exception as hook_err:
+        # Never let a hook bug crash the scheduler.
+        log.error("scheduler_error_hook_failed", error=str(hook_err))
 
 
 class ScheduledJob(msgspec.Struct):
@@ -37,7 +79,20 @@ class SchedulerService:
                 "misfire_grace_time": 60 * 5,  # 5 minutes grace period
             },
         )
+        # Wire the error listener so failed jobs surface as notifications.
+        # Listener is registered before start so we never miss an early
+        # failure.
+        try:
+            self.scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
+        except Exception as e:
+            log.warning("scheduler_listener_failed", error=str(e))
         self._started = False
+
+    # `_scheduler` alias kept for the /admin/health dashboard, which
+    # introspects the underlying APScheduler instance.
+    @property
+    def _scheduler(self):
+        return self.scheduler
 
     @classmethod
     def get_instance(cls) -> "SchedulerService":

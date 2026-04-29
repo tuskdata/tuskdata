@@ -2,6 +2,109 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.9] - 2026-04-29 — Observability + per-user isolation + pipeline runs real
+
+The polish pass before v0.5 cloud-native. Four modules, 25 smoke
+tests passing (was 18 before this cycle).
+
+### Observability foundations
+
+- **OpenTelemetry SDK opt-in.** New `pyproject.toml` extra
+  `[otel]` (api + sdk + otlp-proto-http exporter +
+  litestar instrumentation). Imports happen inside
+  `tusk.core.otel.init_otel()` so plain `tuskdata[studio]`
+  doesn't pull the SDK. Activate with `TUSK_OTEL_ENDPOINT=...`;
+  service name overridable via `TUSK_OTEL_SERVICE_NAME`.
+- **Correlation IDs** — new `CorrelationIDMiddleware` reads
+  `X-Correlation-ID` (or generates `secrets.token_hex(8)`),
+  stashes in a `contextvars.ContextVar`, propagates back on the
+  response. structlog gets a `_correlation_processor` so every
+  log line carries the id. Now you can trace a request across
+  Tusk + plugins + downstream Postgres logs by grepping one
+  16-char token.
+- **`/admin/health` dashboard** — admin-gated full page with
+  cards for Postgres pools (size + active per DSN), SSH tunnels
+  (sessions + forwards + consumers), AI provider (3s health
+  probe), scheduler (running flag + job count + last failed
+  run), and plugins (name/version/db size). HTMX-polled every
+  10s. Linked from `/settings`.
+- **Scheduler error notifications** — APScheduler's
+  `EVENT_JOB_ERROR` is wired into the existing notification
+  system. Failures dispatch `scheduler.job.error` with
+  job_id + error + traceback. Whichever channel the admin has
+  subscribed gets the alert.
+- New `tusk.core.notifications.dispatch_event(event_key, context)`
+  helper used by the scheduler hook.
+
+### Per-user isolation
+
+- `owner_id TEXT DEFAULT ''` columns added (idempotent ALTER) to
+  `query_history`, `saved_queries`, and `scheduled_jobs`.
+- `tusk.studio.routes.base` grew `_current_user_id`,
+  `_current_user_is_admin`, `_can_modify`, `_filter_user_id`
+  helpers. Routes use them to stamp `owner_id` on writes and
+  filter listings on reads.
+- `owner_id == ''` = legacy/unowned — visible to everyone in
+  single-user mode and to admins in multi-user. Migration is
+  idempotent so restarts don't choke (test
+  `test_owner_id_migration_idempotent` confirms).
+- DELETE/UPDATE on history entries, saved queries, and
+  scheduled jobs now 403 if the caller doesn't own the resource
+  and isn't admin.
+- Schema layouts moved from
+  `~/.tusk/schema_layouts/{conn}.json` to
+  `~/.tusk/schema_layouts/{conn}/{user_id_or_global}.json`. Two
+  users dragging the same connection's ER no longer overwrite
+  each other's layout. Legacy single-file layouts are migrated
+  on first read.
+
+### `_handle_pipeline` actually runs
+
+- Pipeline scheduler jobs were no-ops in v0.4.8.x — the handler
+  validated the dataset existed and then `raise NotImplementedError`.
+  v0.4.9 wires through `polars_engine._run_pipeline` (off the
+  event loop via `asyncio.to_thread`) and materializes results to
+  `~/.tusk/pipeline_runs/{job_id}/{utc_ts}.parquet`.
+- New `pipeline_runs` table in `~/.tusk/scheduler.db` records
+  every run: `job_id`, `started_at`, `ended_at`, `output_path`,
+  `rows_written`, `error`.
+- New endpoints:
+  - `GET /api/scheduler/jobs/{job_id}/pipeline-runs` — last 10 runs.
+  - `GET /api/scheduler/pipeline-runs/{run_id}/download` — the
+    parquet file (with path-containment guard against tampered
+    `output_path` rows).
+- Scheduled UI: pipeline-kind jobs now show a "View runs" link.
+  Click → drawer listing each run with download + row count.
+- Dispatcher injects `_job_id` / `_job_name` into the payload
+  before calling the handler — backwards-compat (built-in
+  handlers ignore underscore-prefixed keys; pipeline handler
+  reads `_job_id` to key the parquet output dir).
+
+### Schema viewer truncate badge
+
+Backend already returned `truncated: true` + `total_tables: N`
+in v0.4.8.2 but the frontend ignored it. `schema.html` got a
+`<span id="schema-truncate-badge" class="chip chip-amber">` and
+`schema.js` populates it with "Showing 500 of N tables" when
+the cap fires.
+
+### Tests
+
+`tests/test_frontend_smoke.py` grew 7 tests (was 18, now 25):
+
+- `test_correlation_id_propagates` /
+  `test_correlation_id_generated_when_missing` /
+  `test_admin_health_renders` (observability).
+- `test_history_owner_isolation_in_history_layer` /
+  `test_legacy_unowned_history_visible_in_single_user` /
+  `test_scheduled_jobs_owner_isolation` /
+  `test_owner_id_migration_idempotent` (per-user isolation).
+
+Plus `tests/test_handle_pipeline.py` — 8 new tests for the
+pipeline runner including end-to-end parquet write, transform
+application, missing-dataset error path, and dispatcher
+job-id injection.
+
 ## [0.4.8.3] - 2026-04-29 — Backup works through SSH tunnels
 
 User reported "el backup no me dejó" on a Coolify-deployed Tusk

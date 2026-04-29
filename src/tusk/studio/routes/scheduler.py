@@ -5,12 +5,16 @@ All endpoints are guarded by :func:`tusk.studio.routes.admin._check_admin_auth`
 """
 
 from datetime import datetime
+from pathlib import Path
 
-from litestar import Controller, get, post, delete
+from litestar import Controller, Request, get, post, delete
+from litestar.exceptions import NotFoundException
 from litestar.params import Body
+from litestar.response import File
 
 from tusk.core.scheduler import get_scheduler
 from tusk.core.scheduled_tasks import (
+    TUSK_DIR,
     add_backup_schedule,
     add_vacuum_schedule,
     add_analyze_schedule,
@@ -22,9 +26,12 @@ from tusk.core.scheduled_tasks import (
     add_plugin_job,
     list_jobs as list_specs,
     get_runs,
+    get_pipeline_run,
+    get_pipeline_runs,
     remove_schedule,
 )
 from tusk.studio.routes.admin import _check_admin_auth
+from tusk.studio.routes.base import _current_user_id
 
 
 def _next_runs(scheduler, job_id: str, limit: int = 10) -> list[str]:
@@ -83,17 +90,50 @@ class SchedulerController(Controller):
         """Last 10 runs of a job."""
         return {"runs": get_runs(job_id, limit=10)}
 
+    @get("/jobs/{job_id:str}/pipeline-runs")
+    async def job_pipeline_runs(self, job_id: str) -> dict:
+        """Last 10 pipeline materializations for a job (newest first).
+
+        Each entry includes ``output_path`` (parquet file) and
+        ``rows_written``. The ``id`` field is the primary key for use
+        with the ``/pipeline-runs/{run_id}/download`` endpoint.
+        """
+        return {"runs": get_pipeline_runs(job_id, limit=10)}
+
+    @get("/pipeline-runs/{run_id:int}/download")
+    async def download_pipeline_run(self, run_id: int) -> File:
+        """Stream the parquet output for a pipeline run.
+
+        Containment guard: the recorded ``output_path`` must live inside
+        ``~/.tusk/pipeline_runs/`` — defends against a tampered DB row
+        pointing at an arbitrary file (single-user mode is loopback-only,
+        but defense-in-depth is cheap here).
+        """
+        row = get_pipeline_run(run_id)
+        if not row or not row.get("output_path"):
+            raise NotFoundException(f"pipeline run {run_id} not found")
+        path = Path(row["output_path"]).resolve()
+        root = (TUSK_DIR / "pipeline_runs").resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            raise NotFoundException(f"pipeline run {run_id} output is outside the runs directory")
+        if not path.is_file():
+            raise NotFoundException(f"pipeline run {run_id} output file is missing on disk")
+        return File(path=path, filename=path.name, media_type="application/octet-stream")
+
     # ─────────────────────────────────────────────────────────
     # Create — built-in kinds (back-compat shapes)
     # ─────────────────────────────────────────────────────────
 
     @post("/jobs/backup")
-    async def add_backup_job(self, data: dict = Body()) -> dict:
+    async def add_backup_job(self, request: Request, data: dict = Body()) -> dict:
         connection_id = data.get("connection_id")
         if not connection_id:
             return {"error": "connection_id is required"}
         backup_dir = data.get("backup_dir")
         run_date = data.get("run_date")
+        owner_id = _current_user_id(request)
 
         if run_date:
             try:
@@ -108,17 +148,19 @@ class SchedulerController(Controller):
                 minute=data.get("minute", 0),
                 day_of_week=data.get("day_of_week", "*"),
                 backup_dir=backup_dir,
+                owner_id=owner_id,
             )
 
         return {"success": True, "job_id": job_id}
 
     @post("/jobs/vacuum")
-    async def add_vacuum_job(self, data: dict = Body()) -> dict:
+    async def add_vacuum_job(self, request: Request, data: dict = Body()) -> dict:
         connection_id = data.get("connection_id")
         if not connection_id:
             return {"error": "connection_id is required"}
         full = data.get("full", False)
         run_date = data.get("run_date")
+        owner_id = _current_user_id(request)
 
         if run_date:
             try:
@@ -133,16 +175,18 @@ class SchedulerController(Controller):
                 minute=data.get("minute", 0),
                 day_of_week=data.get("day_of_week", "sun"),
                 full=full,
+                owner_id=owner_id,
             )
 
         return {"success": True, "job_id": job_id}
 
     @post("/jobs/analyze")
-    async def add_analyze_job(self, data: dict = Body()) -> dict:
+    async def add_analyze_job(self, request: Request, data: dict = Body()) -> dict:
         connection_id = data.get("connection_id")
         if not connection_id:
             return {"error": "connection_id is required"}
         run_date = data.get("run_date")
+        owner_id = _current_user_id(request)
 
         if run_date:
             try:
@@ -155,6 +199,7 @@ class SchedulerController(Controller):
                 connection_id=connection_id,
                 hour=data.get("hour", 4),
                 minute=data.get("minute", 0),
+                owner_id=owner_id,
             )
 
         return {"success": True, "job_id": job_id}
@@ -164,7 +209,7 @@ class SchedulerController(Controller):
     # ─────────────────────────────────────────────────────────
 
     @post("/jobs/query")
-    async def add_query_job_endpoint(self, data: dict = Body()) -> dict:
+    async def add_query_job_endpoint(self, request: Request, data: dict = Body()) -> dict:
         name = data.get("name")
         connection_id = data.get("connection_id")
         sql = data.get("sql")
@@ -179,13 +224,14 @@ class SchedulerController(Controller):
                 sql=sql,
                 trigger=trigger,
                 save_results_as=save_results_as,
+                owner_id=_current_user_id(request),
             )
         except ValueError as e:
             return {"error": str(e)}
         return {"success": True, "job_id": job_id}
 
     @post("/jobs/pipeline")
-    async def add_pipeline_job_endpoint(self, data: dict = Body()) -> dict:
+    async def add_pipeline_job_endpoint(self, request: Request, data: dict = Body()) -> dict:
         name = data.get("name")
         pipeline_id = data.get("pipeline_id")
         trigger = data.get("trigger") or {}
@@ -198,13 +244,14 @@ class SchedulerController(Controller):
                 pipeline_id=pipeline_id,
                 trigger=trigger,
                 workspace=workspace,
+                owner_id=_current_user_id(request),
             )
         except ValueError as e:
             return {"error": str(e)}
         return {"success": True, "job_id": job_id}
 
     @post("/jobs/plugin")
-    async def add_plugin_job_endpoint(self, data: dict = Body()) -> dict:
+    async def add_plugin_job_endpoint(self, request: Request, data: dict = Body()) -> dict:
         name = data.get("name")
         plugin_id = data.get("plugin_id")
         kind = data.get("kind")
@@ -219,6 +266,7 @@ class SchedulerController(Controller):
                 kind=kind,
                 payload=payload,
                 trigger=trigger,
+                owner_id=_current_user_id(request),
             )
         except ValueError as e:
             return {"error": str(e)}
