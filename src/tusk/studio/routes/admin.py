@@ -511,9 +511,15 @@ class AdminController(Controller):
 
     @post("/{conn_id:str}/backup")
     async def create_db_backup(self, request: Request, conn_id: str, data: dict = Body(default={})) -> dict | Response:
-        """Create a database backup. Accepts JSON body:
-            { "format": "plain"|"custom"|"directory", "tables": ["...", ...] }
+        """Submit a database backup as a background job. Returns
+        immediately with the job_id; the actual pg_dump runs in a
+        worker thread and the global jobs poller surfaces a toast
+        when it finishes. JSON body:
+            { "format": "plain"|"custom"|"directory", "tables": [...] }
         """
+        from tusk.core.jobs import get_registry
+        from tusk.studio.routes.base import _current_user_id
+
         config = get_connection(conn_id)
         if not config:
             return {"success": False, "error": "Connection not found"}
@@ -532,13 +538,12 @@ class AdminController(Controller):
             progress_path = progress_dir / f".progress-{progress_id}.log"
             progress_path.write_text("")
 
-        # Pre-resolve the SSH tunnel here, in this event loop. The
-        # backup module used to do this internally with a worker
-        # thread + asyncio.run(), but ssh_tunnel._lock is bound to
-        # the main Granian loop — a fresh loop in a worker thread
-        # awaits a lock owned by another loop and hangs forever.
-        # Resolving here means the lock is awaited on its native loop
-        # and `create_backup` stays sync without bridging.
+        # Pre-resolve the SSH tunnel on this loop. ssh_tunnel._lock is
+        # bound to the main Granian loop — bridging from a worker
+        # thread via asyncio.run() makes the lock unreachable and the
+        # backup hangs. Resolving here keeps the await on its native
+        # loop, then we hand the local-forward `(host, port)` to the
+        # sync backup runner via kwargs.
         effective_host: str | None = None
         effective_port: int | None = None
         if config.uses_ssh_tunnel:
@@ -552,34 +557,45 @@ class AdminController(Controller):
             except Exception as e:
                 if progress_path:
                     progress_path.unlink(missing_ok=True)
-                return {"success": False, "error": f"SSH tunnel setup failed: {e}", "filename": None}
+                return {"success": False, "error": f"SSH tunnel setup failed: {e}"}
 
-        # pg_dump can take minutes on a real DB; running it inline
-        # blocks the Granian worker for the duration — the browser
-        # request that fired the backup is on the same worker, so it
-        # never gets a response and the user just sees a hung modal.
-        # Push the subprocess work to a thread so the loop stays free
-        # (and the progress poller can keep returning).
-        success, message, filepath = await asyncio.to_thread(
-            create_backup,
-            config,
-            format=fmt,
-            tables=tables,
-            progress_path=progress_path,
-            effective_host=effective_host,
-            effective_port=effective_port,
+        def _backup_result_handler(result):
+            success, message, filepath = result
+            href = f"/api/admin/backups/{filepath.name}" if (success and filepath) else None
+            return success, message, href
+
+        owner_id = _current_user_id(request) or None
+        db_label = config.database or config.name or conn_id
+        job_id = get_registry().submit_sync(
+            label=f"Backup {db_label}",
+            kind="backup",
+            owner_id=owner_id,
+            fn=create_backup,
+            kwargs={
+                "config": config,
+                "format": fmt,
+                "tables": tables,
+                "progress_path": progress_path,
+                "effective_host": effective_host,
+                "effective_port": effective_port,
+            },
+            result_handler=_backup_result_handler,
         )
 
-        if progress_path:
-            progress_path.unlink(missing_ok=True)
-
         if is_htmx(request):
-            return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
+            return Response(
+                content="",
+                headers=htmx_toast(
+                    f"Backup started for {db_label} — keeps running if you change tabs",
+                    "info",
+                ),
+            )
 
         return {
-            "success": success,
-            "message": message,
-            "filename": filepath.name if filepath else None,
+            "success": True,
+            "job_id": job_id,
+            "status": "running",
+            "message": f"Backup started for {db_label}",
         }
 
     @get("/{conn_id:str}/backup/progress/{progress_id:str}")
@@ -669,13 +685,27 @@ class AdminController(Controller):
 
     @post("/{conn_id:str}/restore")
     async def restore_db_backup(self, request: Request, conn_id: str, data: dict = Body()) -> dict | Response:
-        """Restore database from backup"""
-        config = get_connection(conn_id)
-        if not config:
+        """Submit a database restore as a background job. Optional
+        `target_conn_id` in body picks a different registered
+        connection to restore *into* (default: current connection).
+        Useful for pulling a prod backup into a local diagnostic
+        instance without touching the source DB.
+        """
+        from tusk.core.jobs import get_registry
+        from tusk.studio.routes.base import _current_user_id
+
+        # Origin connection is just used for the path-style conn_id;
+        # the actual restore target is `target_conn_id` (or the same
+        # connection if not specified).
+        if not get_connection(conn_id):
             return {"success": False, "error": "Connection not found"}
 
-        if config.type != "postgres":
-            return {"success": False, "error": "Restore only available for PostgreSQL"}
+        target_conn_id = data.get("target_conn_id") or conn_id
+        target_config = get_connection(target_conn_id)
+        if not target_config:
+            return {"success": False, "error": f"Target connection not found: {target_conn_id}"}
+        if target_config.type != "postgres":
+            return {"success": False, "error": "Restore only available for PostgreSQL targets"}
 
         filename = data.get("filename")
         if not filename:
@@ -683,12 +713,32 @@ class AdminController(Controller):
                 return Response(content="", headers=htmx_error("No filename provided"))
             return {"success": False, "error": "No filename provided"}
 
-        success, message = await asyncio.to_thread(restore_backup, config, filename)
+        owner_id = _current_user_id(request) or None
+        target_label = target_config.database or target_config.name or target_conn_id
+        job_id = get_registry().submit_sync(
+            label=f"Restore {filename} → {target_label}",
+            kind="restore",
+            owner_id=owner_id,
+            fn=restore_backup,
+            kwargs={"config": target_config, "filename": filename},
+            result_handler=lambda r: (r[0], r[1], None),
+        )
 
         if is_htmx(request):
-            return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
+            return Response(
+                content="",
+                headers=htmx_toast(
+                    f"Restore started: {filename} → {target_label}",
+                    "info",
+                ),
+            )
 
-        return {"success": success, "message": message}
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": "running",
+            "message": f"Restore started: {filename} → {target_label}",
+        }
 
     @post("/{conn_id:str}/databases")
     async def create_new_database(self, request: Request, conn_id: str, data: dict = Body()) -> dict | Response:
@@ -706,13 +756,31 @@ class AdminController(Controller):
                 return Response(content="", headers=htmx_error("Database name is required"))
             return {"success": False, "error": "Database name is required"}
 
+        from tusk.core.jobs import get_registry
+        from tusk.studio.routes.base import _current_user_id
+
         owner = data.get("owner")
-        success, message = await asyncio.to_thread(create_database, config, db_name, owner)
+        owner_id = _current_user_id(request) or None
+        job_id = get_registry().submit_sync(
+            label=f"Create database {db_name}",
+            kind="create_db",
+            owner_id=owner_id,
+            fn=create_database,
+            kwargs={"config": config, "db_name": db_name, "owner": owner},
+            result_handler=lambda r: (r[0], r[1], None),
+        )
 
         if is_htmx(request):
-            return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
-
-        return {"success": success, "message": message}
+            return Response(
+                content="",
+                headers=htmx_toast(f"Creating database {db_name}…", "info"),
+            )
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": "running",
+            "message": f"Creating database {db_name}",
+        }
 
     @post("/{conn_id:str}/databases/from-backup")
     async def create_database_from_backup_file(self, request: Request, conn_id: str, data: dict = Body()) -> dict | Response:
@@ -736,15 +804,52 @@ class AdminController(Controller):
                 return Response(content="", headers=htmx_error("Backup filename is required"))
             return {"success": False, "error": "Backup filename is required"}
 
+        from tusk.core.jobs import get_registry
+        from tusk.studio.routes.base import _current_user_id
+
+        # `target_conn_id` lets the user pick a different registered
+        # PostgreSQL connection to materialize the new DB into — e.g.
+        # download a prod backup and restore it on a local Postgres
+        # for diagnostics. Defaults to the current connection when
+        # omitted.
+        target_conn_id = data.get("target_conn_id") or conn_id
+        target_config = get_connection(target_conn_id)
+        if not target_config:
+            return {"success": False, "error": f"Target connection not found: {target_conn_id}"}
+        if target_config.type != "postgres":
+            return {"success": False, "error": "Database creation only available for PostgreSQL targets"}
+
         owner = data.get("owner")
-        success, message = await asyncio.to_thread(
-            create_database_from_backup, config, filename, db_name, owner
+        owner_id = _current_user_id(request) or None
+        target_label = target_config.name or target_conn_id
+        job_id = get_registry().submit_sync(
+            label=f"Restore {filename} → new DB {db_name} on {target_label}",
+            kind="create_db_from_backup",
+            owner_id=owner_id,
+            fn=create_database_from_backup,
+            kwargs={
+                "config": target_config,
+                "filename": filename,
+                "new_db_name": db_name,
+                "owner": owner,
+            },
+            result_handler=lambda r: (r[0], r[1], None),
         )
 
         if is_htmx(request):
-            return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
-
-        return {"success": success, "message": message}
+            return Response(
+                content="",
+                headers=htmx_toast(
+                    f"Creating {db_name} on {target_label} from {filename}…",
+                    "info",
+                ),
+            )
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": "running",
+            "message": f"Creating {db_name} on {target_label} from {filename}",
+        }
 
     @get("/{conn_id:str}/extensions")
     async def list_extensions(self, request: Request, conn_id: str) -> dict | Template:

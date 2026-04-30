@@ -40,6 +40,7 @@ from tusk.studio.routes import (
     NotificationAPIController,
     AICopilotController,
     AISettingsPageController,
+    JobsController,
     health_check,
     metrics,
 )
@@ -288,6 +289,7 @@ def get_route_handlers() -> list:
         NotificationAPIController,
         AICopilotController,
         AISettingsPageController,
+        JobsController,
         health_check,
         metrics,
     ]
@@ -316,6 +318,19 @@ def on_startup() -> None:
     # Load connections
     load_connections_from_file()
     log.info("Connections loaded")
+
+    # Job registry: any persisted job still in `running` state was
+    # left over from a process that's no longer alive. Mark them so the
+    # activity drawer doesn't show a perpetual spinner. Then trim
+    # history older than a week to keep the SQLite file from growing
+    # without bound.
+    try:
+        from tusk.core.jobs import get_registry as _get_jobs_registry
+        registry = _get_jobs_registry()
+        registry.mark_interrupted_on_startup()
+        registry.prune_old(days=7)
+    except Exception as e:
+        log.warning("Job registry startup hook failed (non-fatal)", error=str(e))
 
     # Discover plugins
     plugins = discover_plugins()

@@ -22,12 +22,10 @@
             <a href="/api/admin/backups/{{ b.filename }}" class="btn btn-sm btn-ghost" style="color:var(--brand)">Download</a>
         </div>
         <div class="flex gap-2">
-            <button hx-post="/api/admin/{{ conn_id }}/restore"
-                    hx-vals='{"filename": "{{ b.filename }}"}'
-                    hx-swap="none"
-                    hx-confirm="Restore backup to current database? This will overwrite existing data."
-                    class="btn btn-sm" style="flex:1;color:var(--accent-amber);border-color:rgba(176,119,0,.30)">
-                Restore to current DB
+            <button @click="window.showRestore('{{ b.filename }}')"
+                    class="btn btn-sm" style="flex:1;color:var(--accent-amber);border-color:rgba(176,119,0,.30)"
+                    title="Restore into the current connection (or pick a different one for diagnostics)">
+                Restore…
             </button>
             <button @click="showCreateDb('{{ b.filename }}')"
                     class="btn btn-sm" style="flex:1;color:var(--green);border-color:rgba(31,138,76,.30)">

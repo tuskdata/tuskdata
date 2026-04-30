@@ -12,6 +12,7 @@ from tusk.studio.routes.scheduler import SchedulerController
 from tusk.studio.routes.downloads import DownloadsController
 from tusk.studio.routes.notifications import NotificationPageController, NotificationAPIController
 from tusk.studio.routes.ai import AICopilotController, AISettingsPageController
+from tusk.studio.routes.jobs import JobsController
 
 __all__ = [
     # Base
@@ -41,4 +42,5 @@ __all__ = [
     "NotificationAPIController",
     "AICopilotController",
     "AISettingsPageController",
+    "JobsController",
 ]

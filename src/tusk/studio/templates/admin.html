@@ -606,6 +606,17 @@
                 <div class="mono" style="color:var(--brand)" x-text="backupFile"></div>
             </div>
             <div>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Target connection</label>
+                <select x-model="targetConnId" style="width:100%">
+                    <template x-for="c in availableConns" :key="c.id">
+                        <option :value="c.id" x-text="c.name + ' (' + (c.database || c.host) + ')'"></option>
+                    </template>
+                </select>
+                <p class="text-xs" style="color:var(--fg-3);margin-top:4px">
+                    The new database is created on this server. Pick a different connection to restore the backup elsewhere — useful for local diagnostics.
+                </p>
+            </div>
+            <div>
                 <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">New Database Name</label>
                 <input x-model="dbName" type="text" placeholder="my_new_database" style="width:100%">
                 <p class="text-xs" style="color:var(--fg-3);margin-top:4px">Use lowercase letters, numbers, and underscores</p>
@@ -617,6 +628,44 @@
         <div class="flex gap-3" style="justify-content:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)">
             <button @click="createDbOpen = false" class="btn">Cancel</button>
             <button @click="createDatabase()" class="btn" style="background:var(--green);color:white;border-color:var(--green)">Create Database</button>
+        </div>
+    </div>
+</div>
+
+<!-- Restore to existing DB modal — target connection is pre-selected
+     to the current admin connection but can be swapped. -->
+<div x-data="restoreModal()"
+     x-show="restoreOpen"
+     x-on:open-restore.window="openModal($event.detail)"
+     x-on:keydown.escape.window="restoreOpen = false"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)" @click="restoreOpen = false"></div>
+    <div class="card" style="position:relative;padding:24px;width:450px;box-shadow:var(--shadow-xl)" @click.stop>
+        <h3 style="font-size:17px;font-weight:600;margin-bottom:16px">Restore Backup</h3>
+        <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:var(--surface-2);border-radius:8px;padding:12px;font-size:12.5px">
+                <div style="color:var(--fg-3);margin-bottom:4px">Backup file:</div>
+                <div class="mono" style="color:var(--brand)" x-text="backupFile"></div>
+            </div>
+            <div>
+                <label style="display:block;font-size:12.5px;color:var(--fg-3);margin-bottom:4px">Target connection</label>
+                <select x-model="targetConnId" style="width:100%">
+                    <template x-for="c in availableConns" :key="c.id">
+                        <option :value="c.id" x-text="c.name + ' (' + (c.database || c.host) + ')'"></option>
+                    </template>
+                </select>
+                <p class="text-xs" style="color:var(--fg-3);margin-top:4px">
+                    Defaults to the currently-open connection. Pick another to restore into a different DB (e.g. a local copy for diagnostics).
+                </p>
+            </div>
+            <div style="background:rgba(204,46,61,.10);border:1px solid rgba(204,46,61,.30);border-radius:8px;padding:12px;font-size:12.5px;color:var(--red)">
+                <strong>This overwrites the target database.</strong> Existing tables will be replaced.
+            </div>
+        </div>
+        <div class="flex gap-3" style="justify-content:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)">
+            <button @click="restoreOpen = false" class="btn">Cancel</button>
+            <button @click="restore()" class="btn" style="background:var(--accent-amber);color:white;border-color:var(--accent-amber)">Restore</button>
         </div>
     </div>
 </div>
@@ -757,11 +806,18 @@ function adminSidebar() {
         },
         async createBackup() {
             if (!adminState.connId) return;
-            showToast('Creating backup...', 'info');
             try {
                 const res = await fetch('/api/admin/' + adminState.connId + '/backup', { method: 'POST' });
                 const data = await res.json();
-                showToast(data.message || data.error, data.success ? 'success' : 'error');
+                // /backup is async now — returns 202+job_id immediately.
+                // The global jobs poller in tusk-jobs.js shows the
+                // completion toast (and download link) when pg_dump
+                // finishes, even if the user navigates away.
+                if (data.error) {
+                    showToast(data.error, 'error');
+                } else {
+                    showToast(data.message || 'Backup started', 'info');
+                }
             } catch (e) { showToast('Backup failed: ' + e.message, 'error'); }
         }
     };
@@ -816,7 +872,14 @@ function backupOptionsModal() {
                 tables: this.filterTables && this.selectedTables.length ? this.selectedTables : null,
                 progress_id: this.progressId,
             };
-            // Kick off polling in parallel with the request itself.
+            // The backend now returns 202 + job_id immediately and the
+            // pg_dump runs in a worker thread, so this fetch resolves
+            // in milliseconds. The progress poller below shows live
+            // phases (`dumping` → `archiving` → `hashing` → `done`)
+            // for as long as the user keeps the modal open. The
+            // global jobs poller (tusk-jobs.js) shows the completion
+            // toast even after the modal is closed or the user
+            // navigates away.
             const stop = this._startPoll();
             try {
                 const res = await fetch('/api/admin/' + adminState.connId + '/backup', {
@@ -825,8 +888,13 @@ function backupOptionsModal() {
                     body: JSON.stringify(body),
                 });
                 const data = await res.json();
-                showToast(data.message || data.error, data.success ? 'success' : 'error');
-                if (data.success) {
+                if (data.error) {
+                    showToast(data.error, 'error');
+                } else {
+                    showToast(data.message || 'Backup started', 'info');
+                    // Close the modal — the work continues in the
+                    // background. User will get a "completed" toast
+                    // from the global poller when pg_dump finishes.
                     this.open = false;
                 }
             } catch (e) {
@@ -987,14 +1055,36 @@ window.showCreateDb = function(filename) {
     window.dispatchEvent(new CustomEvent('open-create-db', { detail: filename }));
 };
 
+// Shared helper: load all PostgreSQL connections for the target picker
+// dropdowns. Cached per-modal to avoid hammering /api/connections on
+// every open.
+async function _loadPgConnections() {
+    try {
+        const res = await fetch('/api/connections');
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        return list.filter(c => c.type === 'postgres');
+    } catch { return []; }
+}
+
 function createDbModal() {
     return {
         createDbOpen: false,
         backupFile: '',
         dbName: '',
-        openModal(filename) {
+        targetConnId: '',
+        availableConns: [],
+        async openModal(filename) {
             this.backupFile = filename;
             this.dbName = '';
+            this.availableConns = await _loadPgConnections();
+            // Default the picker to whichever connection the user is
+            // viewing — the most common case is restoring back into the
+            // same server. Fallback to the first PG conn if no admin
+            // context is set.
+            this.targetConnId = adminState.connId
+                || (this.availableConns[0] && this.availableConns[0].id)
+                || '';
             this.createDbOpen = true;
         },
         async createDatabase() {
@@ -1002,21 +1092,77 @@ function createDbModal() {
             if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(this.dbName)) {
                 showToast('Invalid database name. Use letters, numbers, and underscores only.', 'warning'); return;
             }
-            showToast('Creating database from backup...', 'info');
+            if (!this.targetConnId) {
+                showToast('Pick a target connection', 'warning'); return;
+            }
+            // The route returns 202 + job_id immediately; the global
+            // jobs poller surfaces the completion toast. We only show
+            // a "started" notice here and close the modal.
             try {
                 const res = await fetch('/api/admin/' + adminState.connId + '/databases/from-backup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: this.dbName, filename: this.backupFile })
+                    body: JSON.stringify({
+                        name: this.dbName,
+                        filename: this.backupFile,
+                        target_conn_id: this.targetConnId,
+                    })
                 });
                 const data = await res.json();
-                showToast(data.success ? 'Database "' + this.dbName + '" created!' : ('Failed: ' + data.message),
-                          data.success ? 'success' : 'error');
-                if (data.success) this.createDbOpen = false;
+                if (data.error) {
+                    showToast(data.error, 'error');
+                } else {
+                    showToast(data.message || 'Restore started', 'info');
+                    this.createDbOpen = false;
+                }
             } catch (e) { showToast('Failed: ' + e.message, 'error'); }
         }
     };
 }
+
+function restoreModal() {
+    return {
+        restoreOpen: false,
+        backupFile: '',
+        targetConnId: '',
+        availableConns: [],
+        async openModal(filename) {
+            this.backupFile = filename;
+            this.availableConns = await _loadPgConnections();
+            this.targetConnId = adminState.connId
+                || (this.availableConns[0] && this.availableConns[0].id)
+                || '';
+            this.restoreOpen = true;
+        },
+        async restore() {
+            if (!this.targetConnId) {
+                showToast('Pick a target connection', 'warning'); return;
+            }
+            try {
+                const res = await fetch('/api/admin/' + adminState.connId + '/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: this.backupFile,
+                        target_conn_id: this.targetConnId,
+                    })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showToast(data.error, 'error');
+                } else {
+                    showToast(data.message || 'Restore started', 'info');
+                    this.restoreOpen = false;
+                }
+            } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+        }
+    };
+}
+
+// Make the restore modal openable from the backups partial.
+window.showRestore = function(filename) {
+    window.dispatchEvent(new CustomEvent('open-restore', { detail: filename }));
+};
 
 function scheduleModal() {
     return {

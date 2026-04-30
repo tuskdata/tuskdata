@@ -39,6 +39,9 @@
          Loading non-deferred guarantees `cmdkPalette` is defined when
          Alpine processes `x-data="cmdkPalette()"`. -->
     <script src="/static/cmdk.js"></script>
+    <!-- tusk-jobs: global background-jobs poller, topnav badge, drawer.
+         Defer is fine — it self-mounts on DOMContentLoaded. -->
+    <script src="/static/tusk-jobs.js" defer></script>
     <!-- AI Copilot panel — `window.tuskAI.open()` opens it on any page,
          keyboard shortcut Cmd/Ctrl+I. -->
     <script defer src="/static/tusk-ai.js"></script>
@@ -107,6 +110,46 @@
                  hx-get="/api/notifications/badge"
                  hx-trigger="load, every 30s, refreshNotifications from:body"
                  hx-swap="innerHTML">
+            </div>
+
+            <!-- Background jobs activity indicator. Mount point for
+                 tusk-jobs.js — button shows the running count, click
+                 opens the drawer. Both elements stay in the DOM
+                 always; tusk-jobs.js handles the rest. -->
+            <div style="position:relative">
+                <button id="tusk-jobs-btn" type="button"
+                        class="tusk-icon-btn"
+                        title="Background jobs">
+                    <i data-lucide="activity"></i>
+                    <span id="tusk-jobs-badge"
+                          class="hidden"
+                          style="position:absolute;top:-4px;right:-4px;
+                                 background:var(--brand);color:#fff;
+                                 border-radius:9px;font-size:10px;
+                                 font-weight:600;line-height:1;
+                                 padding:2px 5px;min-width:14px;
+                                 text-align:center"></span>
+                </button>
+                <aside id="tusk-jobs-drawer"
+                       class="hidden"
+                       style="position:absolute;top:calc(100% + 8px);right:0;
+                              width:340px;max-height:70vh;overflow-y:auto;
+                              background:var(--surface);
+                              border:1px solid var(--border);
+                              border-radius:var(--r);
+                              box-shadow:var(--shadow-lg);
+                              padding:10px;z-index:50">
+                    <div style="display:flex;align-items:center;justify-content:space-between;
+                                margin-bottom:8px;padding:0 4px">
+                        <div style="font-weight:600;font-size:13px">Background jobs</div>
+                        <div style="font-size:11px;color:var(--fg-3)">Last 25</div>
+                    </div>
+                    <div id="tusk-jobs-list">
+                        <div style="padding:24px;text-align:center;color:var(--fg-3);font-size:13px">
+                            Loading…
+                        </div>
+                    </div>
+                </aside>
             </div>
 
             <button id="theme-toggle" onclick="toggleTheme()" class="tusk-icon-btn" title="Toggle theme">

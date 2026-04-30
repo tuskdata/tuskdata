@@ -2,6 +2,66 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.11] - 2026-04-30 — Background jobs + restore-anywhere
+
+Long-running operations (backups, restores, DNS scans) used to block
+the page until they finished. Switching tabs cancelled the in-flight
+HTTP request and dropped the result on the floor. v0.4.11 moves them
+to a real job system so they keep running regardless of where the
+user navigates, and surfaces completion via a global toast + topnav
+activity drawer.
+
+- **Job registry** (`tusk.core.jobs`) — Job + JobRegistry with SQLite
+  persistence at `~/.tusk/jobs.db`. `submit_sync(...)` runs callable
+  in a daemon thread; `submit_async(...)` runs a coroutine as an
+  asyncio.Task on the current loop. Per-owner scoping for multi-user
+  mode. On `app.on_startup`, any row still `running` from a prior
+  process gets marked `interrupted` (subprocess parent is gone — we
+  can't resume but we stop lying); rows older than 7 days get pruned.
+
+- **Endpoints** — `GET /api/jobs` and `GET /api/jobs/{id}`
+  (`JobsController` in `routes/jobs.py`). Owner-scoped.
+
+- **Backups + restores via jobs** — `/backup`, `/restore`,
+  `/databases`, `/databases/from-backup` now return 202 + `{job_id,
+  status: "running", message}` immediately. The pg_dump / pg_restore
+  / createdb subprocess runs in a worker thread; the route handler
+  returns in milliseconds and the global poller surfaces the
+  completion toast (with download link for backups).
+
+- **Topnav activity indicator + drawer** — new button next to the
+  notification bell shows the running-job count, click opens a
+  side drawer listing the last 25 jobs with status pills, durations,
+  detail messages, and download links when applicable. Wired in
+  `base.html`; logic lives in `static/tusk-jobs.js`.
+
+- **Global poller** — single `setInterval(3000)` shared across all
+  tabs of the same browser. Diff'd against per-job last-seen status
+  to fire transition toasts (`running` → `done|failed|interrupted`),
+  but seeds the cache silently on first poll so reloads don't replay
+  history.
+
+- **Restore to a different connection** — `Create Database from
+  Backup` and the new `Restore...` dialog both expose a "Target
+  connection" picker, populated from `/api/connections` and
+  defaulting to the currently-open admin connection. Pick another
+  registered Postgres to restore the backup elsewhere — useful for
+  pulling a prod backup into a local Tusk for diagnostics. Backend
+  routes accept `target_conn_id` in the body and use that connection
+  for the actual subprocess.
+
+- **Plugin job API** — `tusk.plugins.submit_job_sync /
+  submit_job_async / get_jobs_registry` re-exports the registry so
+  plugins can submit long-running scans without blocking. Uses a
+  fallback-to-inline import-guard so plugins stay compatible with
+  pre-0.4.11 cores.
+
+Companion: tusk-security 0.2.9 wires `/dns/fetch` as a `dns_fetch`
+kind job. The fetch + country enrichment pass run in the background;
+the page shows "Fetching… in background" while a per-page watcher
+refreshes the dns widgets when the global poller flips the job to
+`done`.
+
 ## [0.4.10] - 2026-04-30 — Backups actually work (and tell the truth)
 
 Two bugs were combining to make the backup feature both broken and

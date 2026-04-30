@@ -30,6 +30,15 @@ from tusk.plugins.templates import (
     setup_plugin_templates,
     cleanup_plugin_templates,
 )
+# Re-export the job system so plugins can submit long-running scans
+# (e.g. AdGuard query log fetch, network/port scans, dependency audits)
+# without blocking the route handler. Import path stays stable across
+# Tusk versions even if the underlying registry moves.
+from tusk.core.jobs import (
+    submit_job_sync,
+    submit_job_async,
+    get_registry as get_jobs_registry,
+)
 
 __all__ = [
     # Base class
@@ -52,4 +61,8 @@ __all__ = [
     # Templates
     "setup_plugin_templates",
     "cleanup_plugin_templates",
+    # Background jobs
+    "submit_job_sync",
+    "submit_job_async",
+    "get_jobs_registry",
 ]
