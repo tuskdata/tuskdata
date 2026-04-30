@@ -2,6 +2,50 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.10] - 2026-04-30 — Backups actually work (and tell the truth)
+
+Two bugs were combining to make the backup feature both broken and
+silently dishonest. User reported "se queda ahí mucho rato y no
+termina haciendo nada" plus a list of files showing 0.0 KB but a
+green "verified" badge.
+
+1. **Hang on Create Backup** — `tusk.admin.backup.create_backup` is
+   synchronous and calls `subprocess.Popen(...).communicate()` /
+   `subprocess.run(...)` on `pg_dump`. The route handler called it
+   inline, blocking the entire Granian worker for the whole dump
+   (minutes on a real DB). The same worker had to reply to the very
+   request that fired the backup, so the browser never got a response
+   and the progress poller could never run either. Fix: wrap
+   `create_backup`, `restore_backup`, `create_database`, and
+   `create_database_from_backup` in `asyncio.to_thread(...)` at every
+   async route call site. Subprocess work now runs in the default
+   thread pool and the loop stays free.
+
+2. **Empty backups marked as verified** — the `verified` chip in the
+   backups list was hardcoded in the template, shown unconditionally.
+   Worse, `create_backup` accepted "pg_dump returned 0 with no output"
+   as success because we only checked `dump_proc.returncode`, never
+   the resulting file size. An empty stdout → gzip writes ~23 bytes
+   of header/trailer → the file looks ~"0.0 KB" in the UI but exists,
+   so metadata gets written and the badge says "verified". Fixes:
+   - Check `gzip_proc.returncode` (was ignored).
+   - After both procs finish, fail when `filepath.stat().st_size <
+     100` — even an empty database produces several hundred bytes of
+     `SET` / encoding preamble. A smaller file means pg_dump silently
+     produced nothing, usually a client / server version mismatch.
+     Delete the file and return a clear error.
+   - Template now shows `empty` (red) for 0-byte files, `verified`
+     (green) when sidecar metadata is present, `unverified` (neutral)
+     when the file exists but no metadata.
+
+Also kept from the abandoned 0.4.9.1 work: pre-resolve SSH tunnels in
+the async route handler so `create_backup` doesn't have to bridge
+sync→async via a worker thread. That bridge was hanging on
+`ssh_tunnel._lock`, an asyncio.Lock bound to the main loop — a fresh
+loop in a worker thread awaiting that lock never resolves. The
+`effective_host` / `effective_port` kwargs flow through to `_pg_env`
+and the `pg_dump` argv unchanged.
+
 ## [0.4.9] - 2026-04-29 — Observability + per-user isolation + pipeline runs real
 
 The polish pass before v0.5 cloud-native. Four modules, 25 smoke

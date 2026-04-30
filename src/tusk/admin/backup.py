@@ -203,6 +203,8 @@ def create_backup(
     format: str = "plain",
     tables: list[str] | None = None,
     progress_path: Path | None = None,
+    effective_host: str | None = None,
+    effective_port: int | None = None,
 ) -> tuple[bool, str, Path | None]:
     """Create a pg_dump backup of the database.
 
@@ -246,12 +248,19 @@ def create_backup(
 
     pg_dump = get_pg_dump_path()
 
-    try:
-        effective_host, effective_port = _resolve_tunnel(config)
-        if config.uses_ssh_tunnel:
-            _progress(f"tunnel ready at {effective_host}:{effective_port}")
-    except Exception as e:
-        return False, f"SSH tunnel setup failed: {e}", None
+    # If the caller (route handler) pre-resolved the tunnel, use those
+    # values — that's the cross-loop-safe path. The internal
+    # `_resolve_tunnel` fallback is for sync callers like
+    # scheduler-driven backups that aren't already in an event loop.
+    if effective_host is None or effective_port is None:
+        try:
+            effective_host, effective_port = _resolve_tunnel(config)
+            if config.uses_ssh_tunnel:
+                _progress(f"tunnel ready at {effective_host}:{effective_port}")
+        except Exception as e:
+            return False, f"SSH tunnel setup failed: {e}", None
+    elif config.uses_ssh_tunnel:
+        _progress(f"tunnel ready at {effective_host}:{effective_port} (pre-resolved)")
 
     cmd = [
         pg_dump,
@@ -293,12 +302,16 @@ def create_backup(
                     stderr=subprocess.PIPE,
                 )
                 dump_proc.stdout.close()
-                gzip_proc.communicate()
+                _, gzip_stderr = gzip_proc.communicate()
                 dump_proc.wait()
                 if dump_proc.returncode != 0:
                     stderr = dump_proc.stderr.read().decode() if dump_proc.stderr else "Unknown error"
                     filepath.unlink(missing_ok=True)
                     return False, f"pg_dump failed: {stderr}", None
+                if gzip_proc.returncode != 0:
+                    err = gzip_stderr.decode() if gzip_stderr else "gzip failed"
+                    filepath.unlink(missing_ok=True)
+                    return False, f"gzip failed: {err}", None
         elif format == "custom":
             # -Fc writes directly to a file via -f
             cmd.extend(["-f", str(filepath)])
@@ -325,6 +338,19 @@ def create_backup(
             tmp_dir = None
 
         size = filepath.stat().st_size
+        # Even a totally empty database produces several hundred bytes
+        # (SET search_path, encoding, role grants, etc). A sub-100-byte
+        # gzipped output means pg_dump returned success but never
+        # actually wrote anything to stdout — usually a silent client
+        # version / protocol mismatch. Treat as failure so we don't
+        # leave a misleading "verified" file in the backups dir.
+        if size < 100:
+            filepath.unlink(missing_ok=True)
+            return False, (
+                f"pg_dump returned success but produced an empty file "
+                f"({size} bytes). Check that pg_dump's version matches the "
+                f"server's PostgreSQL version."
+            ), None
         size_human = f"{size / 1024 / 1024:.2f} MB" if size > 1024 * 1024 else f"{size / 1024:.1f} KB"
 
         _progress("hashing")

@@ -1,5 +1,6 @@
 """Admin API routes for PostgreSQL administration"""
 
+import asyncio
 import os
 import ipaddress
 import msgspec
@@ -531,8 +532,42 @@ class AdminController(Controller):
             progress_path = progress_dir / f".progress-{progress_id}.log"
             progress_path.write_text("")
 
-        success, message, filepath = create_backup(
-            config, format=fmt, tables=tables, progress_path=progress_path
+        # Pre-resolve the SSH tunnel here, in this event loop. The
+        # backup module used to do this internally with a worker
+        # thread + asyncio.run(), but ssh_tunnel._lock is bound to
+        # the main Granian loop — a fresh loop in a worker thread
+        # awaits a lock owned by another loop and hangs forever.
+        # Resolving here means the lock is awaited on its native loop
+        # and `create_backup` stays sync without bridging.
+        effective_host: str | None = None
+        effective_port: int | None = None
+        if config.uses_ssh_tunnel:
+            try:
+                from tusk.core.ssh_tunnel import get_tunneled_dsn
+                from urllib.parse import urlparse
+                tunneled_dsn = await get_tunneled_dsn(config)
+                parsed = urlparse(tunneled_dsn)
+                effective_host = parsed.hostname or "127.0.0.1"
+                effective_port = parsed.port or config.port
+            except Exception as e:
+                if progress_path:
+                    progress_path.unlink(missing_ok=True)
+                return {"success": False, "error": f"SSH tunnel setup failed: {e}", "filename": None}
+
+        # pg_dump can take minutes on a real DB; running it inline
+        # blocks the Granian worker for the duration — the browser
+        # request that fired the backup is on the same worker, so it
+        # never gets a response and the user just sees a hung modal.
+        # Push the subprocess work to a thread so the loop stays free
+        # (and the progress poller can keep returning).
+        success, message, filepath = await asyncio.to_thread(
+            create_backup,
+            config,
+            format=fmt,
+            tables=tables,
+            progress_path=progress_path,
+            effective_host=effective_host,
+            effective_port=effective_port,
         )
 
         if progress_path:
@@ -648,7 +683,7 @@ class AdminController(Controller):
                 return Response(content="", headers=htmx_error("No filename provided"))
             return {"success": False, "error": "No filename provided"}
 
-        success, message = restore_backup(config, filename)
+        success, message = await asyncio.to_thread(restore_backup, config, filename)
 
         if is_htmx(request):
             return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
@@ -672,7 +707,7 @@ class AdminController(Controller):
             return {"success": False, "error": "Database name is required"}
 
         owner = data.get("owner")
-        success, message = create_database(config, db_name, owner)
+        success, message = await asyncio.to_thread(create_database, config, db_name, owner)
 
         if is_htmx(request):
             return Response(content="", headers=htmx_toast(message, "success" if success else "error"))
@@ -702,7 +737,9 @@ class AdminController(Controller):
             return {"success": False, "error": "Backup filename is required"}
 
         owner = data.get("owner")
-        success, message = create_database_from_backup(config, filename, db_name, owner)
+        success, message = await asyncio.to_thread(
+            create_database_from_backup, config, filename, db_name, owner
+        )
 
         if is_htmx(request):
             return Response(content="", headers=htmx_toast(message, "success" if success else "error"))

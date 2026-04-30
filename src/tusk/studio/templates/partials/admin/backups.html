@@ -12,7 +12,13 @@
                 <div class="mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.filename }}</div>
                 <div class="mono text-xs" style="color:var(--fg-3)">{{ b.size_human }} · {{ b.created }}</div>
             </div>
-            <span class="chip chip-green">verified</span>
+            {% if b.size_bytes == 0 %}
+                <span class="chip chip-red" title="Backup file is empty — pg_dump likely failed mid-run">empty</span>
+            {% elif b.metadata_present %}
+                <span class="chip chip-green" title="Sidecar metadata present (sha256, format, table list)">verified</span>
+            {% else %}
+                <span class="chip" title="No sidecar metadata — file present but unverified">unverified</span>
+            {% endif %}
             <a href="/api/admin/backups/{{ b.filename }}" class="btn btn-sm btn-ghost" style="color:var(--brand)">Download</a>
         </div>
         <div class="flex gap-2">
