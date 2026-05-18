@@ -2,6 +2,37 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.12] - 2026-05-18 — SSH tunnel fails fast, Admin doesn't freeze
+
+When the bastion's Security Group dropped your IP (e.g. you moved
+networks), the Admin page locked up with every panel stuck on
+"Loading…" forever. Root cause: `asyncssh.connect()` had no
+`connect_timeout`, so a dropped SYN hung the TCP layer for ~127s on
+Linux. And because the whole session-open ran inside one global
+`asyncio.Lock`, every other tunneled request queued behind it; with a
+single Granian worker the queue starved the rest of the UI.
+
+- **`SSH_CONNECT_TIMEOUT_S = 10.0`** — `asyncssh.connect()` now caps
+  TCP+handshake at 10s and raises `SSHTunnelUnreachable`. Failure is
+  visible inside one toast cycle instead of hanging the page.
+
+- **Broken-session cooldown** (`SSH_BROKEN_TTL_S = 30.0`) — after a
+  failed handshake we remember the bastion for 30s and fail-fast on
+  every subsequent `get_tunneled_dsn()` call. A flood of admin polls
+  (Active Processes + Locks + Bloat + Extensions + Settings + Roles
+  all polling every few seconds) now costs one 10s probe, not eight.
+
+- **`test_ssh_connection` clears the cooldown on success** — clicking
+  "Test connection" in the UI and getting a pass immediately re-enables
+  normal admin polls instead of waiting out the TTL.
+
+- **Admin partials render an inline error panel** — `_admin_error()`
+  helper in `routes/admin.py` returns a shared `partials/admin/_error.html`
+  on HTMX requests, so failed polls swap a red banner with the cause
+  ("ssh_tunnel: bastion 1.2.3.4 marked unreachable (...)") into the
+  panel instead of leaving the spinner running. Applied to stats,
+  processes, locks, table bloat, extensions, roles, settings.
+
 ## [0.4.11] - 2026-04-30 — Background jobs + restore-anywhere
 
 Long-running operations (backups, restores, DNS scans) used to block

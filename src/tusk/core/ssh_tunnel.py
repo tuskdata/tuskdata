@@ -26,10 +26,23 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from tusk.core.logging import get_logger
+
+# Cap the SSH handshake. asyncssh has no default connect timeout, so an
+# unreachable bastion (e.g. SG drops your IP) would hang on TCP SYN
+# retries for ~127s on Linux. With the global lock held, every other
+# tunneled request piles up behind it — that's how the admin page locks
+# up with "Loading…" forever.
+SSH_CONNECT_TIMEOUT_S = 10.0
+
+# After a connect failure we remember it for this long and fail-fast on
+# the next request, so a flood of admin-panel polls doesn't each pay a
+# fresh 10s timeout.
+SSH_BROKEN_TTL_S = 30.0
 
 if TYPE_CHECKING:
     from tusk.core.connection import ConnectionConfig
@@ -67,6 +80,40 @@ class _Session:
 # Sessions keyed by SSH-side fingerprint (host:port:user:keyhash).
 _sessions: dict[str, _Session] = {}
 _lock = asyncio.Lock()
+
+# fingerprint -> (failed_at_monotonic, last_error_message). Entries older
+# than SSH_BROKEN_TTL_S are ignored and cleared lazily.
+_broken_sessions: dict[str, tuple[float, str]] = {}
+
+
+class SSHTunnelUnreachable(RuntimeError):
+    """Raised when the bastion is known-unreachable (cached failure)
+    or fails to handshake within SSH_CONNECT_TIMEOUT_S.
+
+    Callers can catch this specifically to render a friendlier error
+    than a generic asyncssh traceback. It is still a RuntimeError so
+    existing `except Exception` paths keep working.
+    """
+
+
+def _broken_hit(fingerprint: str) -> str | None:
+    """Return the cached error message if this bastion is in cooldown."""
+    entry = _broken_sessions.get(fingerprint)
+    if entry is None:
+        return None
+    failed_at, msg = entry
+    if time.monotonic() - failed_at >= SSH_BROKEN_TTL_S:
+        _broken_sessions.pop(fingerprint, None)
+        return None
+    return msg
+
+
+def _mark_broken(fingerprint: str, message: str) -> None:
+    _broken_sessions[fingerprint] = (time.monotonic(), message)
+
+
+def _clear_broken(fingerprint: str) -> None:
+    _broken_sessions.pop(fingerprint, None)
 
 
 def _ssh_fingerprint(config: "ConnectionConfig") -> str:
@@ -118,11 +165,39 @@ async def get_tunneled_dsn(config: "ConnectionConfig") -> str:
     sess_fp = _ssh_fingerprint(config)
     fwd_key = _forward_key(config)
 
+    # Fast path: bastion is in cooldown after a recent failure. Bail
+    # before queuing on the lock so a flood of polls doesn't each wait
+    # 10s for the same answer.
+    cached_error = _broken_hit(sess_fp)
+    if cached_error is not None:
+        raise SSHTunnelUnreachable(
+            f"ssh_tunnel: bastion {config.ssh_host} marked unreachable "
+            f"({cached_error}); will retry in <{int(SSH_BROKEN_TTL_S)}s"
+        )
+
     async with _lock:
         # 1. Get-or-create the SSH session for this bastion.
         session = _sessions.get(sess_fp)
         if session is None:
-            conn = await _open_session(config)
+            # Re-check inside the lock: another coroutine may have just
+            # finished a failing attempt while we waited.
+            cached_error = _broken_hit(sess_fp)
+            if cached_error is not None:
+                raise SSHTunnelUnreachable(
+                    f"ssh_tunnel: bastion {config.ssh_host} marked unreachable "
+                    f"({cached_error})"
+                )
+            try:
+                conn = await _open_session(config)
+            except SSHTunnelUnreachable as e:
+                _mark_broken(sess_fp, str(e))
+                raise
+            except Exception as e:
+                _mark_broken(sess_fp, str(e) or type(e).__name__)
+                raise SSHTunnelUnreachable(
+                    f"ssh_tunnel: failed to reach {config.ssh_host}: {e}"
+                ) from e
+            _clear_broken(sess_fp)
             session = _Session(conn=conn, fingerprint=sess_fp)
             _sessions[sess_fp] = session
             log.info(
@@ -190,7 +265,18 @@ async def _open_session(config: "ConnectionConfig"):
             "ssh_tunnel: neither ssh_private_key nor ssh_password is set"
         )
 
-    return await asyncssh.connect(**kwargs)
+    # connect_timeout caps the TCP+handshake phase. asyncssh itself has
+    # no default here, so without it a dropped SYN (e.g. bastion SG
+    # blocks your IP) hangs ~127s on Linux's tcp_syn_retries.
+    kwargs["connect_timeout"] = SSH_CONNECT_TIMEOUT_S
+
+    try:
+        return await asyncssh.connect(**kwargs)
+    except asyncio.TimeoutError as e:
+        raise SSHTunnelUnreachable(
+            f"ssh_tunnel: handshake to {config.ssh_host}:{config.ssh_port or 22} "
+            f"timed out after {SSH_CONNECT_TIMEOUT_S:.0f}s"
+        ) from e
 
 
 async def _open_forward(conn, config: "ConnectionConfig") -> _Forward:
@@ -275,6 +361,9 @@ async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
     try:
         conn = await _open_session(config)
     except Exception as e:
+        # User-initiated probe: surface the underlying error verbatim,
+        # but don't pollute the bastion's broken-cooldown cache. The
+        # admin polls do their own caching via get_tunneled_dsn.
         return False, f"SSH connect failed: {e}"
 
     forward = None
@@ -283,6 +372,9 @@ async def test_ssh_connection(config: "ConnectionConfig") -> tuple[bool, str]:
             forward = await _open_forward(conn, config)
         except Exception as e:
             return False, f"port forward failed: {e}"
+        # A successful manual probe clears any stale broken marker so
+        # the next admin poll doesn't keep failing for SSH_BROKEN_TTL_S.
+        _clear_broken(_ssh_fingerprint(config))
         return True, "SSH + port forward OK"
     finally:
         # Best-effort close of every resource we opened, in reverse

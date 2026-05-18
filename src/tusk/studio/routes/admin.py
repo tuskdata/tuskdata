@@ -18,6 +18,24 @@ from tusk.core.config import get_config
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
+def _admin_error(request: Request, message: str, *, title: str | None = None, hint: str | None = None) -> Template | dict:
+    """Return an HTMX-friendly error panel, or a JSON dict for API callers.
+
+    All admin polled endpoints (processes, locks, extensions, settings,
+    table maintenance, …) use this so an unreachable bastion or a failed
+    query renders a visible banner instead of leaving the panel stuck on
+    "Loading…". The detail string is the raw error from the engine —
+    e.g. 'ssh_tunnel: bastion 1.2.3.4 marked unreachable (...)'.
+    """
+    detail = message or "Unknown error"
+    if is_htmx(request):
+        return Template(
+            "partials/admin/_error.html",
+            context={"detail": detail, "title": title, "hint": hint},
+        )
+    return {"error": detail}
+
+
 def _is_loopback(connection: Request) -> bool:
     """True if the request originates from the local machine."""
     client = getattr(connection, "client", None)
@@ -333,15 +351,15 @@ class AdminController(Controller):
         """Get server statistics"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Admin features only available for PostgreSQL"}
+            return _admin_error(request, "Admin features only available for PostgreSQL")
 
         stats = await get_server_stats(config)
 
         if isinstance(stats, dict):
-            return stats  # Error case
+            return _admin_error(request, stats.get("error") or "Failed to load server stats")
 
         # Record a history point for the sparkline feed.
         try:
@@ -386,15 +404,15 @@ class AdminController(Controller):
         query params filter the list."""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Admin features only available for PostgreSQL"}
+            return _admin_error(request, "Admin features only available for PostgreSQL")
 
         queries = await get_active_queries(config)
 
         if isinstance(queries, dict):
-            return queries  # Error case
+            return _admin_error(request, queries.get("error") or "Failed to load active processes")
 
         # Server-side filter — case-insensitive substring match.
         if user:
@@ -856,10 +874,10 @@ class AdminController(Controller):
         """List all extensions (installed and available)"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Extensions only available for PostgreSQL"}
+            return _admin_error(request, "Extensions only available for PostgreSQL")
 
         try:
             extensions = await get_extensions(config)
@@ -880,9 +898,7 @@ class AdminController(Controller):
 
             return {"extensions": ext_list}
         except Exception as e:
-            if is_htmx(request):
-                return Template("partials/error-message.html", context={"error": str(e), "title": "Extensions Error"})
-            return {"error": str(e)}
+            return _admin_error(request, str(e), title="Extensions error")
 
     @post("/{conn_id:str}/extensions/{name:str}/install")
     async def install_ext(self, request: Request, conn_id: str, name: str) -> dict | Template | Response:
@@ -964,14 +980,14 @@ class AdminController(Controller):
         """Get blocking locks in the database"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Locks monitor only available for PostgreSQL"}
+            return _admin_error(request, "Locks monitor only available for PostgreSQL")
 
         result = await get_locks(config)
         if isinstance(result, dict) and "error" in result:
-            return result
+            return _admin_error(request, result["error"], title="Lock monitor error")
 
         if is_htmx(request):
             return Template("partials/admin/locks.html", context={"locks": result, "show_all": False, "conn_id": conn_id})
@@ -982,14 +998,14 @@ class AdminController(Controller):
         """Get all locks in the database"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Locks monitor only available for PostgreSQL"}
+            return _admin_error(request, "Locks monitor only available for PostgreSQL")
 
         result = await get_all_locks(config)
         if isinstance(result, dict) and "error" in result:
-            return result
+            return _admin_error(request, result["error"], title="Lock monitor error")
 
         if is_htmx(request):
             return Template("partials/admin/locks.html", context={"locks": result, "show_all": True, "conn_id": conn_id})
@@ -1000,14 +1016,14 @@ class AdminController(Controller):
         """Get table bloat and maintenance info"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Table maintenance only available for PostgreSQL"}
+            return _admin_error(request, "Table maintenance only available for PostgreSQL")
 
         result = await get_table_bloat(config)
         if isinstance(result, dict) and "error" in result:
-            return result
+            return _admin_error(request, result["error"], title="Table maintenance error")
 
         if is_htmx(request):
             return Template("partials/admin/bloat.html", context={"tables": result, "conn_id": conn_id})
@@ -1084,10 +1100,10 @@ class AdminController(Controller):
         """Get all roles in the database"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Roles management only available for PostgreSQL"}
+            return _admin_error(request, "Roles management only available for PostgreSQL")
 
         try:
             roles = await get_roles(config)
@@ -1109,9 +1125,7 @@ class AdminController(Controller):
                 return Template("partials/admin/roles.html", context={"roles": roles_list, "conn_id": conn_id})
             return {"roles": roles_list}
         except Exception as e:
-            if is_htmx(request):
-                return Template("partials/error-message.html", context={"error": str(e), "title": "Roles Error"})
-            return {"error": str(e)}
+            return _admin_error(request, str(e), title="Roles error")
 
     @post("/{conn_id:str}/roles")
     async def create_new_role(self, request: Request, conn_id: str, data: dict = Body()) -> dict | Template | Response:
@@ -1324,10 +1338,10 @@ class AdminController(Controller):
         """Get PostgreSQL configuration settings"""
         config = get_connection(conn_id)
         if not config:
-            return {"error": "Connection not found"}
+            return _admin_error(request, "Connection not found")
 
         if config.type != "postgres":
-            return {"error": "Settings viewer only available for PostgreSQL"}
+            return _admin_error(request, "Settings viewer only available for PostgreSQL")
 
         try:
             if important_only:
@@ -1355,9 +1369,7 @@ class AdminController(Controller):
                 return Template("partials/admin/settings.html", context={"settings": settings_list})
             return {"settings": settings_list}
         except Exception as e:
-            if is_htmx(request):
-                return Template("partials/error-message.html", context={"error": str(e), "title": "Settings Error"})
-            return {"error": str(e)}
+            return _admin_error(request, str(e), title="Settings error")
 
     @get("/{conn_id:str}/settings/categories")
     async def list_setting_categories(self, conn_id: str) -> dict:

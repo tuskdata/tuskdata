@@ -1,0 +1,16 @@
+{# Inline error panel shared by every admin partial. Renders inside the
+   target div so HTMX swap replaces "Loading…" with a visible failure
+   state instead of leaving the spinner forever. The 'detail' string is
+   surfaced raw so the user sees the underlying cause (SSH timeout,
+   unreachable host, etc). #}
+<div class="card" style="padding:16px;display:flex;gap:12px;align-items:flex-start;border-color:var(--red-border, #b34a4a);background:var(--red-bg, rgba(180,60,60,0.08))">
+    <i data-lucide="alert-triangle" class="w-5 h-5" style="color:var(--red, #d65a5a);flex-shrink:0;margin-top:2px"></i>
+    <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--fg);margin-bottom:4px">{{ title or "Could not load" }}</div>
+        <div class="mono text-xs" style="color:var(--fg-2);word-break:break-word">{{ detail }}</div>
+        {% if hint %}
+        <div class="text-xs" style="color:var(--fg-3);margin-top:6px">{{ hint }}</div>
+        {% endif %}
+    </div>
+</div>
+<script>if (window.lucide) lucide.createIcons();</script>
