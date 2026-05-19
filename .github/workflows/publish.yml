@@ -1,0 +1,97 @@
+name: Publish to PyPI
+
+# Fires on annotated/lightweight tags matching v* (e.g. v0.4.12).
+# Manual dispatch is enabled for emergency re-runs of an existing tag.
+#
+# Uses PyPI trusted publishing (OIDC) — no API token in repo secrets.
+# The matching trusted publisher config on PyPI is:
+#   - Repository: tuskdata/tuskdata
+#   - Workflow:   publish.yml
+#   - Environment: pypi
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Verify tag matches pyproject version
+        # Catches the foot-gun where someone tags v0.4.12 but pyproject
+        # still says 0.4.11. We compare the tag (vX.Y.Z) to the version
+        # uv reports for the project.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/v}"
+          pyproj_version=$(uv version --short 2>/dev/null || python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag=$tag pyproject=$pyproj_version"
+          if [ "$tag" != "$pyproj_version" ]; then
+            echo "::error::Tag v$tag does not match pyproject version $pyproj_version"
+            exit 1
+          fi
+
+      - name: Build
+        run: uv build
+
+      - name: Smoke-test the wheel
+        # Install the freshly-built wheel into a clean venv and import
+        # the package. Catches packaging bugs (missing files, broken
+        # imports) before PyPI sees them — there is no un-publish.
+        run: |
+          set -euo pipefail
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/python -c "import tusk; print('import tusk OK')"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish on real tag pushes — manual dispatch from a non-tag
+    # ref would build but should not publish.
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/tuskdata/
+    permissions:
+      id-token: write  # required for PyPI OIDC trusted publishing
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish via trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No token: OIDC handles auth. Verbose surface lets us debug
+          # auth issues straight from the action logs if they recur.
+          verbose: true
+          print-hash: true
