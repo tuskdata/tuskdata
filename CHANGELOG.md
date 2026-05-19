@@ -2,6 +2,26 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.13] - 2026-05-19 — CSRF middleware no longer 500s on bad token
+
+Every POST/PUT/DELETE/PATCH without a matching `X-CSRF-Token` returned
+**500 Internal Server Error** instead of the intended 403. Root cause:
+`CSRFMiddleware` called `await response(scope, receive, send)` on a
+Litestar `Response` instance, which is not an ASGI callable — Litestar 2.x
+no longer casts it implicitly, so the call raised `TypeError: 'Response'
+object is not callable` and the middleware-error handler converted it to
+a 500. Browser users were unaffected because HTMX auto-attaches the token
+from the cookie; programmatic clients (tests, curl, third-party SDKs) hit
+the 500 the moment they POST without priming the cookie first.
+
+- **Fix**: emit the 403 directly via the ASGI `send` channel with a JSON
+  body, instead of trying to await a `Response`. `src/tusk/studio/app.py`.
+- **Impact**: this was the blocker for the v0.3.0 BI plugin e2e tests
+  (`POST /api/bi/dashboards` from a fresh client). It also would have
+  bitten any future SDK or external integration the moment it tried to
+  call an API endpoint without browser cookies.
+- Post-mortem: `specs/bugs/2026-05-19-csrf-middleware-500.md`.
+
 ## [0.4.12] - 2026-05-18 — SSH tunnel fails fast, Admin doesn't freeze
 
 When the bastion's Security Group dropped your IP (e.g. you moved

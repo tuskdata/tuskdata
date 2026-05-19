@@ -120,11 +120,23 @@ class CSRFMiddleware(AbstractMiddleware):
             header_token = request.headers.get(CSRF_HEADER)
 
             if not cookie_token or not header_token or not secrets.compare_digest(cookie_token, header_token):
-                response = Response(
-                    content={"error": "CSRF token missing or invalid"},
-                    status_code=403,
-                )
-                await response(scope, receive, send)
+                # Emit the 403 directly via the ASGI send channel.
+                # Wrapping a Litestar `Response` and calling it as
+                # `await response(scope, receive, send)` only works for
+                # ASGIApp instances — Response is not one, and the
+                # implicit cast Litestar used to do internally was
+                # dropped in 2.x, which produced a 500 instead of a
+                # clean 403 here. See bugs/2026-05-19-csrf-middleware-500.md.
+                body = b'{"error": "CSRF token missing or invalid"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 403,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
                 return
 
         # Wrap send to add CSRF cookie if not present
