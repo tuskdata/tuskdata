@@ -2,6 +2,26 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.14] - 2026-05-19 — CI workflow + publish workflow fix
+
+Two CI plumbing changes:
+
+- **Fix `publish.yml`**: `astral-sh/setup-uv@v3` with `enable-cache: true`
+  defaults to looking for `**/uv.lock` to invalidate the cache, and
+  fails the job when none exists. We don't ship a lockfile because
+  this is a library, not an app. Point `cache-dependency-glob` at
+  `pyproject.toml` so the cache still invalidates on dependency
+  changes. v0.4.13 never made it to PyPI for this reason; this
+  release retries.
+
+- **Add `ci.yml`**: runs `pytest + coverage` (+ `ruff check` with
+  `continue-on-error: true` until the codebase is clean) on every
+  push to main and every PR. Coverage summary lands in the job
+  summary so trend is visible. Tech-debt P1 #1 closed.
+
+No source code changes; pyproject.toml version bump + workflow files
+only.
+
 ## [0.4.13] - 2026-05-19 — CSRF middleware no longer 500s on bad token
 
 Every POST/PUT/DELETE/PATCH without a matching `X-CSRF-Token` returned

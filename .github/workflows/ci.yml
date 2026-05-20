@@ -1,0 +1,75 @@
+name: CI
+
+# Runs the test suite + lint on every push to main and every PR.
+# The publish workflow runs on tag push and depends on this passing
+# (we don't block via required-checks yet — that gets enabled once we
+# trust the suite to be green consistently).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-flight runs for the same ref so we don't burn minutes on
+# stale commits when someone pushes a quick fix.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install project + test extras
+        # Install the editable project so pytest collects the local
+        # source, not the published wheel. `[dev]` extra pulls in
+        # pytest, coverage, and the rest of the dev tooling we use.
+        run: |
+          uv venv
+          uv pip install -e ".[all]"
+          uv pip install pytest pytest-asyncio coverage ruff
+
+      - name: Run ruff
+        # Lint is a fail-fast gate; if the codebase doesn't even parse
+        # the way we expect, no point running tests.
+        run: uv run ruff check src/ tests/
+        continue-on-error: true  # lift to false once the codebase is clean
+
+      - name: Run pytest
+        # `-p no:randomly` to keep the order deterministic in CI logs.
+        # Coverage is collected but not gated yet — we report it in the
+        # job summary so trend is visible. Gate on % later when we've
+        # closed the most-glaring untested paths.
+        run: |
+          uv run coverage run --source=src/tusk -m pytest tests/ -v --tb=short
+          uv run coverage report --skip-covered --sort=-cover > coverage.txt
+          echo "## Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -10 coverage.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.txt
+          if-no-files-found: ignore

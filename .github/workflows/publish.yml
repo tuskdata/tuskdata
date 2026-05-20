@@ -30,6 +30,11 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          # We don't ship a uv.lock — it's a library, not an app.
+          # Without this, setup-uv looks for **/uv.lock by default and
+          # fails the job when none exists. Point the cache key at
+          # pyproject.toml so the cache still invalidates on dep changes.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.12
