@@ -2,7 +2,9 @@
 
 ## Status
 
-**Decided** 2026-05-18 in conversation. Not yet executed. Lives in `later/` because it's housekeeping that happens **after** 0.5.x — there's no value in removing them mid-cycle.
+**Executed** 2026-05-20 alongside v0.4.15. Wheels removed from `tuskdata-compose/wheels/`; Coolify rebuilds without them. Source repos remain unchanged on GitHub. Originally scheduled "after 0.5.x" but pulled in early — the cleanup turned out to be 15 minutes of work and aligned naturally with the v0.4.15 release that needed a compose bump anyway.
+
+This file remains as a record of the decision; the cleanup is no longer pending.
 
 ## Rationale
 
