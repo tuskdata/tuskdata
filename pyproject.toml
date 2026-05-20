@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.16"
+version = "0.4.17"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -17,16 +17,22 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Database",
     "Topic :: Database :: Database Engines/Servers",
 ]
-requires-python = ">=3.12"
+# Python 3.13 matches the production Docker base image
+# (`python:3.13-slim`). Bumped from 3.12 in v0.4.17 to align prod/dev/CI.
+# 3.14 is tested in parallel via the CI matrix; will become the default
+# once it has 1-2 quiet releases under it.
+requires-python = ">=3.13"
 # Core dependencies - minimal, always required
 dependencies = [
-    "msgspec>=0.18",       # Fast serialization
+    # msgspec 0.21+ ships ~40% faster JSON encoding, which is in the
+    # hot path for every API response we render. 0.20 is the floor for
+    # the new tuple-hash fix on Python 3.14.
+    "msgspec>=0.21",
     "structlog>=24.0",     # Structured logging
     "tomli-w>=1.0",        # Config file writing
     "httpx>=0.27",         # HTTP client (for future ETL workflows)
@@ -48,7 +54,10 @@ studio = [
     "litestar>=2.0",         # Web framework
     "granian>=2.0",          # ASGI server
     "minijinja>=2.0",        # Rust-based templates (MiniJinja)
-    "duckdb>=1.0",           # Analytics engine
+    # DuckDB 1.5 ships Python 3.14 wheels + Polars LazyFrame pushdown
+    # improvements. We're already past the 1.0 baseline; the floor
+    # bumps because tusk-cluster also needs >=1.5 once we touch it.
+    "duckdb>=1.5",           # Analytics engine
     "polars>=1.0",           # DataFrame transforms
     "pyarrow>=17.0",         # Arrow format support
     "apscheduler>=3.10,<4",  # Task scheduler — 4.x reorganized imports (no apscheduler.schedulers)
@@ -110,7 +119,7 @@ include = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 exclude = [
     ".venv",
     "build",

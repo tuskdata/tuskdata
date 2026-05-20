@@ -5,11 +5,12 @@ import secrets
 import shutil
 from pathlib import Path
 from litestar import Litestar, Request, Response
-from litestar.middleware.base import AbstractMiddleware
-from litestar.static_files import StaticFilesConfig
+from litestar.middleware import ASGIMiddleware
+from litestar.static_files import create_static_files_router
 from litestar.template import TemplateConfig
 from litestar.config.compression import CompressionConfig
 from litestar.types import ASGIApp, Receive, Scope, Send
+from litestar.enums import ScopeType
 
 from litestar.contrib.minijinja import MiniJinjaTemplateEngine
 from litestar.openapi import OpenAPIConfig
@@ -134,7 +135,7 @@ _PUBLIC_PREFIXES = (
 )
 
 
-class RequestTimeoutMiddleware(AbstractMiddleware):
+class RequestTimeoutMiddleware(ASGIMiddleware):
     """Bound every HTTP request to a max wall-clock budget.
 
     Last night's SSH-tunnel hang (see specs/bugs/2026-05-18-...) made
@@ -149,16 +150,16 @@ class RequestTimeoutMiddleware(AbstractMiddleware):
     disable.
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
+    # ASGIMiddleware filters scopes at the framework level — no more
+    # `if scope["type"] != "http"` inside the handler.
+    scopes = (ScopeType.HTTP,)
 
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         path = Request(scope).url.path
         timeout = _timeout_for(path)
 
         if timeout <= 0:
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         # Track whether the downstream app started writing a response.
@@ -175,7 +176,7 @@ class RequestTimeoutMiddleware(AbstractMiddleware):
 
         try:
             await asyncio.wait_for(
-                self.app(scope, receive, tracking_send),
+                next_app(scope, receive, tracking_send),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -199,7 +200,7 @@ class RequestTimeoutMiddleware(AbstractMiddleware):
                 await send({"type": "http.response.body", "body": body})
 
 
-class CSRFMiddleware(AbstractMiddleware):
+class CSRFMiddleware(ASGIMiddleware):
     """Double-submit cookie CSRF protection.
 
     - Sets a `tusk_csrf` cookie on every response if not present.
@@ -208,11 +209,9 @@ class CSRFMiddleware(AbstractMiddleware):
     - HTMX is configured in base.html to send this header automatically.
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
+    scopes = (ScopeType.HTTP,)
 
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         request = Request(scope)
         path = request.url.path
         method = request.method
@@ -256,10 +255,10 @@ class CSRFMiddleware(AbstractMiddleware):
                 message = {**message, "headers": headers}
             await send(message)
 
-        await self.app(scope, receive, send_with_csrf)
+        await next_app(scope, receive, send_with_csrf)
 
 
-class CorrelationIDMiddleware(AbstractMiddleware):
+class CorrelationIDMiddleware(ASGIMiddleware):
     """Attach an `X-Correlation-ID` to every HTTP request/response.
 
     Reads the incoming `X-Correlation-ID` header (any value the caller
@@ -271,11 +270,9 @@ class CorrelationIDMiddleware(AbstractMiddleware):
     server logs with client traces.
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
+    scopes = (ScopeType.HTTP,)
 
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         # Pull the header out of the raw ASGI scope (case-insensitive).
         incoming = ""
         for name, value in scope.get("headers") or ():
@@ -301,12 +298,12 @@ class CorrelationIDMiddleware(AbstractMiddleware):
             await send(message)
 
         try:
-            await self.app(scope, receive, send_with_correlation)
+            await next_app(scope, receive, send_with_correlation)
         finally:
             _correlation_id.reset(token)
 
 
-class SessionRequiredMiddleware(AbstractMiddleware):
+class SessionRequiredMiddleware(ASGIMiddleware):
     """Require a valid session cookie in multi-user mode.
 
     Single-user mode is a no-op (anyone with network access is already
@@ -323,22 +320,20 @@ class SessionRequiredMiddleware(AbstractMiddleware):
     uploads, notification webhooks, etc.
     """
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
+    scopes = (ScopeType.HTTP,)
 
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         # Single-user mode → no auth gate.
         from tusk.core.config import get_config
         if get_config().auth_mode != "multi":
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         request = Request(scope)
         path = request.url.path
 
         if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         # Validate session.
@@ -353,7 +348,7 @@ class SessionRequiredMiddleware(AbstractMiddleware):
                     valid = True
 
         if valid:
-            await self.app(scope, receive, send)
+            await next_app(scope, receive, send)
             return
 
         # Reject. HTMX boost / fetch get JSON; full nav gets a redirect.
@@ -714,22 +709,22 @@ async def _log_unhandled_exception(exception: Exception, scope: Scope) -> None:
         exc_info=exception,
     )
 
+# Static-files router (replaces deprecated StaticFilesConfig).
+# Plugin assets are served by an explicit handler in PageController
+# (`/static/plugins/{plugin_id}/{filename}`) instead of a second
+# router — Litestar's prefix matching couldn't pick the most-specific
+# prefix and the plugin assets were shadowed.
+_static_files_router = create_static_files_router(
+    path="/static",
+    directories=[STATIC_DIR],
+)
+
 app = Litestar(
-    route_handlers=get_route_handlers(),
+    route_handlers=[*get_route_handlers(), _static_files_router],
     template_config=TemplateConfig(
         directory=TEMPLATES_DIR,
         engine=MiniJinjaTemplateEngine,
     ),
-    static_files_config=[
-        # Plugin assets are served by an explicit handler in PageController
-        # (`/static/plugins/{plugin_id}/{filename}`) instead of a second
-        # StaticFilesConfig — Litestar's prefix matching couldn't pick
-        # the most specific prefix and the plugin assets were shadowed.
-        StaticFilesConfig(
-            directories=[STATIC_DIR],
-            path="/static",
-        ),
-    ],
     compression_config=CompressionConfig(
         backend="zstd",
         minimum_size=500,  # Compress responses larger than 500 bytes
@@ -738,7 +733,15 @@ app = Litestar(
     # first (so it bounds the whole stack, including auth + CSRF),
     # then session check, then correlation-id tagging, then CSRF
     # validation, then the actual handler.
-    middleware=[RequestTimeoutMiddleware, SessionRequiredMiddleware, CorrelationIDMiddleware, CSRFMiddleware],
+    # NOTE: ASGIMiddleware subclasses are passed as INSTANCES, not
+    # classes (the old AbstractMiddleware took classes — Litestar 2.15
+    # changed the contract).
+    middleware=[
+        RequestTimeoutMiddleware(),
+        SessionRequiredMiddleware(),
+        CorrelationIDMiddleware(),
+        CSRFMiddleware(),
+    ],
     # Litestar's default OpenAPI controller registers at `/schema`, which
     # collides with our user-facing Schema viewer page. Move it under
     # `/api/openapi` so `/schema` is free for the application UI.

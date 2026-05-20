@@ -37,7 +37,11 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
-        run: uv python install 3.12
+        # Match the production Docker base (python:3.13-slim).
+        # Library wheels are pure Python, so the build version doesn't
+        # constrain consumers, but keeping prod + publish on the same
+        # interpreter prevents surprises in import smoke tests.
+        run: uv python install 3.13
 
       - name: Verify tag matches pyproject version
         # Catches the foot-gun where someone tags v0.4.12 but pyproject

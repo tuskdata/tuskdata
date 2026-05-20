@@ -2,6 +2,42 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.17] - 2026-05-20 — Python 3.13 baseline + Litestar 2.x deprecations cleared
+
+Framework hygiene. No new user-visible features; closes 4 P1 items from
+the engineering audit in one release.
+
+**Python baseline bumped to 3.13** (`requires-python = ">=3.13"`):
+- Production has been on `python:3.13-slim` via Docker since v0.4.x —
+  this release closes the inconsistency with CI + the development venv.
+- CI matrix now runs **Python 3.13 (required) + 3.14 (advisory)**.
+  3.14 failures don't block merges (`continue-on-error`) but surface
+  early. Once it has a few quiet releases under it we'll promote.
+- `target-version` in ruff config bumped to `py313`.
+- Tech-debt P1 #4 (Litestar deprecations) and the implicit "align prod
+  with CI" both addressed.
+
+**Dependency bumps**:
+- `msgspec >= 0.21` (was `>= 0.18`) — ships ~40% faster JSON encoding
+  in the hot path. Every API response we render benefits.
+- `duckdb >= 1.5` (was `>= 1.0`) — Python 3.14 wheels + Polars
+  LazyFrame pushdown improvements.
+
+**Litestar 2.x deprecations cleared**:
+- `AbstractMiddleware` → `ASGIMiddleware` for all four middlewares
+  (RequestTimeout, Session, CorrelationID, CSRF). New pattern uses
+  `handle(scope, receive, send, next_app)` instead of `__call__`
+  with `self.app`. Middlewares are now passed to `Litestar(...)` as
+  **instances**, not classes — the contract changed in 2.15.
+  Tech-debt P1 #3 closed.
+- `StaticFilesConfig` → `create_static_files_router` in
+  `studio/app.py`. The router now lives in `route_handlers` instead
+  of `static_files_config`. Tech-debt P1 #4 closed.
+
+**Test suite**: 250 tests pass with `-W error::DeprecationWarning`
+(modulo one unrelated Litestar internal warning). Zero deprecations
+emitted by our own code now.
+
 ## [0.4.16] - 2026-05-20 — Process resilience (Granian + middleware + watchdog)
 
 The SSH-tunnel freeze post-mortem (2026-05-17) called out that even on

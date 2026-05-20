@@ -1,29 +1,25 @@
-# Tech debt — 2026-05-19
+# Tech debt — 2026-05-19 (updated 2026-05-20)
 
 Ranked by **impact × likelihood of biting us within 0.5.x-0.7.x**. Each item should either become an ADR + closed issue, or move to roadmap if it's actually a feature.
 
 ## P1 — fix in 0.5.x
 
-### 1. No CI workflow on PRs
-We added `publish.yml` (tag → PyPI) but there's nothing running tests on PR. Every regression we ship is unguarded. **Fix**: add `.github/workflows/ci.yml` that runs `pytest` + `ruff` + `mypy` (if we adopt) on push and PR. Block merges on red.
-- Effort: half a day.
+### 1. ~~No CI workflow on PRs~~ **CLOSED** (v0.4.14)
+`.github/workflows/ci.yml` runs pytest + ruff + coverage on push/PR with parallel Python 3.13 + 3.14 jobs.
 
-### 2. Middleware exception logging is silent
-The CSRF middleware bug shipped in v0.3.x and stayed hidden through ~10 releases because Litestar's default exception handler eats tracebacks at INFO. Browser users were fine; programmatic clients got 500s. **Fix**: configure Litestar to log all 5xx with traceback at ERROR level, regardless of `debug` flag. Add a guard test that POSTs without CSRF and asserts 403 (not 500) — locks the post-mortem in place.
-- Effort: half a day.
-- See `bugs/2026-05-19-csrf-middleware-500.md`.
+### 2. ~~Middleware exception logging is silent~~ **CLOSED** (v0.4.15)
+`_log_unhandled_exception` `after_exception` hook in `studio/app.py` logs every 5xx at ERROR with traceback + path + method + correlation_id; routine 4xx are silenced. Regression test in `tests/test_middleware.py`.
 
-### 3. AbstractMiddleware is deprecated (Litestar 2.15)
-All three middlewares in `studio/app.py` (CSRF, CorrelationID, SessionRequired) inherit from `AbstractMiddleware`, which Litestar removes in 3.0. Will block any future Litestar major bump. **Fix**: migrate to `litestar.middleware.ASGIMiddleware`.
-- Effort: 1 day (3 middlewares + tests).
+### 3. ~~AbstractMiddleware is deprecated (Litestar 2.15)~~ **CLOSED** (v0.4.17)
+All four middlewares (RequestTimeout, Session, CorrelationID, CSRF) migrated to `litestar.middleware.ASGIMiddleware`. Passed as instances now, not classes.
 
-### 4. StaticFilesConfig is deprecated (Litestar 2.6)
-Same story. Litestar wants `create_static_files_router` now. **Fix**: migrate in `studio/app.py`. Tests will catch any path-matching regressions.
-- Effort: half a day.
+### 4. ~~StaticFilesConfig is deprecated (Litestar 2.6)~~ **CLOSED** (v0.4.17)
+Migrated to `create_static_files_router` in `studio/app.py`. Tests pass with zero DeprecationWarnings.
 
-### 5. Test coverage at 33% overall, ≤17% on biggest routes files
+### 5. Test coverage at 33% overall, ≤17% on biggest routes files (open)
 The four largest routes files (`admin.py 1709 LOC, 17%`, `data.py 1384/21%`, `api.py 1122/33%`, `auth.py 786/18%`) accumulate every new endpoint **and** have the lowest coverage. **Fix**: stop adding endpoints to these files (split convention — one Controller per logical area in its own file). Backfill basic happy-path tests for the existing endpoints before any new feature lands there.
 - Effort: ongoing, scoped per release. Target 50% on admin.py before 0.5.x ships.
+- **Open** — targeted for v0.4.18.
 
 ## P2 — fix in 0.6.x or 0.7.x
 

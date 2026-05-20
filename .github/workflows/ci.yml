@@ -23,8 +23,22 @@ permissions:
 
 jobs:
   test:
-    name: Test (Python 3.12)
+    name: Test (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      # Don't cancel the 3.14 job if 3.13 fails — we want both signals.
+      fail-fast: false
+      matrix:
+        # 3.13 is the supported baseline (matches the Docker base
+        # image). 3.14 runs in parallel as a forward-looking check; we
+        # don't block merges on it yet (continue-on-error below) but
+        # surface regressions early.
+        include:
+          - python: "3.13"
+            required: true
+          - python: "3.14"
+            required: false
+    continue-on-error: ${{ !matrix.required }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +50,7 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install ${{ matrix.python }}
 
       - name: Install project + test extras
         # Install the editable project so pytest collects the local
