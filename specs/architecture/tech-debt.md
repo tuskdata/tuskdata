@@ -1,0 +1,70 @@
+# Tech debt — 2026-05-19
+
+Ranked by **impact × likelihood of biting us within 0.5.x-0.7.x**. Each item should either become an ADR + closed issue, or move to roadmap if it's actually a feature.
+
+## P1 — fix in 0.5.x
+
+### 1. No CI workflow on PRs
+We added `publish.yml` (tag → PyPI) but there's nothing running tests on PR. Every regression we ship is unguarded. **Fix**: add `.github/workflows/ci.yml` that runs `pytest` + `ruff` + `mypy` (if we adopt) on push and PR. Block merges on red.
+- Effort: half a day.
+
+### 2. Middleware exception logging is silent
+The CSRF middleware bug shipped in v0.3.x and stayed hidden through ~10 releases because Litestar's default exception handler eats tracebacks at INFO. Browser users were fine; programmatic clients got 500s. **Fix**: configure Litestar to log all 5xx with traceback at ERROR level, regardless of `debug` flag. Add a guard test that POSTs without CSRF and asserts 403 (not 500) — locks the post-mortem in place.
+- Effort: half a day.
+- See `bugs/2026-05-19-csrf-middleware-500.md`.
+
+### 3. AbstractMiddleware is deprecated (Litestar 2.15)
+All three middlewares in `studio/app.py` (CSRF, CorrelationID, SessionRequired) inherit from `AbstractMiddleware`, which Litestar removes in 3.0. Will block any future Litestar major bump. **Fix**: migrate to `litestar.middleware.ASGIMiddleware`.
+- Effort: 1 day (3 middlewares + tests).
+
+### 4. StaticFilesConfig is deprecated (Litestar 2.6)
+Same story. Litestar wants `create_static_files_router` now. **Fix**: migrate in `studio/app.py`. Tests will catch any path-matching regressions.
+- Effort: half a day.
+
+### 5. Test coverage at 33% overall, ≤17% on biggest routes files
+The four largest routes files (`admin.py 1709 LOC, 17%`, `data.py 1384/21%`, `api.py 1122/33%`, `auth.py 786/18%`) accumulate every new endpoint **and** have the lowest coverage. **Fix**: stop adding endpoints to these files (split convention — one Controller per logical area in its own file). Backfill basic happy-path tests for the existing endpoints before any new feature lands there.
+- Effort: ongoing, scoped per release. Target 50% on admin.py before 0.5.x ships.
+
+## P2 — fix in 0.6.x or 0.7.x
+
+### 6. Three routes files exceed 1,000 LOC
+`admin.py` (1,709), `data.py` (1,384), `api.py` (1,122). Too big to navigate, too many cross-handler dependencies, refactor risk grows monthly. **Fix**: split into `routes/admin/{processes,locks,backup,roles,extensions,settings,stats,maintenance}.py` with one Controller each.
+- Effort: 2-3 days.
+
+### 7. `polars_engine.py` is 1,164 LOC
+Mixes I/O, schema introspection, eval safety, and chart rendering. **Fix**: split into `polars_engine/{io,schema,safe_eval,charts}.py`. Tests exist for safe_eval already.
+- Effort: 2 days.
+
+### 8. Silent `try/except: pass` blocks (10+ occurrences)
+Each one is a potential silent-failure landmine. Many are legitimately fine ("close best-effort"), but several swallow real errors. **Fix**: audit each one, replace with explicit `log.debug("...", error=str(e))` so the failure is at least visible at DEBUG. Add a lint rule for naked `except: pass`.
+- Effort: 1 day.
+
+### 9. CLI is 248 stmts with 0% coverage
+`tusk studio`, `tusk plugins`, `tusk version` etc. all manually tested. When we add `tusk apply` for GitOps dashboards (roadmap), the CLI becomes user-facing. **Fix**: add `tests/test_cli.py` covering the main commands via `subprocess` or click's test runner.
+- Effort: 1 day. Bundle with GitOps feature work.
+
+### 10. No docs site
+README is the only public-facing doc. Enterprise won't touch a product without proper docs. **Fix**: mkdocs-material site, GitHub Pages hosting. Initial scope: install, first dashboard, plugin system, security, deployment.
+- Effort: 2-3 weeks (mostly writing).
+
+## P3 — opportunistic / cleanup
+
+### 11. Many `Optional`/`Union` legacy typing
+Python 3.10+ has `X | None` and `X | Y`. We're on 3.12. **Fix**: ruff rule `UP007` + a single PR doing the migration. Cosmetic but reduces noise.
+- Effort: 1 hour with ruff.
+
+### 12. `cli.py` uses `print(...)` everywhere
+Fine for a CLI, but inconsistent with the rest of the codebase (`structlog`). Not worth changing unless we want CLI output to be machine-parseable. **Defer.**
+
+### 13. Plugin templates rely on filesystem copy at startup
+`plugins/templates.py` copies templates from each plugin's installed wheel to `studio/templates/plugins/<id>/` on boot. Works but means hot-reloading plugin templates requires app restart. **Defer** unless someone complains. When `tusk-bi` is promoted to core, this goes away.
+
+## Not actually debt (but listed elsewhere as such)
+
+- **No license-key infrastructure**: not debt yet — only needed when we ship the first paid feature. Tracked in `roadmap/next.md`.
+- **No semantic layer**: feature, not debt. `roadmap/next.md`.
+- **No reverse-ETL / activation**: feature. `roadmap/now.md`.
+
+## Re-prioritize
+
+This list should be reviewed before every 0.X.0 release. New items go into the right priority slot via PR. Closed items move out with a one-line reason.
