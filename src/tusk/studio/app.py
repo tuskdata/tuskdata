@@ -68,6 +68,46 @@ STATIC_DIR = STUDIO_DIR / "static"
 CSRF_COOKIE = "tusk_csrf"
 CSRF_HEADER = "x-csrf-token"
 SESSION_COOKIE = "tusk_session"
+
+# Default request timeout (seconds). A handler that doesn't return
+# inside this budget gets cancelled and the caller sees 504. Tuned for
+# SMB load — most read endpoints respond in <2s, exports + backups
+# already returned 202 + job_id by then.
+#
+# Override per-path via _SLOW_PATH_PREFIXES below. Override at runtime
+# via TUSK_REQUEST_TIMEOUT env var (number of seconds, or 0 to disable).
+_DEFAULT_REQUEST_TIMEOUT_S = float(os.environ.get("TUSK_REQUEST_TIMEOUT", "60") or 60)
+
+# A few endpoints legitimately need a longer budget. Mostly streaming
+# downloads + long-running synchronous fallbacks that haven't been
+# migrated to background jobs yet. Keep this list **small** — every
+# entry is a deviation from the contract that the UI never hangs.
+_SLOW_PATH_PREFIXES = {
+    "/api/admin/": 300.0,            # admin reads can be slow on big DBs (pg_stat_activity etc.)
+    "/api/data/export": 600.0,       # CSV/Parquet exports
+    "/api/downloads/": 600.0,        # file downloads
+}
+
+# Skip the timeout entirely for paths where it would do more harm than
+# good (SSE / WebSocket-ish streams, embed pages serving long iframes).
+_TIMEOUT_EXEMPT_PREFIXES = (
+    "/static/",
+    "/api/ci/sse/",
+    "/health",
+    "/metrics",
+)
+
+
+def _timeout_for(path: str) -> float:
+    """Return the timeout in seconds for `path`, or 0 to disable."""
+    if _DEFAULT_REQUEST_TIMEOUT_S <= 0:
+        return 0.0
+    if any(path.startswith(p) for p in _TIMEOUT_EXEMPT_PREFIXES):
+        return 0.0
+    for prefix, override in _SLOW_PATH_PREFIXES.items():
+        if path.startswith(prefix):
+            return override
+    return _DEFAULT_REQUEST_TIMEOUT_S
 # Paths exempt from CSRF (login needs to work without a token, health, static, etc.)
 _CSRF_EXEMPT_PREFIXES = ("/static/", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/auth/config", "/health", "/api/ci/webhook", "/api/ci/sse/", "/bi/public/", "/embed/", "/api/embed/")
 _STATE_CHANGING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
@@ -92,6 +132,71 @@ _PUBLIC_PREFIXES = (
     "/embed/",
     "/api/embed/",
 )
+
+
+class RequestTimeoutMiddleware(AbstractMiddleware):
+    """Bound every HTTP request to a max wall-clock budget.
+
+    Last night's SSH-tunnel hang (see specs/bugs/2026-05-18-...) made
+    the pod unresponsive without crashing it. A frozen handler ties
+    up a worker until Granian's recycle kicks in (1h by default).
+    A request-level timeout is the surgical version: cancel the
+    handler, free the worker, return 504 to the caller.
+
+    Budget defaults to 60s and is overridable via TUSK_REQUEST_TIMEOUT.
+    Some routes get a longer budget (see _SLOW_PATH_PREFIXES); a few
+    are exempt entirely (SSE, static, health). Set the env to 0 to
+    disable.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = Request(scope).url.path
+        timeout = _timeout_for(path)
+
+        if timeout <= 0:
+            await self.app(scope, receive, send)
+            return
+
+        # Track whether the downstream app started writing a response.
+        # If it did, we can't cleanly send a 504 anymore — the caller
+        # has bytes in flight. In that rare case we just log and let
+        # the cancellation propagate.
+        response_started = False
+
+        async def tracking_send(message):
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await asyncio.wait_for(
+                self.app(scope, receive, tracking_send),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            timeout_log = get_logger("studio.exceptions")
+            timeout_log.error(
+                "Request timeout exceeded",
+                path=path,
+                method=scope.get("method"),
+                timeout_s=timeout,
+            )
+            if not response_started:
+                body = b'{"error": "Request timeout exceeded"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 504,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
 
 
 class CSRFMiddleware(AbstractMiddleware):
@@ -460,6 +565,26 @@ def on_startup() -> None:
         minutes=30,
     )
 
+    # Job watchdog — kill background jobs that have exceeded their
+    # declared max_duration_s. Runs every 30s so a stuck job doesn't
+    # tie up worker slots for hours.
+    try:
+        from tusk.core.jobs import get_registry as _get_jobs_registry
+
+        def _job_watchdog_tick():
+            killed = _get_jobs_registry().mark_timed_out()
+            if killed > 0:
+                log.warning("Job watchdog killed timed-out jobs", count=killed)
+
+        scheduler.add_interval_job(
+            _job_watchdog_tick,
+            job_id="job_watchdog",
+            name="Kill background jobs past their max_duration_s",
+            seconds=30,
+        )
+    except Exception as e:
+        log.warning("Failed to register job watchdog", error=str(e))
+
     # Register scheduled downloads
     try:
         from tusk.core.downloads import schedule_downloads
@@ -609,7 +734,11 @@ app = Litestar(
         backend="zstd",
         minimum_size=500,  # Compress responses larger than 500 bytes
     ),
-    middleware=[SessionRequiredMiddleware, CorrelationIDMiddleware, CSRFMiddleware],
+    # Middleware execution order is outside-in: RequestTimeout runs
+    # first (so it bounds the whole stack, including auth + CSRF),
+    # then session check, then correlation-id tagging, then CSRF
+    # validation, then the actual handler.
+    middleware=[RequestTimeoutMiddleware, SessionRequiredMiddleware, CorrelationIDMiddleware, CSRFMiddleware],
     # Litestar's default OpenAPI controller registers at `/schema`, which
     # collides with our user-facing Schema viewer page. Move it under
     # `/api/openapi` so `/schema` is free for the application UI.

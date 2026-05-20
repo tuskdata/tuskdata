@@ -2,6 +2,73 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.16] - 2026-05-20 — Process resilience (Granian + middleware + watchdog)
+
+The SSH-tunnel freeze post-mortem (2026-05-17) called out that even on
+a single pod, a stuck subsystem can make the whole UI unresponsive
+without crashing. ADR 0001 separates HA (multi-pod) from resilience
+(single-pod survives its own hangs). This release lands the
+single-pod resilience work end-to-end.
+
+**Granian** (`src/tusk/cli.py`):
+- `--respawn-failed-workers`: crashed workers come back automatically.
+- `--workers-lifetime 3600`: recycle every hour, bounds slow leaks.
+- `--workers-max-rss 2048`: kill any worker past 2 GiB resident.
+- `--workers-kill-timeout 30s`: stuck workers can't delay restart.
+
+**`RequestTimeoutMiddleware`** (`src/tusk/studio/app.py`):
+- Wraps every HTTP handler in `asyncio.wait_for` with a 60s default
+  budget. `TUSK_REQUEST_TIMEOUT` env overrides; 0 disables.
+- Slow paths (`/api/admin/...`, exports, downloads) get an explicit
+  longer budget. SSE / static / health are exempt.
+- On timeout: 504 with a JSON body, ERROR log via the existing
+  `after_exception` hook with `path`, `method`, `timeout_s`.
+
+**Job watchdog** (`src/tusk/core/jobs.py`):
+- `Job.max_duration_s` and per-kind defaults
+  (`DEFAULT_MAX_DURATION_S` — backup=1h, query=10m, dns_scan=30m).
+- New `mark_timed_out()` finds running jobs past their deadline,
+  marks them `failed_timeout`, and (for async jobs) cancels the
+  underlying `asyncio.Task`. Sync jobs get marked in the DB; the
+  thread keeps running until Granian recycle frees the worker.
+- Wired into the scheduler every 30s.
+- Tests: `tests/test_jobs_watchdog.py` covers happy path, opt-out
+  (max_duration_s=0), immutable-finished-jobs guard, mixed cohorts.
+
+**Ruff `ASYNC` rule family** turned on in `pyproject.toml`:
+- Catches `subprocess.run` / `time.sleep` / sync `open()` inside
+  `async def` — exactly the pattern that caused v0.4.10's backup
+  hang. Lesson #1 from `specs/bugs/2026-04-30-backups-hang-and-lie.md`
+  is now enforced statically.
+- Fixed one real violation in `settings.py` (sync subprocess.run for
+  pg_dump version probe — wrapped in `asyncio.to_thread`).
+- Annotated 2 legitimate-but-flagged cases with `noqa` +
+  explanation (`cluster.py`'s fire-and-forget detached child,
+  `downloads.py`'s buffered chunk writes between async yields).
+
+**K8s deployment recipe** (`docs/deployment/kubernetes.md`):
+- StatefulSet with 1 replica + PVC for `~/.tusk`.
+- Tuned liveness + readiness + startup probes matching the Granian
+  worker timeout.
+- Loud warning not to scale to 2+ replicas — links to ADR 0001 and
+  the postgres-meta-and-ha later/ spec.
+
+**Specs added** (`specs/`):
+- `roadmap/later/tusk-cluster-improvements.md` — what "mejorar
+  tusk-cluster" actually means and when to start.
+- `roadmap/later/tusk-bi-to-core.md` — promotion plan from external
+  plugin into core (decided, scheduled before 0.7.x).
+
+**CI fix** (`tests/test_middleware.py`):
+- The middleware regression tests POSTed to `/api/bi/dashboards`
+  which only exists when tusk-bi is installed — CI doesn't install
+  it. Refactored to register hermetic `/__mw_test_*` routes inside
+  the fixture so the tests don't depend on plugin presence.
+- Also short-circuits the app lifecycle hooks during the fixture so
+  re-entering a TestClient after another test file's cleanup doesn't
+  hit "Event loop is closed" on the stale scheduler.
+- `tests/test_bi_v030_e2e.py` now `importorskip`s `tusk_bi`.
+
 ## [0.4.15] - 2026-05-20 — Error observability + plugin cleanup
 
 The cause of the v0.4.13 CSRF bug staying silent for ~10 releases was

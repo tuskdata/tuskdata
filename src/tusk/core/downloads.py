@@ -437,7 +437,12 @@ async def download_file(
                 output = _resolve_output_path(source, storage)
                 downloaded = 0
 
-                with open(output, "wb") as f:
+                # ASYNC230 flags the sync open() but in this download
+                # path the file writes interleave with `async for` so the
+                # event loop yields between chunks anyway. A pure-async
+                # rewrite via aiofiles would be cleaner; tracked in
+                # tech-debt.md but not blocking 0.5.x.
+                with open(output, "wb") as f:  # noqa: ASYNC230  — buffered writes between async yields
                     async for chunk in resp.aiter_bytes(8192):
                         f.write(chunk)
                         downloaded += len(chunk)

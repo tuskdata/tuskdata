@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.15"
+version = "0.4.16"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -111,3 +111,44 @@ include = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "tests/fixtures",
+]
+
+[tool.ruff.lint]
+# Start with a minimal rule set focused on **correctness**, not style.
+# We can layer in more rules once the codebase is clean against this
+# baseline. Each block has a comment explaining why it's on.
+select = [
+    # ASYNC: blocking I/O inside `async def` bodies. The backup hang
+    # (specs/bugs/2026-04-30-backups-hang-and-lie.md) was caused
+    # exactly by this — synchronous `subprocess.Popen.communicate`
+    # inside an async route handler froze the worker. Letting ruff
+    # catch the pattern statically beats post-incident debugging.
+    "ASYNC",
+    # Pyflakes: undefined names, unused imports — cheap, high signal.
+    "F",
+    # Pycodestyle errors (E) but not whitespace warnings (W) — we don't
+    # want our diffs polluted with whitespace churn yet.
+    "E",
+]
+# Suppress rules that would create churn without proportional value.
+ignore = [
+    "E501",   # line too long — line-length already set; let some long
+              # strings/URLs slide rather than wrapping them awkwardly.
+    "E731",   # lambda assignment — used in a few places intentionally.
+    "ASYNC110",  # while True + asyncio.sleep — used in legit poller loops.
+    "ASYNC240",  # pathlib.Path methods in async functions. The rule
+                 # assumes trio's stricter purity model — for asyncio
+                 # apps with reasonable filesystem latency the cost is
+                 # negligible. Migrating to anyio.Path is on the radar
+                 # but not P1.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files often import for side effects, define fixtures with
+# unusual shapes, or hardcode dev-only patterns. Loosen rules there.
+"tests/**" = ["F401", "F811"]

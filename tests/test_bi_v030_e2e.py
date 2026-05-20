@@ -30,6 +30,9 @@ import pytest
 # Skip the whole module when Playwright (the browser library, not the
 # Python binding) hasn't been installed via `playwright install`.
 playwright = pytest.importorskip("playwright.sync_api")
+# Also skip when the tusk-bi plugin isn't installed — CI installs only
+# `tuskdata[all]` (core + cluster); tusk-bi is an external plugin.
+pytest.importorskip("tusk_bi", reason="tusk-bi plugin not installed in this environment")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 

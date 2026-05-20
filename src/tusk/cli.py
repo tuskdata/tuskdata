@@ -185,12 +185,44 @@ def start_studio():
 
     print(f"Starting Tusk Studio at http://{host}:{port}")
 
+    # Granian resilience knobs (see specs/architecture/adrs/0001 +
+    # specs/roadmap/now.md "Process resilience"):
+    #
+    # --respawn-failed-workers: if a worker crashes (segfault, OOM,
+    #     uncaught exception leaking through to the runtime), bring
+    #     it back automatically. Default Granian behavior is to leave
+    #     the pod up with no workers, which produces "TCP up but
+    #     connection refused" — worst of both worlds.
+    #
+    # --workers-lifetime 3600: recycle each worker every hour. Bounds
+    #     any slow memory creep, fragmented allocator state, leaked
+    #     connection handles, etc. Single-worker setups (the SMB
+    #     default) get a 1-2s blip; multi-worker setups get rolling
+    #     recycle.
+    #
+    # --workers-max-rss 2048: kill any worker that grows past 2 GiB
+    #     resident memory. Catches runaway analytical queries that
+    #     pull a huge dataframe into Polars and don't release. 2 GiB
+    #     is generous for an SMB Postgres-admin workload but blocks
+    #     pathological cases.
+    #
+    # --workers-kill-timeout 30s: when we send SIGTERM to a worker
+    #     during recycle / shutdown, wait at most 30s before SIGKILL.
+    #     Prevents a stuck worker from delaying restart forever.
+    #
+    # Per-request timeouts live at the application layer (Litestar
+    # middleware, separate P1 task) — Granian itself doesn't enforce
+    # a per-handler budget.
     subprocess.run([
         sys.executable, "-m", "granian",
         "--interface", "asgi",
         "--host", host,
         "--port", str(port),
-        "tusk.studio.app:app"
+        "--respawn-failed-workers",
+        "--workers-lifetime", "3600",
+        "--workers-max-rss", "2048",
+        "--workers-kill-timeout", "30s",
+        "tusk.studio.app:app",
     ])
 
 

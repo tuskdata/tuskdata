@@ -68,23 +68,27 @@ class SettingsController(Controller):
         """Detect available PostgreSQL binary paths"""
         from tusk.admin.backup import _get_pg_bin_search_paths
 
+        import asyncio
+        import subprocess
+
+        def _probe_version(pg_dump_path: str) -> str:
+            """Sync subprocess wrapped for asyncio.to_thread — running
+            subprocess.run() directly in an async body blocks the event
+            loop for up to `timeout` seconds. Caught by ASYNC221."""
+            try:
+                result = subprocess.run(
+                    [pg_dump_path, "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                return result.stdout.strip() if result.returncode == 0 else "unknown"
+            except Exception:
+                return "unknown"
+
         available = []
         for search_path in _get_pg_bin_search_paths():
             pg_dump = search_path / "pg_dump"
             if pg_dump.exists():
-                # Get version
-                import subprocess
-                try:
-                    result = subprocess.run(
-                        [str(pg_dump), "--version"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    version = result.stdout.strip() if result.returncode == 0 else "unknown"
-                except Exception:
-                    version = "unknown"
-
+                version = await asyncio.to_thread(_probe_version, str(pg_dump))
                 available.append({
                     "path": str(search_path),
                     "version": version,

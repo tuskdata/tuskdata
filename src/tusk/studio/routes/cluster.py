@@ -413,8 +413,15 @@ class ClusterController(Controller):
             import subprocess
             import sys
 
-            # Start cluster using CLI command in background
-            process = subprocess.Popen(
+            # Start cluster using CLI command in background.
+            # `start_new_session=True` detaches the child — Popen returns
+            # immediately, no .communicate() / .wait() call follows, so
+            # this is fire-and-forget and DOES NOT block the event loop.
+            # ASYNC220 flags subprocess.Popen in async bodies broadly,
+            # but the rule can't distinguish fire-and-forget from
+            # blocking. Suppress with a marker comment that future-us can
+            # grep for if the pattern ever changes.
+            process = subprocess.Popen(  # noqa: ASYNC220  — fire-and-forget detached child
                 [sys.executable, "-m", "tusk.cli", "cluster", "--workers", str(num_workers)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
