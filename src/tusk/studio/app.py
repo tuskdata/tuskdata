@@ -552,6 +552,43 @@ def on_shutdown() -> None:
 # Discover plugins before creating app (needed for route handlers)
 discover_plugins()
 
+
+async def _log_unhandled_exception(exception: Exception, scope: Scope) -> None:
+    """Litestar `after_exception` hook — log every exception with its
+    traceback before the framework converts it to an HTTP response.
+
+    Without this, Litestar's default behavior converts unhandled
+    exceptions to a generic 500 with **no traceback in the structlog
+    output**. That is precisely how the CSRF middleware bug stayed
+    invisible across ~10 releases (see specs/bugs/2026-05-19-csrf-...).
+
+    Decisions:
+    - Log at ERROR with `exc_info=True` so the full traceback lands
+      in the standard logger pipeline (which structlog wraps).
+    - Tag the record with the request path + method so a 500 in admin
+      isn't indistinguishable from one in BI.
+    - We DON'T differentiate 4xx vs 5xx here — Litestar's HTTPException
+      subclasses are also caught, but those are typically intentional
+      and quiet. We filter the noisy 4xx classes out so we keep signal:
+      404, 401, 403, 422 are routine.
+    """
+    from litestar.exceptions import HTTPException
+
+    if isinstance(exception, HTTPException) and 400 <= exception.status_code < 500:
+        # Routine client errors — quiet.
+        return
+
+    log = get_logger("studio.exceptions")
+    path = scope.get("path", "<unknown>")
+    method = scope.get("method", "<unknown>")
+    log.error(
+        "Unhandled exception",
+        method=method,
+        path=path,
+        exc_type=type(exception).__name__,
+        exc_info=exception,
+    )
+
 app = Litestar(
     route_handlers=get_route_handlers(),
     template_config=TemplateConfig(
@@ -583,5 +620,10 @@ app = Litestar(
     ),
     on_startup=[on_startup],
     on_shutdown=[on_shutdown],
+    # Centralized error logging — see _log_unhandled_exception.
+    # Without this, Litestar swallows tracebacks at the default log
+    # level and 5xx bugs become invisible (the CSRF middleware bug
+    # lived undetected for ~10 releases for this exact reason).
+    after_exception=[_log_unhandled_exception],
     debug=os.environ.get("TUSK_DEBUG", "").lower() in ("1", "true", "yes"),
 )

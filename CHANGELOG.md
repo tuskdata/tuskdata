@@ -2,6 +2,36 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.15] - 2026-05-20 — Error observability + plugin cleanup
+
+The cause of the v0.4.13 CSRF bug staying silent for ~10 releases was
+that Litestar's default exception handler swallowed tracebacks. Fix
+the proximate cause:
+
+- **`after_exception` hook** in `src/tusk/studio/app.py` —
+  `_log_unhandled_exception` runs after every exception Litestar
+  catches, logs at ERROR via structlog (with traceback + path +
+  method + correlation_id), and explicitly silences routine 4xx
+  HTTPExceptions so we keep signal:noise high. Tech-debt P1 #2
+  closed.
+
+- **`tests/test_middleware.py`** — locks in the CSRF post-mortem with
+  3 regression tests (POST without CSRF → 403 not 500, POST with
+  CSRF → 2xx, GET skips guard) plus a test that the after_exception
+  hook actually fires on 5xx. These run in the regular pytest suite,
+  no Playwright needed.
+
+Plugin cleanup (decided in the audit cycle, executed now):
+
+- **Drop `tusk-ci` and `tusk-security` plugins** from the deployed
+  compose image. The repos stay on GitHub as-is (no archival, no data
+  migration — per the prior call). `tuskdata-compose` no longer
+  installs them. CI builds shrink accordingly.
+
+- **Update CLI's "no plugins installed" hint** in `src/tusk/cli.py`
+  to point at `tusk-bi` + `tusk-cluster` (the two plugins we actually
+  ship).
+
 ## [0.4.14] - 2026-05-19 — CI workflow + publish workflow fix
 
 Two CI plumbing changes:

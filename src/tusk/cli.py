@@ -74,8 +74,8 @@ def handle_plugins():
             if not plugins:
                 print("No plugins installed")
                 print("\nInstall plugins via pip:")
-                print("  pip install tusk-security")
-                print("  pip install tusk-cluster")
+                print("  pip install tusk-bi        # dashboards & analytics")
+                print("  pip install tusk-cluster   # distributed query")
                 return
 
             print(f"{'Plugin':<25} {'Version':<12} {'Tab':<15}")
