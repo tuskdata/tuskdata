@@ -2,7 +2,7 @@
 
 Tusk is designed to run as **a single process**. The deployment here is a `StatefulSet` with **one replica** and a persistent volume for `~/.tusk`. This works in production for SMB-scale loads.
 
-> ⚠️ **Do not increase `replicas`.** Tusk's scheduler, sessions, and plugin storage are not yet multi-pod safe. See [ADR 0001](../../specs/architecture/adrs/0001-single-process-by-default.md) for the full reasoning and the list of things that break with `replicas: 2+`. HA support is on the roadmap for 0.9.x — until then, scale vertically (more CPU/RAM per pod), not horizontally.
+> ⚠️ **Do not increase `replicas`.** Tusk's scheduler, sessions, and plugin storage are not yet multi-pod safe. See [ADR 0001](https://github.com/tuskdata/tuskdata/blob/main/specs/architecture/adrs/0001-single-process-by-default.md) for the full reasoning and the list of things that break with `replicas: 2+`. HA support is on the roadmap for 0.9.x — until then, scale vertically (more CPU/RAM per pod), not horizontally.
 
 ## Minimal working manifest
 
@@ -124,7 +124,7 @@ If you set `replicas: 2+`:
 - **SQLite at `~/.tusk/*.db` is per-pod.** Each replica has its own jobs/sessions/audit DB. Sessions don't migrate across pods.
 - **PG connection pools multiply.** Each pod opens its own pool to your Postgres. Easy to blow past `max_connections`.
 
-If you genuinely need HA today, run a single pod with **a robust auto-restart story** (the probes above) and a fast PVC. Real HA support arrives in Tusk 0.9.x — see [`specs/roadmap/later/postgres-meta-and-ha.md`](../../specs/roadmap/later/postgres-meta-and-ha.md).
+If you genuinely need HA today, run a single pod with **a robust auto-restart story** (the probes above) and a fast PVC. Real HA support arrives in Tusk 0.9.x — see [`specs/roadmap/later/postgres-meta-and-ha.md`](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/later/postgres-meta-and-ha.md).
 
 ## Backing up the volume
 
