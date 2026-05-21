@@ -85,15 +85,38 @@ suggested SQL, did it actually work?
               for the error text + the actually-run SQL.
 """)
         return
-    if args[0] != "stats":
-        print(f"Unknown ai subcommand: {args[0]}. Try `tusk ai help`.")
-        sys.exit(1)
+    if args[0] == "stats":
+        # Hand off to the module's main(argv). The module lives inside
+        # the package so it's distributed with the wheel.
+        from tusk.core import ai_stats
+        ai_stats.main(args[1:])
+        return
 
-    # Hand off to the module's `main(argv)`. The module lives inside
-    # the package (src/tusk/core/ai_stats.py) so it's distributed with
-    # the wheel — no need to hunt for a top-level scripts/ dir.
-    from tusk.core import ai_stats
-    ai_stats.main(args[1:])
+    if args[0] == "debug-prompt":
+        # tusk ai debug-prompt <conn_id> "<question>"
+        # Prints exactly what _schema_summary returns for that pair —
+        # the schema text the LLM would have received in its prompt.
+        # No LLM call, no network — pure local introspection.
+        if len(args) < 3:
+            print("Usage: tusk ai debug-prompt <conn_id> \"<question>\"")
+            sys.exit(1)
+        conn_id, question = args[1], args[2]
+        import asyncio
+        from tusk.studio.routes.ai import _schema_summary
+        text = asyncio.run(_schema_summary(conn_id, question))
+        if not text:
+            print(f"(empty — connection {conn_id} not found or not Postgres)")
+            sys.exit(1)
+        print(f"=== schema text sent to LLM for conn_id={conn_id} ===")
+        print(f"=== question: {question}")
+        print()
+        print(text)
+        print()
+        print(f"=== {len(text)} chars ===")
+        return
+
+    print(f"Unknown ai subcommand: {args[0]}. Try `tusk ai help`.")
+    sys.exit(1)
 
 
 def handle_plugins():
@@ -169,6 +192,7 @@ AI Commands:
     tusk ai stats --days 7              Restrict to last 7 days
     tusk ai stats --verbose             Print every prompt + verdict
     tusk ai stats --session <key>       One session only
+    tusk ai debug-prompt <conn> "<q>"   Dump schema text sent to LLM
 
 Plugin Commands:
     tusk plugins list         List installed plugins""")

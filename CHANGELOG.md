@@ -2,6 +2,59 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.22] - 2026-05-21 — AI grounding: cross-language matching + top-N safety net
+
+`tusk ai stats` from production showed two **deterministic**
+hallucinations on the same prompt: AI suggested
+`SELECT administrative_area_name FROM geo_administrative_area`
+twice. The column doesn't exist — the real one is `name`.
+
+Root cause traced to `_schema_summary` (`routes/ai.py:550`):
+
+- The matcher decides which tables to include with full column
+  definitions by checking if any token from the user's prompt is a
+  **literal substring** of the table name or any column name.
+- User's prompt was Spanish ("niveles administrativos"). Table is
+  English (`geo_administrative_area`). `"administrativos" in
+  "geo_administrative_area"` → False. Table got listed in the
+  overview section without columns. Model had no anchor → invented
+  `administrative_area_name` with the "table + _name" pattern.
+
+Two fixes:
+
+1. **Prefix-overlap matching** alongside substring. If a 5+ char
+   common prefix exists between a prompt token and any word in the
+   identifier, the table is selected for detail. Catches
+   "administrativos" ↔ "administrative", "usuarios" ↔ "users"
+   (partial), etc. The 5-char floor avoids junk matches on
+   "the"/"for" etc.
+
+2. **Always seed the detail section with the top 3 tables by row
+   count**, regardless of whether the matcher already picked
+   something. Reason: the matcher is best-effort; small local models
+   (the user is on qwen3.5:9b via Ollama) hallucinate confidently
+   when handed only a table name. Three guaranteed examples give
+   the model an anchor to copy from instead of inventing column
+   names that "sound right".
+
+Also adds `tusk ai debug-prompt <conn_id> "<question>"` — calls
+`_schema_summary` directly and dumps the schema text that *would*
+be sent to the LLM. Lets you verify the fix without round-tripping
+through a chat session.
+
+Usage on a deployed container:
+
+```
+tusk ai debug-prompt status_staging "niveles administrativos"
+# → prints the full schema text. Look for geo_administrative_area
+#   under "### Detailed schema". Expect to see `name` listed as a
+#   column, no `administrative_area_name` anywhere.
+```
+
+After this release, the same prompt should generate
+`SELECT name FROM geo_administrative_area` (or close to it) instead
+of the hallucination.
+
 ## [0.4.21] - 2026-05-21 — `tusk ai stats` surfaces ABANDONED SQL too
 
 First production run of v0.4.20's `tusk ai stats` told us: 9 prompts,

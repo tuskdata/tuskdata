@@ -547,14 +547,52 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
                 "more", "less"}
         tokens = {t for t in re.findall(r"[a-z_]{3,}", prompt_lower) if t not in STOP}
 
+        def _common_prefix_len(a: str, b: str) -> int:
+            n = 0
+            for x, y in zip(a, b):
+                if x != y:
+                    break
+                n += 1
+            return n
+
         def matches_prompt(tname: str, t: dict) -> bool:
+            """A table is relevant if any prompt token overlaps with its
+            name or any column name. Substring is the primary signal but
+            we also accept a 5+ char common prefix between a token and
+            any word in the identifier — that catches cross-language
+            pairs like 'administrativos' (es) ↔ 'administrative' (en),
+            'usuarios' (es) ↔ 'users' (en, partial 'us'), 'pedidos'
+            (es) ↔ 'orders' — wait, that last one wouldn't match,
+            which is fine: we'd rather have a few misses than a flood
+            of false positives.
+            """
             tn = tname.lower()
             if any(tok in tn for tok in tokens):
                 return True
+
+            # Prefix-overlap: split identifier into words on `_`/digits
+            # and compare each against each token. 5 chars is enough to
+            # rule out coincidence ("the" / "for" wouldn't slip through
+            # because of the STOP filter + the 5-char floor).
+            table_words = [w for w in re.findall(r"[a-z]+", tn) if len(w) >= 5]
+            for tok in tokens:
+                if len(tok) < 5:
+                    continue
+                for word in table_words:
+                    if _common_prefix_len(tok, word) >= 5:
+                        return True
+
             for c in t["cols"]:
                 cn = c["name"].lower()
                 if any(tok in cn for tok in tokens):
                     return True
+                col_words = [w for w in re.findall(r"[a-z]+", cn) if len(w) >= 5]
+                for tok in tokens:
+                    if len(tok) < 5:
+                        continue
+                    for word in col_words:
+                        if _common_prefix_len(tok, word) >= 5:
+                            return True
             return False
 
         priority_set: set[str] = {n for n, t in tables.items() if matches_prompt(n, t)}
@@ -611,16 +649,23 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             used += len(block)
             seen.add(tname)
 
-        # If no prompt keywords matched anything, fall back to top-N by rows
-        # so the model still sees ~8 detailed tables it can rely on.
-        if not seen:
-            for tname, t in all_sorted[:8]:
-                block = emit_table(tname, t)
-                if used + len(block) > budget_chars:
-                    break
-                out_lines.append(block)
-                used += len(block)
-                seen.add(tname)
+        # Always seed the detail section with the top-3 tables by row
+        # count, even when the prompt-keyword matcher already picked
+        # something. Reason: the matcher is best-effort (cross-language
+        # prompts, ambiguous tokens) and small local models hallucinate
+        # confidently when handed only a table name with no columns.
+        # Three guaranteed examples give the model an anchor to copy
+        # from instead of inventing column names that "sound right".
+        top_n_seed = 8 if not seen else 3
+        for tname, t in all_sorted[:top_n_seed]:
+            if tname in seen:
+                continue
+            block = emit_table(tname, t)
+            if used + len(block) > budget_chars:
+                break
+            out_lines.append(block)
+            used += len(block)
+            seen.add(tname)
 
         return "\n".join(out_lines)
     except Exception as e:
