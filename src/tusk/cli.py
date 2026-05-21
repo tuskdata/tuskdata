@@ -28,6 +28,8 @@ def main():
         handle_plugins()
     elif command == "features":
         show_features()
+    elif command == "ai":
+        handle_ai()
     elif command == "version":
         from tusk import __version__
         print(f"Tusk v{__version__}")
@@ -59,6 +61,39 @@ def show_features():
     """Show status of optional features"""
     from tusk.core.deps import print_feature_status
     print_feature_status()
+
+
+def handle_ai():
+    """Dispatch `tusk ai <subcommand>`. Currently the only subcommand
+    is `stats`, which runs the AI Copilot hit-rate report. Forwards
+    its argv after `stats` to the script so flags like `--days 7`
+    and `--verbose` work transparently."""
+    args = sys.argv[2:]
+    if not args or args[0] in ("help", "--help", "-h"):
+        print("""Usage: tusk ai stats [--days N] [--session KEY] [--verbose]
+
+Correlates ~/.tusk/ai_memory.db (AI conversations) with
+~/.tusk/history.db (executed queries) to answer: when the Copilot
+suggested SQL, did it actually work?
+
+  CONFIRMED   AI suggestion was run successfully on the same conn
+              within 5 min.
+  HONEST      AI returned a `-- ` SQL comment (its "I don't know"
+              pattern); grounding worked.
+  ABANDONED   AI suggested but no query ran shortly after.
+  FAILED      AI suggested, the query ran and errored. See --verbose
+              for the error text + the actually-run SQL.
+""")
+        return
+    if args[0] != "stats":
+        print(f"Unknown ai subcommand: {args[0]}. Try `tusk ai help`.")
+        sys.exit(1)
+
+    # Hand off to the module's `main(argv)`. The module lives inside
+    # the package (src/tusk/core/ai_stats.py) so it's distributed with
+    # the wheel — no need to hunt for a top-level scripts/ dir.
+    from tusk.core import ai_stats
+    ai_stats.main(args[1:])
 
 
 def handle_plugins():
@@ -128,6 +163,12 @@ Auth Commands:
     tusk auth init                      Initialize auth (create admin user)
     tusk auth enable                    Enable multi-user mode
     tusk auth disable                   Disable auth (single mode)
+
+AI Commands:
+    tusk ai stats                       Hit-rate report from AI memory
+    tusk ai stats --days 7              Restrict to last 7 days
+    tusk ai stats --verbose             Print every prompt + verdict
+    tusk ai stats --session <key>       One session only
 
 Plugin Commands:
     tusk plugins list         List installed plugins""")

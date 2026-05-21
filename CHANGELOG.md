@@ -2,6 +2,52 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.20] - 2026-05-21 — `tusk ai stats` — AI Copilot hit-rate report
+
+User-driven audit revealed two things about the AI Copilot:
+
+1. We claim "conversation memory" since v0.4.7 but nothing surfaces it
+   to the user — `~/.tusk/ai_memory.db` fills silently.
+2. The user reports the Copilot is still hallucinating columns despite
+   `_schema_summary` (in `routes/ai.py:452`) being designed to ground
+   it in `pg_catalog`. Need data to prove which side is broken.
+
+This release ships a CLI tool that answers both: a hit-rate report
+correlating AI suggestions with what actually got executed.
+
+```
+tusk ai stats                 # default, last 30 days
+tusk ai stats --days 7        # last week
+tusk ai stats --session KEY   # one conversation
+tusk ai stats --verbose       # every prompt + verdict
+```
+
+The report classifies each (user prompt → assistant turn) pair as:
+
+- **CONFIRMED** — AI suggested SQL, a query ran on the same conn
+  within 5 min, and it succeeded. Strong positive signal.
+- **HONEST** — AI returned a `-- ` SQL comment (its "I don't know"
+  pattern from the few-shots). Grounding worked.
+- **FAILED** — AI suggested, a query ran ≤5min later and errored.
+  The report prints the prompt, the AI's SQL, the SQL that actually
+  ran (often the user modified it), and the database error string.
+  This is where you see exactly which column the model invented.
+- **ABANDONED** — AI suggested but no query ran. User likely
+  rejected silently.
+- **NO_SQL** — assistant turn had no parseable SQL.
+
+Headline numbers: hit rate (CONFIRMED+HONEST / total) and miss rate
+(FAILED+ABANDONED / total). Per-session breakdown for the top 10
+busiest sessions.
+
+Implementation lives in `src/tusk/core/ai_stats.py` so it's
+distributed with the wheel. CLI dispatch via `tusk ai stats` in
+`src/tusk/cli.py`.
+
+This is part of the pre-0.5.0 bug bash — 0.5.0 doesn't ship until
+the AI Copilot's miss rate is one we can defend. The user reframed
+the release window: "bugs go in 0.4.x until clean, then 0.5.0".
+
 ## [0.4.19] - 2026-05-21 — CI hotfix: otel dep + Node 20 deprecations
 
 CI was red on every push since v0.4.14 — turns out we never noticed
