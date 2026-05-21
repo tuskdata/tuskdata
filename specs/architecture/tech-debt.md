@@ -16,6 +16,11 @@ All four middlewares (RequestTimeout, Session, CorrelationID, CSRF) migrated to 
 ### 4. ~~StaticFilesConfig is deprecated (Litestar 2.6)~~ **CLOSED** (v0.4.17)
 Migrated to `create_static_files_router` in `studio/app.py`. Tests pass with zero DeprecationWarnings.
 
+### 5b. Test isolation — Litestar app is a module-level singleton shared across test files
+Multiple test files (`test_e2e.py`, `test_admin_routes.py`, `test_middleware.py`, `test_bi_v030_e2e.py`) all do `from tusk.studio.app import app` then `TestClient(app=app)`. The Litestar app object's lifespan state leaks across modules: when test file A's TestClient exits, its `on_shutdown` runs and partially closes the scheduler / lifespan task; when test file B's TestClient enters, it tries to start a new lifespan but the underlying ASGI receive coroutine has been cancelled. Symptom: `concurrent.futures._base.CancelledError` raised during TestClient `__exit__` on the *second* fixture to run.
+
+Worked around in v0.4.19 by catching CancelledError in `test_e2e.py`'s fixture teardown — the test itself has already completed by then. **Proper fix**: each test file builds its own Litestar instance from scratch (route handlers + middleware passed in) instead of importing the singleton. That eliminates the cross-file state entirely. Tracked here, scheduled for 0.5.x when we touch the test infra to add the Postgres service container.
+
 ### 5. Test coverage — admin.py from 17% → 31%, target 50% (open, partial)
 **Partial progress shipped in v0.4.18** (`tests/test_admin_routes.py`):
 - admin.py: 17% → 31% (covered the routing logic, guards, wrong-type
