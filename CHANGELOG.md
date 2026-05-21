@@ -2,6 +2,34 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.21] - 2026-05-21 — `tusk ai stats` surfaces ABANDONED SQL too
+
+First production run of v0.4.20's `tusk ai stats` told us: 9 prompts,
+**0 FAILED**, 5 ABANDONED. The AI is generating SQL but the user is
+reading it and **rejecting before running** — so it never hits the
+DB and can't show up as a FAILED. The "AI hallucinates columns"
+complaint maps to ABANDONED, not FAILED.
+
+The previous report only printed the AI's SQL for FAILED entries.
+ABANDONED entries showed up only as a count. That made it impossible
+to see what the AI was actually suggesting on the cases that mattered.
+
+This release also prints the AI's SQL for every ABANDONED entry:
+
+```
+ABANDONED prompts — the 5 cases where the AI suggested SQL but no
+  query ran on that conn within 5 min:
+
+  [2026-05-19T...]
+  prompt:  show me active users this month
+  ai sql:  SELECT * FROM users WHERE active_yn = TRUE AND created_at > ...
+```
+
+Paste those into the audit thread and we can validate whether the
+suggestions are actually hallucinated (column names that don't
+exist) vs reasonable-but-rejected (user just preferred to write it
+themselves).
+
 ## [0.4.20] - 2026-05-21 — `tusk ai stats` — AI Copilot hit-rate report
 
 User-driven audit revealed two things about the AI Copilot:

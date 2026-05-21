@@ -214,15 +214,20 @@ def main(argv=None):
         verdict_counts[verdict] += 1
         by_session.setdefault(session, Counter())[verdict] += 1
 
-        # Always keep FAILED entries for the post-stats breakdown — the
-        # *why* is the most valuable signal here. Verbose adds everything.
-        if verdict == "FAILED" or args.verbose:
+        # Always keep FAILED + ABANDONED for the post-stats breakdown.
+        # ABANDONED is the most actionable signal in practice: it means
+        # the AI suggested SQL and the user *looked at it and rejected*.
+        # When the user says "AI hallucinates columns", what they
+        # really mean is "AI suggested plausible-looking SQL that
+        # references things that don't exist, I caught it on review,
+        # never ran it". That maps to ABANDONED, not FAILED.
+        if verdict in ("FAILED", "ABANDONED") or args.verbose:
             detail.append({
                 "session": session,
                 "ts": ts.isoformat(),
-                "prompt": (last_user["content"] or "")[:120],
+                "prompt": (last_user["content"] or "")[:200],
                 "verdict": verdict,
-                "ai_sql": (sql or "")[:200] if sql else None,
+                "ai_sql": (sql or "")[:400] if sql else None,
                 "ran_sql": (vdetail["ran_sql"] or "")[:200] if vdetail["ran_sql"] else None,
                 "error": (vdetail["error"] or "")[:200] if vdetail["error"] else None,
             })
@@ -287,6 +292,23 @@ def main(argv=None):
             print()
         if len(fails) > 20:
             print(f"  ... and {len(fails) - 20} more (rerun with --verbose to see all).")
+
+    # Surface ABANDONED — these are the AI's SQL suggestions the user
+    # *read and rejected*. Often the same hallucinated-column pattern
+    # as FAILED, just caught before the DB sees it.
+    abandoned = [d for d in detail if d["verdict"] == "ABANDONED"]
+    if abandoned:
+        print()
+        print(f"ABANDONED prompts — the {len(abandoned)} cases where the AI suggested SQL but no query ran on that conn within 5 min:")
+        print()
+        for d in abandoned[:20]:
+            print(f"  [{d['ts']}]")
+            print(f"  prompt:  {d['prompt']}")
+            if d['ai_sql']:
+                print(f"  ai sql:  {d['ai_sql']}")
+            print()
+        if len(abandoned) > 20:
+            print(f"  ... and {len(abandoned) - 20} more (rerun with --verbose to see all).")
 
     if args.verbose:
         print()
