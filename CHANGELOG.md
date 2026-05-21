@@ -2,6 +2,44 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.24] - 2026-05-21 — AI Copilot: new-tab + memory-poisoning guard
+
+Production stats showed the 0.4.22 grounding fix wasn't enough. Same
+hallucination came back on `geo_administrative_area` even after the
+cross-language matcher was correctly including the table with full
+columns. Root cause traced to **conversation memory poisoning**:
+
+The first bad turn (an "Optimize this SQL" round where the user gave
+the AI a query that was already wrong) was stored in `ai_memory.db`.
+Every subsequent fresh prompt — "Cuales son los nombres de los niveles
+administrativos?" — came with that previous bad SQL injected into the
+context as `### Previous conversation`. A 9b local model prefers to
+copy the prior in-context turn over reading the schema reference.
+Hence the deterministic loop.
+
+Two fixes:
+
+1. **System prompt declares the schema section as authority.** New
+   wording: "if previous conversation or the user's `Current SQL:`
+   block references a column that does NOT appear in the schema
+   section, that prior SQL is WRONG. Do not copy it. Correct it
+   using only real columns from the schema." Tells the model
+   explicitly how to recover from a poisoned turn.
+
+2. **Insert button is now "New tab".** The old "Insert" appended to
+   the active editor with `\n\n` — running the Optimize flow twice
+   left two stacked copies of the same query in the same tab, which
+   was the bug in the production screenshots. New behavior calls
+   `window.createTab("AI suggestion", sql)` so the suggestion lands
+   somewhere independent of whatever the user was working on.
+   "Replace" button unchanged.
+
+If hallucination persists, run `tusk ai clear-memory` on the server
+to flush poisoned turns, then re-test. Long-term: see the "AI Copilot
+quality" thread in specs/ — local 9b models have a ceiling that prompt
+engineering can't reach past. Anthropic/OpenAI providers don't have
+this failure mode.
+
 ## [0.4.23] - 2026-05-21 — AI security tier 1: input cap, schema sanitization, destructive-SQL banner
 
 Three defenses for the AI Copilot, none of which depend on the underlying

@@ -143,7 +143,7 @@
                         <i data-lucide="refresh-cw"></i>Replace
                     </button>
                     <button type="button" class="btn btn-sm btn-brand" onclick="window.tuskAI.insert()">
-                        <i data-lucide="plus"></i>Insert
+                        <i data-lucide="external-link"></i>New tab
                     </button>
                 </div>
                 ${warnBanner}
@@ -335,18 +335,26 @@
             STATE.open = false;
         },
         insert() {
+            // "Insert" now means "open in a new tab" — appending into the
+            // current editor produced the bug where running an Optimize
+            // round left two copies of the same query stacked in the
+            // active tab (v0.4.22 / 0.4.23). A new tab is the only
+            // unambiguous interpretation: the current tab keeps whatever
+            // the user was working on, and the suggestion lands somewhere
+            // they can run independently.
             const r = STATE.last_response;
             if (!r || r.kind !== "sql" || !r.sql) return;
-            if (!window.editor) return;
-            const cur = window.editor.state.doc.length;
-            const cursor = window.editor.state.selection.main.head;
-            const insertPoint = cur > 0 ? cur : 0;
-            const prefix = cur > 0 ? "\n\n" : "";
-            window.editor.dispatch({
-                changes: { from: insertPoint, to: insertPoint, insert: prefix + r.sql },
-                selection: { anchor: insertPoint + prefix.length + r.sql.length },
-            });
-            tuskToast("SQL inserted", "success");
+            if (typeof window.createTab === "function") {
+                window.createTab("AI suggestion", r.sql);
+                tuskToast("SQL opened in new tab", "success");
+            } else if (window.editor) {
+                // Studio editor not loaded (other page) → fall back to
+                // replace-in-place rather than silently doing nothing.
+                window.editor.dispatch({
+                    changes: { from: 0, to: window.editor.state.doc.length, insert: r.sql },
+                });
+                tuskToast("SQL replaced", "success");
+            }
             window.tuskAI.close();
         },
         async clearMemory() {
