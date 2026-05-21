@@ -2,6 +2,33 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.19] - 2026-05-21 — CI hotfix: otel dep + Node 20 deprecations
+
+CI was red on every push since v0.4.14 — turns out we never noticed
+because the test job was advisory for Python 3.14, and on 3.13 the
+failure was the same. PyPI publish kept working (different workflow).
+
+Two distinct fixes:
+
+1. `opentelemetry-instrumentation-litestar>=0.40b0` was a copy-paste
+   error from the *fastapi* instrumentation pin. Only 0.1.0 is
+   published on PyPI for litestar, and it's a stub that doesn't even
+   provide the `opentelemetry.instrumentation.litestar` module. Drop
+   the dep entirely from the `[otel]` extra — `core/otel.py` already
+   handled the ImportError gracefully (logs "instrumentation not
+   installed" and continues). When a real package ships, users can
+   `pip install opentelemetry-instrumentation-litestar` on top.
+
+2. **Node.js 20 deprecation warnings** on every workflow run.
+   Bumped:
+   - `actions/checkout@v4` → `@v5`
+   - `astral-sh/setup-uv@v3` → `@v6`
+   - `actions/upload-artifact@v4` → `@v5`
+   - `actions/download-artifact@v4` → `@v6`
+
+   `pypa/gh-action-pypi-publish@release/v1` stays — that pin tracks
+   the latest stable through the `release/v1` ref.
+
 ## [0.4.18] - 2026-05-21 — admin.py test backfill (17% → 31%)
 
 Closes the last P1 item from the engineering audit: starve the

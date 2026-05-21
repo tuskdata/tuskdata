@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.18"
+version = "0.4.19"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -82,7 +82,14 @@ otel = [
     "opentelemetry-api>=1.21",
     "opentelemetry-sdk>=1.21",
     "opentelemetry-exporter-otlp-proto-http>=1.21",
-    "opentelemetry-instrumentation-litestar>=0.40b0",
+    # opentelemetry-instrumentation-litestar deliberately NOT pinned.
+    # As of May 2026 only the 0.1.0 stub is on PyPI — it doesn't even
+    # publish the `opentelemetry.instrumentation.litestar` module, so
+    # depending on it adds nothing. `core/otel.py` already handles the
+    # ImportError gracefully (logs "instrumentation not installed"
+    # and proceeds without HTTP-span coverage). When the real package
+    # ships, users can `pip install opentelemetry-instrumentation-litestar`
+    # on top, or we re-add the pin here.
 ]
 
 # Everything
