@@ -16,10 +16,28 @@ All four middlewares (RequestTimeout, Session, CorrelationID, CSRF) migrated to 
 ### 4. ~~StaticFilesConfig is deprecated (Litestar 2.6)~~ **CLOSED** (v0.4.17)
 Migrated to `create_static_files_router` in `studio/app.py`. Tests pass with zero DeprecationWarnings.
 
-### 5. Test coverage at 33% overall, ≤17% on biggest routes files (open)
-The four largest routes files (`admin.py 1709 LOC, 17%`, `data.py 1384/21%`, `api.py 1122/33%`, `auth.py 786/18%`) accumulate every new endpoint **and** have the lowest coverage. **Fix**: stop adding endpoints to these files (split convention — one Controller per logical area in its own file). Backfill basic happy-path tests for the existing endpoints before any new feature lands there.
-- Effort: ongoing, scoped per release. Target 50% on admin.py before 0.5.x ships.
-- **Open** — targeted for v0.4.18.
+### 5. Test coverage — admin.py from 17% → 31%, target 50% (open, partial)
+**Partial progress shipped in v0.4.18** (`tests/test_admin_routes.py`):
+- admin.py: 17% → 31% (covered the routing logic, guards, wrong-type
+  rejection, HTMX-vs-JSON branching for ~10 endpoints).
+- Global: 33% → 35%.
+
+What's left to reach 50% on admin.py: the actual SQL-execution
+paths inside each handler. Those need a **real Postgres service
+container in CI** (we don't run one yet). Adding it is the first
+task in 0.5.x: extend `.github/workflows/ci.yml` with a `postgres:17`
+service, then add integration tests that walk the happy paths
+end-to-end against it. The framework-level paths are already
+covered, so the integration tests can focus on engine output shape
+without re-testing guards.
+
+The four largest routes files still need a similar pass:
+- `data.py 1384 LOC, ~21%`
+- `api.py 1122 LOC, ~33%`
+- `auth.py 786 LOC, ~18%`
+
+Plus the long-term refactor: stop adding endpoints to these mega-files;
+one Controller per logical area in its own file.
 
 ## P2 — fix in 0.6.x or 0.7.x
 

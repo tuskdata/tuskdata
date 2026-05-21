@@ -65,6 +65,7 @@ For the **next 4 features** in the roadmap (Data Contracts → GitOps Dashboards
 
 Every PR that adds tests should report the new overall %. Every 0.X.0 release should snapshot here and note the delta vs this baseline.
 
-| Date | Version | Overall |
-|---|---|---:|
-| 2026-05-19 | 0.4.13 | **33%** ← baseline |
+| Date | Version | Overall | admin.py | Notes |
+|---|---|---:|---:|---|
+| 2026-05-19 | 0.4.13 | 33% | 17% | baseline |
+| 2026-05-21 | 0.4.18 | **35%** | **31%** | +2pp global, +14pp on admin.py via `test_admin_routes.py` covering guards + branching. PG-execution paths still uncovered — pending CI PG service in 0.5.x. |

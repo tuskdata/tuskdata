@@ -2,6 +2,37 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.18] - 2026-05-21 — admin.py test backfill (17% → 31%)
+
+Closes the last P1 item from the engineering audit: starve the
+largest untested routes file. `tests/test_admin_routes.py` covers:
+
+- The auth guard branch on every admin route (loopback monkey-patch
+  pattern, same trick test_e2e.py uses).
+- The "unknown conn_id" early-return on 10 GET endpoints.
+- The "wrong connection type" rejection (Postgres-only guard) on
+  9 of the 10 endpoints (`/backups` is correctly exempt — it
+  serves local filesystem data, not Postgres data).
+- HTMX vs JSON response branching on /processes.
+- Payload validation on /explain, /kill-by-user, /kill-by-database,
+  /set-setting.
+- The dedicated `/admin/health` endpoint (HealthController, not
+  AdminController — separate path mount).
+
+Coverage delta:
+- `studio/routes/admin.py`: 17% → **31%** (892 stmts, 615 missed).
+- Global: 33% → **35%**.
+
+The remaining 31% → 50% climb requires a real Postgres service
+container in CI to exercise the SQL-execution paths inside each
+handler. That's the first task in 0.5.x — `.github/workflows/ci.yml`
+gets a `postgres:17` service + integration tests that walk the
+happy paths against it.
+
+This closes the P1 tech-debt backlog from the v0.4.13 engineering
+audit. v0.4.x ships from here; 0.5.0 is the Data Contracts feature
+release.
+
 ## [0.4.17] - 2026-05-20 — Python 3.13 baseline + Litestar 2.x deprecations cleared
 
 Framework hygiene. No new user-visible features; closes 4 P1 items from
