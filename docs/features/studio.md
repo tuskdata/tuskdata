@@ -2,7 +2,10 @@
 
 The SQL editor. This is where the work happens.
 
-> 📷 *Screenshot slot*: `docs/screenshots/studio.png` — sanitized capture of the Studio tab with a query + results.
+![Studio — SQL editor with results table, connection sidebar.](../screenshots/studio.png){ .screenshot }
+
+*Studio — SQL editor with results table, connection sidebar.*
+
 
 ## Layout
 
@@ -15,7 +18,7 @@ A three-column workspace with a top tab bar:
 │ [Query 1] [History 20] [History 21] [+]              ● <conn>   │  ← tab bar
 ├──────────┬──────────────────────────────────────────────────────┤
 │ CONNS    │ [PostgreSQL]      Ask AI · Plan · Format · Save · Run│
-│ ● db-1   │  1  SELECT * FROM geo_administrative_area            │  ← editor
+│ ● db-1   │  1  SELECT * FROM regions                            │  ← editor
 │ ● db-2   │                                                       │
 │ ● db-3   │                                                       │
 ├──────────┼──────────────────────────────────────────────────────┤

@@ -2,7 +2,10 @@
 
 An interactive ER diagram of the active database. Tables are draggable cards; foreign keys are drawn as curved lines between them.
 
-> 📷 *Screenshot slot*: `docs/screenshots/schema.png` — sanitized capture of the Schema tab showing a moderately complex database.
+![Schema view — interactive ER diagram (89 tables · 254 FKs).](../screenshots/schema.png){ .screenshot }
+
+*Schema view — interactive ER diagram (89 tables · 254 FKs).*
+
 
 ## What you see
 

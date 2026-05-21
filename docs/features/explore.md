@@ -2,7 +2,10 @@
 
 A one-click profile of any table: per-column distribution, null ratios, distinct counts, sample values. Think `pandas-profiling` but inline and SQL-agnostic.
 
-> 📷 *Screenshot slot*: `docs/screenshots/explore.png` — sanitized capture of an Explore page with several column cards rendered.
+![Explore — auto-profile of a table with per-column stats and histograms.](../screenshots/explore.png){ .screenshot }
+
+*Explore — auto-profile of a table with per-column stats and histograms.*
+
 
 ## How it works
 
@@ -11,7 +14,7 @@ Pick a connection + table + sample size. Tusk runs a series of cheap `SELECT` qu
 Example flow from the screenshot:
 
 - **Connection**: `<your postgres>` · `<schema>`
-- **Table**: `public.geo_administrative_area`
+- **Table**: `public.regions`
 - **Sample size**: `1k rows` (other options: 5k, 10k, 100k, full table)
 - Click **Auto-explore** → ~2-5 seconds later you have a profile.
 

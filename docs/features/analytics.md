@@ -2,7 +2,10 @@
 
 Dashboards, saved queries, data sources, scheduled snapshots, embed tokens. The BI side of Tusk lives here. Powered by the `tusk-bi` plugin (will be promoted to core in 0.7.x — see [the spec](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/later/tusk-bi-to-core.md)).
 
-> 📷 *Screenshot slot*: `docs/screenshots/analytics-overview.png` — sanitized capture of the Analytics overview page.
+![Analytics — BI Engine overview with dashboards and embed tokens.](../screenshots/analytics-overview.png){ .screenshot }
+
+*Analytics — BI Engine overview with dashboards and embed tokens.*
+
 
 ## Layout
 

@@ -2,7 +2,10 @@
 
 A PostgreSQL DBA console: real-time process list, lock monitor, table maintenance, settings viewer, role manager, backups. The kind of work that usually lives in pgAdmin or Datadog Database Monitoring, here in one tab.
 
-> 📷 *Screenshot slot*: `docs/screenshots/admin.png` — sanitized capture of the Admin tab on a real database.
+![Admin — Postgres console with processes, locks, settings, backups.](../screenshots/admin.png){ .screenshot }
+
+*Admin — Postgres console with processes, locks, settings, backups.*
+
 
 ## Top-bar stats (per connection)
 

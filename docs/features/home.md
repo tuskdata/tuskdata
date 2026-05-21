@@ -2,7 +2,10 @@
 
 The first page after login. Sets the tone: this is a place for **running queries**, not just looking at dashboards.
 
-> 📷 *Screenshot slot*: `docs/screenshots/home.png` — sanitized capture of the Home tab.
+![Home tab — KPI cards, recent queries, AI suggestions.](../screenshots/home.png){ .screenshot }
+
+*Home tab — KPI cards, recent queries, AI suggestions.*
+
 
 ## What's on the page
 
