@@ -119,7 +119,21 @@
         `);
     }
 
-    function _renderSQL(sql, explanation) {
+    function _renderSQL(sql, explanation, danger) {
+        // danger: { dangerous: bool, reason: str } — server flags
+        // destructive SQL (DROP/TRUNCATE/DELETE-no-WHERE/etc) so the
+        // user reads the warning BEFORE pasting it into the editor.
+        const warnBanner = (danger && danger.dangerous) ? `
+            <div class="tusk-ai-danger">
+                <i data-lucide="alert-triangle"></i>
+                <div>
+                    <strong>Destructive SQL detected${danger.reason ? ` — ${tuskEscapeHtml(danger.reason)}` : ""}.</strong>
+                    Review carefully before running. The AI does not know
+                    your data — confirm tables and WHERE clauses match
+                    what you actually intend to change.
+                </div>
+            </div>
+        ` : "";
         _renderBody(`
             <div class="tusk-ai-result">
                 <div class="tusk-ai-result-head">
@@ -132,6 +146,7 @@
                         <i data-lucide="plus"></i>Insert
                     </button>
                 </div>
+                ${warnBanner}
                 <pre class="tusk-ai-sql"><code>${tuskEscapeHtml(sql)}</code></pre>
                 ${explanation ? `<div class="tusk-ai-explanation">${tuskEscapeHtml(explanation)}</div>` : ""}
             </div>
@@ -226,8 +241,9 @@
                 _renderError(res.error);
                 return;
             }
-            STATE.last_response = { kind: "sql", sql: res.sql, explanation: res.explanation };
-            _renderSQL(res.sql, res.explanation);
+            const danger = { dangerous: !!res.dangerous, reason: res.dangerous_reason || "" };
+            STATE.last_response = { kind: "sql", sql: res.sql, explanation: res.explanation, danger };
+            _renderSQL(res.sql, res.explanation, danger);
         } catch (e) {
             _renderError(e.message || "Request failed");
         }
