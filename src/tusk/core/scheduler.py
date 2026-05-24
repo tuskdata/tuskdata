@@ -14,6 +14,25 @@ import msgspec
 log = structlog.get_logger()
 
 
+def _read_default_tz() -> str | None:
+    """Best-effort read of the deployment-wide default timezone.
+
+    Reads from `~/.tusk/config.toml` if a `default_timezone` key is
+    present. Returns None on any failure (callers fall back to the
+    hard default). Never raises — scheduler boot must not depend on
+    a readable config file.
+    """
+    try:
+        from tusk.core.config import get_config
+        cfg = get_config()
+        tz = getattr(cfg, "default_timezone", None)
+        if isinstance(tz, str) and tz:
+            return tz
+    except Exception:
+        pass
+    return None
+
+
 def _on_job_error(event) -> None:
     """APScheduler error listener — fires a `scheduler.job.error`
     notification so admins find out about failed jobs without grepping
@@ -71,7 +90,17 @@ class SchedulerService:
     _instance: "SchedulerService | None" = None
 
     def __init__(self):
+        # Default timezone resolution order:
+        #   1. TUSK_TZ env var (operator override)
+        #   2. config.toml `default_timezone` (per-deployment)
+        #   3. America/Santo_Domingo (deployment lives there; bug B11)
+        # Cron + interval triggers without an explicit `timezone` field
+        # inherit this. APScheduler accepts either an IANA name string
+        # or a tzinfo; the string form is fine.
+        import os
+        tz = os.environ.get("TUSK_TZ") or _read_default_tz() or "America/Santo_Domingo"
         self.scheduler = AsyncIOScheduler(
+            timezone=tz,
             jobstores={"default": MemoryJobStore()},
             job_defaults={
                 "coalesce": True,  # Combine missed executions

@@ -2,6 +2,51 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.26] - 2026-05-24 — walkthrough findings round 2: 7 fixes
+
+**B12 v2** — the 0.4.25 fix hid the onboarding card but left a giant
+white results-container slab below the canvas. Now a single
+`_applyCanvasVisibility()` helper drives all four panels (canvas,
+toggle button color, onboarding card, results pane) consistently, and
+a MutationObserver reveals the results pane the moment something
+writes real content into it.
+
+**B11** — Scheduler default timezone is now `America/Santo_Domingo`
+(was UTC). Override order: `TUSK_TZ` env var → `default_timezone` in
+config.toml → fallback. The Scheduled UI now shows the resolved tz
+next to cron-expression examples via a new `/api/scheduler/info`
+endpoint.
+
+**B2** — Studio map tooltip showed only the UUID `id` for tables with
+Spanish column names (`nombre`, `descripcion`, `direccion`, …). Both
+the backend column picker in `fetch_geometries()` AND the frontend
+label resolver now recognize the Spanish + Portuguese equivalents.
+
+**B6** — Schema canvas first-load nav hint. The legend at the bottom-
+right was too small for users to notice; new centered toast-style
+banner shows once per browser ("Drag to pan · Scroll to zoom · or
+use the buttons (top-right)"), auto-dismisses on first canvas
+interaction or via the X button.
+
+**B9** — Edit button on scheduled jobs. New `Edit trigger` menu item
+opens a prompt for cron/interval; `PUT /api/scheduler/jobs/{id}/
+trigger` updates the row and re-registers with APScheduler. Editing
+the payload (sql, connection_id, etc.) still requires delete-and-
+recreate — the trigger is the part that goes wrong most often, and
+that's what's now editable.
+
+**B8** — Scheduled trigger type form pollution. Switching cron →
+interval → date previously left stale field values around (the user
+hit Interval, but the form still carried a run_date from an earlier
+attempt and submitted as One-time). Now each switch resets the
+fields belonging to the other types. Labels also clarified:
+"Cron expression" / "Interval (every X)" / "One-time (at exact
+moment)".
+
+**B3** — Deferred to 0.4.27. The "status_staging" floating tooltip
+shown in the production screenshot couldn't be reproduced reliably —
+needs specific repro steps from the user before chasing.
+
 ## [0.4.25] - 2026-05-23 — walkthrough findings: 5 fixes
 
 User walked through Tusk surface-by-surface and surfaced bugs the static

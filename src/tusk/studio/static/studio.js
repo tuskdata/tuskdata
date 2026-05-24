@@ -3533,8 +3533,19 @@ function initMap() {
         let hoverPopup = null;
 
         function getFeatureLabel(props) {
-            // Try common label fields
-            const labelFields = ['name', 'Name', 'NAME', 'title', 'label', 'id', 'ID', 'osm_id'];
+            // Keep this list in sync with `_LABEL_NAMES` in postgres.py
+            // (the backend chooses which columns to ship; the frontend
+            // chooses which one to show). Order matters — first hit
+            // wins, so the human-readable name comes before id. B2 in
+            // 0.4.26 added Spanish/Portuguese equivalents.
+            const labelFields = [
+                'name', 'Name', 'NAME', 'nombre', 'Nombre', 'nome',
+                'title', 'titulo', 'label', 'etiqueta',
+                'name_en', 'name_es', 'name_local', 'name_alt',
+                'nombre_corto', 'nombre_normalizado',
+                'descripcion', 'description', 'address', 'direccion',
+                'id', 'ID', 'osm_id',
+            ];
             for (const field of labelFields) {
                 if (props[field]) return String(props[field]);
             }

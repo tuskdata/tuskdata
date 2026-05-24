@@ -56,11 +56,37 @@
         state.connId = initialId || null;
 
         wireEvents();
+        showNavHintIfFirstVisit();
 
         if (state.connId) {
             loadGraph(state.connId);
         } else {
             setStatus('No PostgreSQL connections configured');
+        }
+    }
+
+    // The legend hint at the bottom-right was too small for users
+    // to notice (B6 in 0.4.26). Show a centered toast-style banner
+    // the first time the page is opened; dismiss persists per-browser.
+    function showNavHintIfFirstVisit() {
+        try {
+            if (localStorage.getItem('tusk_schema_nav_dismissed')) return;
+        } catch (_) { /* ignore */ }
+        const hint = document.getElementById('schema-nav-hint');
+        const closeBtn = document.getElementById('schema-nav-hint-close');
+        if (!hint) return;
+        hint.style.display = 'flex';
+        if (window.lucide) window.lucide.createIcons();
+        const dismiss = () => {
+            hint.style.display = 'none';
+            try { localStorage.setItem('tusk_schema_nav_dismissed', '1'); } catch (_) {}
+        };
+        if (closeBtn) closeBtn.addEventListener('click', dismiss);
+        // Auto-dismiss on first canvas interaction so the user isn't
+        // staring at it forever.
+        if (els.page) {
+            els.page.addEventListener('wheel', dismiss, { once: true });
+            els.page.addEventListener('mousedown', dismiss, { once: true });
         }
     }
 

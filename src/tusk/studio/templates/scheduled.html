@@ -80,6 +80,9 @@
                         <i :data-lucide="job.enabled ? 'pause' : 'play'"></i>
                         <span x-text="job.enabled ? 'Pause' : 'Resume'"></span>
                     </button>
+                    <button class="sched-menu-item" @click="editJob(job); open=false">
+                        <i data-lucide="pencil"></i>Edit trigger
+                    </button>
                     <button class="sched-menu-item" @click="deleteJob(job); open=false">
                         <i data-lucide="trash-2"></i>Delete
                     </button>
@@ -190,10 +193,12 @@
                     </div>
 
                     <label class="sched-label">Type</label>
-                    <select class="sched-input" x-model="form.trigger_type">
-                        <option value="cron">Cron</option>
-                        <option value="interval">Interval</option>
-                        <option value="date">One-time</option>
+                    <select class="sched-input"
+                            :value="form.trigger_type"
+                            @change="onTriggerTypeChange($event.target.value)">
+                        <option value="cron">Cron expression</option>
+                        <option value="interval">Interval (every X)</option>
+                        <option value="date">One-time (at exact moment)</option>
                     </select>
 
                     <template x-if="form.trigger_type === 'cron'">
@@ -202,7 +207,9 @@
                             <input class="sched-input mono" type="text" x-model="form.cron"
                                    placeholder="0 2 * * *">
                             <div style="font-size:11.5px;color:var(--fg-3);margin-top:4px">
-                                Example: <code>0 2 * * *</code> = every day at 02:00 UTC
+                                Example: <code>0 2 * * *</code> = every day at 02:00
+                                <span x-text="'(' + serverTimezone + ')'"
+                                      style="color:var(--fg-4)"></span>
                             </div>
                         </div>
                     </template>

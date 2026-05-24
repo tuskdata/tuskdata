@@ -67,6 +67,17 @@
         <span id="schema-status-text">Loading…</span>
     </div>
 
+    <!-- First-load nav hint (B6 in 0.4.26). The legend at the bottom-
+         right is too small to be noticed on a full-canvas page; this
+         shows once per browser, dismissible. -->
+    <div id="schema-nav-hint" class="schema-nav-hint card" style="display:none">
+        <i data-lucide="move" style="width:14px;height:14px"></i>
+        <span><strong>Drag</strong> to pan · <strong>Scroll</strong> to zoom · or use the buttons (top-right)</span>
+        <button id="schema-nav-hint-close" class="icon-btn" title="Dismiss" style="margin-left:8px">
+            <i data-lucide="x" style="width:12px;height:12px"></i>
+        </button>
+    </div>
+
     <!-- Legend (bottom-right) -->
     <div class="schema-legend card">
         <span><span class="pk">●</span> PK</span>

@@ -281,6 +281,38 @@ def delete_job(job_id: str) -> bool:
         conn.close()
 
 
+def set_trigger(job_id: str, trigger: dict) -> bool:
+    """Replace the trigger on a stored job, re-register it in
+    APScheduler so the new schedule actually fires (B9 in 0.4.26).
+
+    Returns True if the row was updated. The caller is responsible
+    for validating the trigger dict (raises ValueError downstream
+    when re-registering an invalid one).
+    """
+    import json as _json
+    _init_db()
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "UPDATE scheduled_jobs SET trigger=? WHERE id=?",
+            (_json.dumps(trigger), job_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return False
+    finally:
+        conn.close()
+    # Re-register: remove the old APScheduler entry and add the spec
+    # again with the new trigger.
+    spec = get_job(job_id)
+    if not spec:
+        return False
+    sched = get_scheduler()
+    sched.remove_job(job_id)
+    _register_with_scheduler(spec)
+    return True
+
+
 def set_enabled(job_id: str, enabled: bool) -> bool:
     _init_db()
     conn = _connect()

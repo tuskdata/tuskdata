@@ -559,11 +559,27 @@ async def fetch_geometries(
             pk_col = None
             label_cols: list[str] = []
             _ID_NAMES = {"id", "gid", "fid", "ogc_fid", "pk"}
+            # English + Spanish + Portuguese label fields. Geo data
+            # tables in Spanish-speaking deployments (the original use
+            # case for Tusk) use `nombre` / `descripcion` / `direccion`
+            # / `categoria` etc., and the previous English-only set
+            # made the map tooltip show only the UUID `id`. B2 in
+            # 0.4.26. The frontend also has a label resolver — keep
+            # them in sync if you add new ones here.
             _LABEL_NAMES = {
+                # English
                 "name", "title", "label", "description", "address",
                 "name_en", "name_es", "name_local", "name_alt",
                 "city", "country", "region", "type", "category", "kind",
                 "status", "code",
+                # Spanish
+                "nombre", "nombre_normalizado", "nombre_corto",
+                "titulo", "etiqueta", "descripcion", "direccion",
+                "ciudad", "pais", "provincia", "sector", "barrio",
+                "categoria", "subcategoria", "estado", "tipo",
+                # Portuguese (cheap to include)
+                "nome", "titulo_pt", "descricao", "endereco",
+                "cidade", "estado_pt",
             }
             for col in sample_cols:
                 lname = col.name.lower()

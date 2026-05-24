@@ -36,6 +36,12 @@
             newModalOpen: false,
             step: "kind",
             form: defaultForm(),
+            // Filled by `/api/scheduler/info` on init. Shown next to the
+            // cron-expression hint so users aren't guessing whether
+            // "0 2 * * *" means 2 AM UTC, browser-local, or server-local
+            // (B11 in 0.4.26). The scheduler resolves to either the
+            // configured default or America/Santo_Domingo by default.
+            serverTimezone: "server time",
             // Pipeline runs drawer state
             pipelineRunsOpen: false,
             pipelineRunsLoading: false,
@@ -51,6 +57,11 @@
             ],
 
             async init() {
+                // Resolve the scheduler's configured timezone in parallel
+                // with the jobs list — used to label cron hints.
+                window.tuskFetchJSON("/api/scheduler/info")
+                    .then((d) => { if (d && d.timezone) this.serverTimezone = d.timezone; })
+                    .catch(() => {});
                 await this.refresh();
                 this.$nextTick(() => window.lucide && window.lucide.createIcons());
             },
@@ -83,6 +94,26 @@
                 } finally {
                     this.loading = false;
                     this.$nextTick(() => window.lucide && window.lucide.createIcons());
+                }
+            },
+
+            // Reset the fields of triggers OTHER than the one being
+            // selected. Without this, switching Cron→Interval then
+            // back to "One-time" left stale interval values around,
+            // and stuff like the run_date field could leak from a
+            // previous attempt — B8 in 0.4.26.
+            onTriggerTypeChange(next) {
+                this.form.trigger_type = next;
+                if (next !== "cron") {
+                    this.form.cron = "0 2 * * *";
+                }
+                if (next !== "interval") {
+                    this.form.interval_hours = 0;
+                    this.form.interval_minutes = 5;
+                    this.form.interval_seconds = 0;
+                }
+                if (next !== "date") {
+                    this.form.run_date = "";
                 }
             },
 
@@ -357,6 +388,45 @@
                     await this.refresh();
                 } catch (e) {
                     if (window.tuskToast) window.tuskToast(`Delete failed: ${e.message}`, "error");
+                }
+            },
+
+            // Edit trigger only (B9 in 0.4.26). Editing the payload
+            // (sql, connection_id, etc.) is bigger surface area — for
+            // now you delete-and-recreate. The trigger is the thing
+            // that goes wrong most often (wrong cron, wrong type) so
+            // that's what we make editable.
+            async editJob(job) {
+                const t = job.trigger || {};
+                let next;
+                if (t.type === "cron") {
+                    const current = t.cron || `${t.minute ?? 0} ${t.hour ?? 0} * * *`;
+                    next = window.prompt(`Edit cron expression for "${job.name}":`, current);
+                    if (!next) return;
+                    next = { type: "cron", cron: next.trim() };
+                } else if (t.type === "interval") {
+                    const totalMin = (t.hours || 0) * 60 + (t.minutes || 0) + (t.seconds || 0) / 60;
+                    const raw = window.prompt(`Edit interval (minutes) for "${job.name}":`, String(totalMin));
+                    if (!raw) return;
+                    const minutes = Number(raw);
+                    if (!minutes || minutes <= 0) {
+                        if (window.tuskToast) window.tuskToast("Invalid minutes", "error");
+                        return;
+                    }
+                    next = { type: "interval", hours: 0, minutes: minutes, seconds: 0 };
+                } else {
+                    if (window.tuskToast) window.tuskToast("This trigger type isn't editable yet — delete and recreate.", "warning");
+                    return;
+                }
+                try {
+                    await window.tuskFetchJSON(`/api/scheduler/jobs/${job.id}/trigger`, {
+                        method: "PUT",
+                        body: JSON.stringify({ trigger: next }),
+                    });
+                    if (window.tuskToast) window.tuskToast("Trigger updated", "success");
+                    await this.refresh();
+                } catch (e) {
+                    if (window.tuskToast) window.tuskToast(`Update failed: ${e.message}`, "error");
                 }
             },
         };

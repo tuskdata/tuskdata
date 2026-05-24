@@ -7,7 +7,7 @@ All endpoints are guarded by :func:`tusk.studio.routes.admin._check_admin_auth`
 from datetime import datetime
 from pathlib import Path
 
-from litestar import Controller, Request, get, post, delete
+from litestar import Controller, Request, get, post, put, delete
 from litestar.exceptions import NotFoundException
 from litestar.params import Body
 from litestar.response import File
@@ -29,6 +29,7 @@ from tusk.core.scheduled_tasks import (
     get_pipeline_run,
     get_pipeline_runs,
     remove_schedule,
+    set_trigger,
 )
 from tusk.studio.routes.admin import _check_admin_auth
 from tusk.studio.routes.base import _current_user_id
@@ -63,6 +64,15 @@ class SchedulerController(Controller):
     # ─────────────────────────────────────────────────────────
     # Listing & metadata
     # ─────────────────────────────────────────────────────────
+
+    @get("/info")
+    async def scheduler_info(self) -> dict:
+        """Scheduler-wide config the frontend wants to surface (timezone
+        next to cron-expression hints, mostly). Added 0.4.26 for B11."""
+        scheduler = get_scheduler()
+        tz = getattr(scheduler.scheduler, "timezone", None)
+        tz_name = str(tz) if tz else "UTC"
+        return {"timezone": tz_name}
 
     @get("/jobs")
     async def list_jobs(self) -> dict:
@@ -298,3 +308,21 @@ class SchedulerController(Controller):
         scheduler = get_scheduler()
         success = scheduler.run_job_now(job_id)
         return {"success": success}
+
+    @put("/jobs/{job_id:str}/trigger")
+    async def update_trigger(self, job_id: str, data: dict = Body()) -> dict:
+        """Replace the trigger for an existing job (B9 in 0.4.26).
+
+        Body: ``{"trigger": {"type": "cron", "cron": "..."}}`` or interval.
+        Returns ``{"success": bool}``.
+        """
+        trigger = data.get("trigger")
+        if not isinstance(trigger, dict) or "type" not in trigger:
+            return {"error": "trigger object with `type` is required"}
+        try:
+            ok = set_trigger(job_id, trigger)
+        except ValueError as e:
+            return {"error": str(e)}
+        if not ok:
+            return {"error": "job not found or could not be updated"}
+        return {"success": True}

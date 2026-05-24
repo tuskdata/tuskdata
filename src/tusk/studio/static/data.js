@@ -74,23 +74,7 @@ function syncCanvasFromTransforms() {
 window.togglePipelineCanvas = function() {
     pipelineCanvasVisible = !pipelineCanvasVisible;
     localStorage.setItem('tusk_pipeline_canvas', pipelineCanvasVisible);
-    const container = document.getElementById('pipeline-canvas-container');
-    const btn = document.getElementById('toggle-canvas-btn');
-    if (container) {
-        container.classList.toggle('hidden', !pipelineCanvasVisible);
-    }
-    if (btn) {
-        btn.classList.toggle('text-indigo-400', pipelineCanvasVisible);
-        btn.classList.toggle('text-[#8b949e]', !pipelineCanvasVisible);
-    }
-    // The big "Build a data pipeline" onboarding card and the canvas
-    // were both showing at once (bug B12, 0.4.25) — canvas already has
-    // its own "Double-click to add a node" placeholder, so the card
-    // is redundant whenever canvas is visible. Hide it in that case.
-    const onboardCard = document.getElementById('data-onboarding-card');
-    if (onboardCard) {
-        onboardCard.classList.toggle('hidden', pipelineCanvasVisible);
-    }
+    _applyCanvasVisibility();
     if (pipelineCanvasVisible) {
         initPipelineCanvas();
         // Wait for Alpine to init, then sync
@@ -100,6 +84,63 @@ window.togglePipelineCanvas = function() {
         }, 100);
     }
 }
+
+// Single source of truth for the four panels that have to stay in
+// sync when canvas visibility changes:
+//   #pipeline-canvas-container — the canvas itself
+//   #toggle-canvas-btn         — toolbar button color
+//   #data-onboarding-card      — big "Build a data pipeline" card
+//   #results-container         — empty area below the canvas
+//
+// When the canvas is ON, the results container should not render its
+// own empty-state — the canvas already shows "Double-click to add a
+// node" and the results pane underneath is just a blank white slab
+// (bug B12 v2 in 0.4.26). We give the results container a class that
+// hides it until something writes real content into it. Anything that
+// updates `results-container.innerHTML` later (preview, error, etc.)
+// just strips the class via _showResultsContainer().
+function _applyCanvasVisibility() {
+    const container = document.getElementById('pipeline-canvas-container');
+    const btn = document.getElementById('toggle-canvas-btn');
+    const onboardCard = document.getElementById('data-onboarding-card');
+    const results = document.getElementById('results-container');
+    if (container) container.classList.toggle('hidden', !pipelineCanvasVisible);
+    if (btn) {
+        btn.classList.toggle('text-indigo-400', pipelineCanvasVisible);
+        btn.classList.toggle('text-[#8b949e]', !pipelineCanvasVisible);
+    }
+    if (onboardCard) onboardCard.classList.toggle('hidden', pipelineCanvasVisible);
+    if (results) results.classList.toggle('hidden', pipelineCanvasVisible);
+}
+
+window._showResultsContainer = function() {
+    const results = document.getElementById('results-container');
+    if (results) results.classList.remove('hidden');
+}
+
+// MutationObserver: any code that writes into the results container
+// (preview render, error, loading spinner, etc.) means we have content
+// the user should see, so un-hide it. Saves us from threading
+// `_showResultsContainer()` into 8 different call sites.
+document.addEventListener('DOMContentLoaded', () => {
+    const results = document.getElementById('results-container');
+    if (!results) return;
+    new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            if (m.type === 'childList' && results.children.length > 0) {
+                // The data-onboarding-card lives inside results-container
+                // as the initial child — don't reveal on the initial DOM,
+                // only when the children change to real content.
+                const onlyOnboard = results.children.length === 1
+                    && results.children[0].id === 'data-onboarding-card';
+                if (!onlyOnboard) {
+                    results.classList.remove('hidden');
+                }
+                break;
+            }
+        }
+    }).observe(results, { childList: true, subtree: false });
+});
 
 // Get transforms for active dataset
 function getTransforms() {
@@ -437,20 +478,13 @@ function _initDataPage() {
         });
     }
 
-    // Restore pipeline canvas visibility
+    // Restore pipeline canvas visibility — single helper keeps the
+    // four panels (canvas, button color, onboard card, results pane)
+    // consistent. Without `_applyCanvasVisibility()` here, the page
+    // would load with canvas + onboarding card BOTH visible (the
+    // original B12 bug) OR canvas + giant white results slab (B12 v2).
+    _applyCanvasVisibility();
     if (pipelineCanvasVisible) {
-        const container = document.getElementById('pipeline-canvas-container');
-        const btn = document.getElementById('toggle-canvas-btn');
-        const onboardCard = document.getElementById('data-onboarding-card');
-        if (container) container.classList.remove('hidden');
-        if (btn) {
-            btn.classList.add('text-indigo-400');
-            btn.classList.remove('text-[#8b949e]');
-        }
-        // Hide the redundant "Build a data pipeline" empty-state when the
-        // canvas is restored from localStorage — bug B12 (0.4.25). Canvas
-        // already has its own "Double-click to add a node" placeholder.
-        if (onboardCard) onboardCard.classList.add('hidden');
         initPipelineCanvas();
         setTimeout(() => syncCanvasFromTransforms(), 200);
     }
