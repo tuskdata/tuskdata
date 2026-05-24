@@ -2,6 +2,24 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.27] - 2026-05-24 — Data canvas fills + double-click works
+
+**B12 v3** — even with the results pane hidden, the canvas was still
+the hard-coded 280px tall, leaving a big empty <main> below it that
+looked like a broken layout (user's screenshot showed the canvas as a
+floating box with whitespace under it for 60%+ of the viewport).
+New `canvas-fills` class on the canvas container — when the results
+pane is hidden, the canvas grows via flex:1 + auto-height on its
+children, filling the whole right side.
+
+**Task #44** — double-click on empty canvas was a no-op even though
+the placeholder text says "Double-click to add a node, or use the
+toolbar". The handler only fired on existing nodes; clicks elsewhere
+fell through. Now `onCanvasDblClick` dispatches a
+`pipeline-canvas-empty-dblclick` window event when no node is hit;
+Data page listens to it and opens the dataset modal. Other pages
+(future BI canvas, etc.) can subscribe with their own meaning.
+
 ## [0.4.26] - 2026-05-24 — walkthrough findings round 2: 7 fixes
 
 **B12 v2** — the 0.4.25 fix hid the onboarding card but left a giant

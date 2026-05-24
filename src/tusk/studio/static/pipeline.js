@@ -705,7 +705,17 @@ document.addEventListener('alpine:init', () => {
                 if (api?._config?.onNodeDoubleClick && node) {
                     api._config.onNodeDoubleClick(node);
                 }
+                return;
             }
+            // Double-click on EMPTY canvas — the placeholder text
+            // promises "Double-click to add a node" but until 0.4.26
+            // nothing happened (bug #44). Dispatch a window event so the
+            // surrounding page (data.html, tusk-bi, etc.) can decide
+            // what "add a node" means in its context — for Data that's
+            // opening the dataset modal.
+            window.dispatchEvent(new CustomEvent('pipeline-canvas-empty-dblclick', {
+                detail: { canvasId, clientX: event.clientX, clientY: event.clientY },
+            }));
         },
 
         onCanvasClick(event) {

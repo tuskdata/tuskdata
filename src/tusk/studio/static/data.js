@@ -104,7 +104,15 @@ function _applyCanvasVisibility() {
     const btn = document.getElementById('toggle-canvas-btn');
     const onboardCard = document.getElementById('data-onboarding-card');
     const results = document.getElementById('results-container');
-    if (container) container.classList.toggle('hidden', !pipelineCanvasVisible);
+    if (container) {
+        container.classList.toggle('hidden', !pipelineCanvasVisible);
+        // When the results pane is hidden, the canvas should grow to
+        // fill the rest of <main>. Otherwise the 280px-tall canvas
+        // floats at the top and there's a giant white slab below —
+        // bug B12 v3 in 0.4.27. The `canvas-fills` class is wired in
+        // tusk-app.css to override the fixed-height style attr.
+        container.classList.toggle('canvas-fills', pipelineCanvasVisible);
+    }
     if (btn) {
         btn.classList.toggle('text-indigo-400', pipelineCanvasVisible);
         btn.classList.toggle('text-[#8b949e]', !pipelineCanvasVisible);
@@ -451,6 +459,16 @@ window.renameDataset = function(id) {
     input.focus();
     input.select();
 }
+
+// Empty-canvas double-click → open the Add Dataset modal (task #44).
+// Until 0.4.26 the placeholder text "Double-click to add a node" was a
+// lie. Pipeline.js now dispatches this event from the SVG dblclick
+// handler when the click isn't on an existing node.
+window.addEventListener('pipeline-canvas-empty-dblclick', () => {
+    if (typeof window.showSourceModal === 'function') {
+        window.showSourceModal();
+    }
+});
 
 // Quick transform shortcut
 window.quickTransform = function(type) {
