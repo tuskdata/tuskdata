@@ -578,19 +578,27 @@ def _maybe_notify(spec: JobSpec, status: str, error: str | None) -> None:
 
 
 async def _handle_backup(payload: dict) -> None:
-    from tusk.admin.backup import BackupService
+    # `BackupService` was refactored to a free function in an earlier
+    # release; the scheduler kept referencing the old class name and
+    # every scheduled backup was failing with ImportError. Fixed 0.4.25.
+    from tusk.admin.backup import create_backup
+    import asyncio
 
     connection_id = payload.get("connection_id")
-    backup_dir = payload.get("backup_dir")
     if not connection_id:
         raise ValueError("backup payload missing connection_id")
     config = get_connection(connection_id)
     if not config or config.type != "postgres":
         raise ValueError(f"connection {connection_id} not found or not postgres")
-    backup_service = BackupService()
-    result = await backup_service.create_backup(config, backup_dir)
-    if not result.get("success"):
-        raise RuntimeError(result.get("error", "backup failed"))
+    fmt = str(payload.get("format", "plain"))
+    tables = payload.get("tables") or None
+    # create_backup is sync (subprocess-driven pg_dump); run in a thread
+    # so we don't block the scheduler event loop on a multi-GB dump.
+    success, message, _path = await asyncio.to_thread(
+        create_backup, config, format=fmt, tables=tables,
+    )
+    if not success:
+        raise RuntimeError(message or "backup failed")
 
 
 async def _handle_vacuum(payload: dict) -> None:

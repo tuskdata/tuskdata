@@ -1102,6 +1102,14 @@ function initEditor(schema = {}, connType = 'postgres') {
                 // Multi-cursor: select next occurrence of word under cursor.
                 { key: "Ctrl-d", run: selectNextOccurrence },
                 { key: "Cmd-d", run: selectNextOccurrence },
+                // Cmd-S / Ctrl-S — open Save Query modal. The
+                // document-level handler at the bottom of this file
+                // covers the case where the editor isn't focused, but
+                // when CodeMirror has focus it captures keydown first
+                // and the browser's native Save dialog wins. Binding
+                // here as well makes Save behave the same regardless
+                // of where the cursor is (B5 in 0.4.25).
+                { key: "Mod-s", run: () => { showSaveQueryModal(); return true; }, preventDefault: true },
             ]),
             queryErrorField,
             queryErrorTheme,

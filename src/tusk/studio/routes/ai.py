@@ -329,17 +329,19 @@ class AICopilotController(Controller):
             "You are a SQL assistant for the Tusk data platform. "
             "Generate concise, correct PostgreSQL by default unless the "
             "user specifies a different dialect. "
-            "ONLY reference tables and columns that appear in the "
-            "`### Detailed schema` section below — never invent table "
-            "or column names. The schema section is the AUTHORITY: if "
-            "previous conversation or the user's `Current SQL:` block "
-            "references a column that does NOT appear in the schema "
-            "section, that prior SQL is WRONG. Do not copy it. Correct "
-            "it using only real columns from the schema. "
-            "If the user's question can't be answered from the "
-            "available schema, return a `sql` field starting with `-- ` "
-            "that explains what's missing, and set `confidence` to "
-            "`low`. "
+            "Use the `### Detailed schema` section below as your source "
+            "of truth for table and column names. "
+            "If a previous conversation turn or the user's `Current "
+            "SQL:` block references a column that contradicts the "
+            "Detailed schema, prefer the schema and rewrite the SQL "
+            "with the real columns — don't echo the wrong column. "
+            "If the schema sections are truly empty AND no table in "
+            "`### Available tables` looks relevant, return a `sql` "
+            "field starting with `-- ` that names which tables you "
+            "would need, and set `confidence` to `low`. Don't refuse "
+            "just because the schema looks short — if there are tables "
+            "listed and one matches the user's question, generate the "
+            "best SQL you can. "
             "Match the language of the user's prompt for the "
             "`explanation` field. SQL keywords stay in English. "
             "The `sql` field must be ONLY the SQL statement — no "
@@ -676,24 +678,30 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
 
         def matches_prompt(tname: str, t: dict) -> bool:
             """A table is relevant if any prompt token overlaps with its
-            name or any column name. Substring is the primary signal but
-            we also accept a 5+ char common prefix between a token and
-            any word in the identifier — that catches cross-language
-            pairs like 'administrativos' (es) ↔ 'administrative' (en),
-            'usuarios' (es) ↔ 'users' (en, partial 'us'), 'pedidos'
-            (es) ↔ 'orders' — wait, that last one wouldn't match,
-            which is fine: we'd rather have a few misses than a flood
-            of false positives.
+            name or any column name. Three signals (any one is enough):
+
+            1. **Bidirectional substring**: token-in-name OR name-in-token.
+               The reverse direction catches plurals & loose user typing
+               like "geo_pois" → table "geo_poi" (the user's token is
+               LONGER than the real table name; the v0.4.22 check only
+               looked at token-in-name and missed this). Bug B4, 0.4.25.
+            2. **5-char common prefix** between any token (≥5 chars) and
+               any identifier word (≥4 chars). Catches "administrativos"
+               ↔ "administrative". Lowered the word floor from 5 → 4
+               so short tables like "geo_poi" (longest word: "poi") at
+               least get checked against shorter tokens too.
+            3. **Same on columns** — sometimes the table name is opaque
+               but a column matches ("name", "nombre", etc).
             """
             tn = tname.lower()
-            if any(tok in tn for tok in tokens):
-                return True
 
-            # Prefix-overlap: split identifier into words on `_`/digits
-            # and compare each against each token. 5 chars is enough to
-            # rule out coincidence ("the" / "for" wouldn't slip through
-            # because of the STOP filter + the 5-char floor).
-            table_words = [w for w in re.findall(r"[a-z]+", tn) if len(w) >= 5]
+            # (1) Bidirectional substring on the full table name.
+            for tok in tokens:
+                if tok in tn or tn in tok:
+                    return True
+
+            # (2) Prefix-overlap on table-name words.
+            table_words = [w for w in re.findall(r"[a-z]+", tn) if len(w) >= 4]
             for tok in tokens:
                 if len(tok) < 5:
                     continue
@@ -701,11 +709,13 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
                     if _common_prefix_len(tok, word) >= 5:
                         return True
 
+            # (3) Same checks on columns.
             for c in t["cols"]:
                 cn = c["name"].lower()
-                if any(tok in cn for tok in tokens):
-                    return True
-                col_words = [w for w in re.findall(r"[a-z]+", cn) if len(w) >= 5]
+                for tok in tokens:
+                    if tok in cn or cn in tok:
+                        return True
+                col_words = [w for w in re.findall(r"[a-z]+", cn) if len(w) >= 4]
                 for tok in tokens:
                     if len(tok) < 5:
                         continue
@@ -762,13 +772,20 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             return f"\n{_sanitize_for_prompt(tname)}\n" + "\n".join(cols_lines)
 
         # Detail priority tables first.
+        # Critical: always emit AT LEAST the first table even if its
+        # block alone exceeds the budget. Previously a 4000-char table
+        # block on the very first iteration would `break` with `seen`
+        # empty, and the model would then say "schema section is empty"
+        # because the `### Detailed schema` header had no content under
+        # it (bug B4 in 0.4.25). Better to overflow budget by ~50% than
+        # to produce a schema-less prompt.
         seen: set[str] = set()
         for tname in priority_set:
             t = tables.get(tname)
             if not t:
                 continue
             block = emit_table(tname, t)
-            if used + len(block) > budget_chars:
+            if used > 0 and used + len(block) > budget_chars:
                 break
             out_lines.append(block)
             used += len(block)
@@ -786,7 +803,11 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             if tname in seen:
                 continue
             block = emit_table(tname, t)
-            if used + len(block) > budget_chars:
+            # Same "always at least one" rule as the priority loop:
+            # if nothing has been emitted yet, force this one through
+            # even if it overflows the budget. The model can handle
+            # a 5KB schema better than an empty one.
+            if used > 0 and used + len(block) > budget_chars:
                 break
             out_lines.append(block)
             used += len(block)

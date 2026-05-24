@@ -83,6 +83,14 @@ window.togglePipelineCanvas = function() {
         btn.classList.toggle('text-indigo-400', pipelineCanvasVisible);
         btn.classList.toggle('text-[#8b949e]', !pipelineCanvasVisible);
     }
+    // The big "Build a data pipeline" onboarding card and the canvas
+    // were both showing at once (bug B12, 0.4.25) — canvas already has
+    // its own "Double-click to add a node" placeholder, so the card
+    // is redundant whenever canvas is visible. Hide it in that case.
+    const onboardCard = document.getElementById('data-onboarding-card');
+    if (onboardCard) {
+        onboardCard.classList.toggle('hidden', pipelineCanvasVisible);
+    }
     if (pipelineCanvasVisible) {
         initPipelineCanvas();
         // Wait for Alpine to init, then sync
@@ -433,11 +441,16 @@ function _initDataPage() {
     if (pipelineCanvasVisible) {
         const container = document.getElementById('pipeline-canvas-container');
         const btn = document.getElementById('toggle-canvas-btn');
+        const onboardCard = document.getElementById('data-onboarding-card');
         if (container) container.classList.remove('hidden');
         if (btn) {
             btn.classList.add('text-indigo-400');
             btn.classList.remove('text-[#8b949e]');
         }
+        // Hide the redundant "Build a data pipeline" empty-state when the
+        // canvas is restored from localStorage — bug B12 (0.4.25). Canvas
+        // already has its own "Double-click to add a node" placeholder.
+        if (onboardCard) onboardCard.classList.add('hidden');
         initPipelineCanvas();
         setTimeout(() => syncCanvasFromTransforms(), 200);
     }

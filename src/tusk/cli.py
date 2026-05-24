@@ -30,10 +30,10 @@ def main():
         show_features()
     elif command == "ai":
         handle_ai()
-    elif command == "version":
+    elif command in ("version", "--version", "-v"):
         from tusk import __version__
         print(f"Tusk v{__version__}")
-    elif command == "help" or command == "--help":
+    elif command in ("help", "--help", "-h"):
         print_usage(plugin_commands)
     elif command in plugin_commands:
         # Route to plugin command handler

@@ -2,6 +2,60 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.25] - 2026-05-23 — walkthrough findings: 5 fixes
+
+User walked through Tusk surface-by-surface and surfaced bugs the static
+audit couldn't catch. Five fixed in this drop:
+
+**B1** — `tusk --version` and `tusk -v` now work (only `tusk version`
+subcommand did before).
+
+**B4** — AI Copilot regression from 0.4.24. The strengthened system
+prompt scared the model into saying "schema section is empty" on
+clean-memory prompts that should have worked. Two causes converging:
+
+  - System prompt was too absolutist ("ONLY reference tables that
+    appear in `### Detailed schema`"). Toned down to "use the schema
+    as source of truth; if there are tables listed and one matches,
+    generate the best SQL you can".
+  - Matcher missed `geo_pois` (user) → `geo_poi` (table). The previous
+    check was `token in tname`, which fails when the token is LONGER
+    than the table name. Now bidirectional: `token in tname OR tname
+    in token`. Also lowered the word-length floor for prefix overlap
+    from 5 → 4 so short tables like `geo_poi` get a fair shot.
+  - The "always emit ≥1 detailed table" rule now genuinely holds —
+    previously the first oversized table block (4000+ chars) would
+    `break` with `seen` empty and the model would correctly observe
+    "no detailed schema". Now: if nothing has been emitted yet, force
+    the first table through even if it overflows budget by ~50%.
+
+**B5** — Studio Save button (Cmd+S / Ctrl+S) was falling through to the
+browser's native file-save dialog when the CodeMirror editor had focus,
+because the keybind only existed at document level. Now it's also bound
+in the editor's keymap (`Mod-s`), so Save works regardless of where the
+cursor is.
+
+**B7** — Scheduled backup jobs were failing every fire with
+`ImportError: cannot import name 'BackupService'`. The class was
+refactored to a free function `create_backup` in an earlier release;
+the scheduler kept the old import. Fixed + the call now runs in
+`asyncio.to_thread` (pg_dump is sync subprocess; was blocking the
+scheduler loop).
+
+**B12** — Data page rendered two empty states simultaneously: the
+canvas's "Double-click to add a node" placeholder AND the big
+"Build a data pipeline" 3-step onboarding card below it. Both
+visible whenever canvas was toggled on. Onboarding card now hides
+when the canvas is visible (toggle + restore-from-localStorage
+paths both wired).
+
+Outstanding from this walkthrough (deferred to 0.4.26+): map tooltip
+shows `id` instead of name/title field (B2), schema-canvas scrollbars
+missing (B6), Scheduled form stores Interval as "once at" (B8), no
+edit button on schedules (B9), no runs viewer for scheduled queries
+(B10), default timezone should be America/Santo_Domingo (B11), tooltip
+ghost on Studio (B3).
+
 ## [0.4.24] - 2026-05-21 — AI Copilot: new-tab + memory-poisoning guard
 
 Production stats showed the 0.4.22 grounding fix wasn't enough. Same
