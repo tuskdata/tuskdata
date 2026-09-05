@@ -31,12 +31,23 @@ _correlation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 
+# Authenticated user for the request in flight (multi-user mode only).
+# Set by `SessionRequiredMiddleware`, so every log line a request emits —
+# queries, exports, MCP calls, errors — says who did it.
+_request_user: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "tusk_request_user", default=None
+)
+
+
 def _correlation_processor(logger, method_name, event_dict):
-    """structlog processor that attaches the current correlation ID
-    (if any) to every log event."""
+    """structlog processor that attaches the current correlation ID and
+    the authenticated user (if any) to every log event."""
     cid = _correlation_id.get()
     if cid:
         event_dict["correlation_id"] = cid
+    user = _request_user.get()
+    if user:
+        event_dict.setdefault("user", user)
     return event_dict
 
 

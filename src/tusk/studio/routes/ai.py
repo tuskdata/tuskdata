@@ -544,18 +544,15 @@ def _session_key(request: Request, connection_id: str | None) -> str | None:
     """
     cid = connection_id or "_no_conn"
     try:
-        from tusk.core.auth import get_session, get_user_by_id
         from tusk.core.config import get_config
 
         config = get_config()
         if config.auth_mode == "multi":
-            session_id = request.cookies.get("tusk_session")
-            if session_id:
-                session = get_session(session_id)
-                if session:
-                    user = get_user_by_id(session.user_id)
-                    if user:
-                        return f"u:{user.id}:c:{cid}"
+            from tusk.studio.routes.base import get_request_user
+
+            user = get_request_user(request)
+            if user:
+                return f"u:{user.id}:c:{cid}"
             # Multi-user without a session cookie shouldn't even reach
             # this code path (auth middleware rejects), but if it does
             # we refuse to invent a key.

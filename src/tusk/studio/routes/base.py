@@ -35,27 +35,32 @@ from tusk.studio.htmx import is_htmx
 # ─────────────────────────────────────────────────────────────
 
 
+def get_request_user(request: Request):
+    """The authenticated User for this request, or None.
+
+    Accepts the session cookie or a personal API token (`Authorization:
+    Bearer tusk_...`) — see `tusk.core.auth.resolve_user`. None in
+    single-user mode. Every route that needs "who is this" goes through
+    here so both credentials behave identically everywhere.
+    """
+    from tusk.core.auth import resolve_user
+
+    return resolve_user(request.cookies, request.headers)
+
+
 def _current_user_id(request: Request) -> str:
-    """Resolve the logged-in user's id from the session cookie.
+    """Resolve the logged-in user's id (session cookie or API token).
 
     Returns '' in single-user mode (means 'unowned/global'). Always returns a
     string — never raises — so callers can safely pass the result straight to
     persistence helpers as ``owner_id``.
     """
-    from tusk.core.config import get_config
-
-    if get_config().auth_mode != "multi":
-        return ""
-
-    from tusk.core.auth import get_session, get_user_by_id
-
-    session_id = request.cookies.get("tusk_session")
-    if not session_id:
-        return ""
-    session = get_session(session_id)
-    if not session:
-        return ""
-    user = get_user_by_id(session.user_id)
+    # The session middleware already resolved the credential and left the
+    # id in the scope; reuse it instead of hitting users.db again.
+    stashed = (request.scope.get("state") or {}).get("tusk_user_id")
+    if stashed:
+        return str(stashed)
+    user = get_request_user(request)
     return user.id if user else ""
 
 
@@ -71,15 +76,7 @@ def _current_user_is_admin(request: Request) -> bool:
     if get_config().auth_mode != "multi":
         return True
 
-    from tusk.core.auth import get_session, get_user_by_id
-
-    session_id = request.cookies.get("tusk_session")
-    if not session_id:
-        return False
-    session = get_session(session_id)
-    if not session:
-        return False
-    user = get_user_by_id(session.user_id)
+    user = get_request_user(request)
     return bool(user and user.is_admin)
 
 

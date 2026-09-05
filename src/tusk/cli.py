@@ -477,8 +477,15 @@ def handle_auth():
     args = sys.argv[2:]
 
     if not args:
-        print("Usage: tusk auth [init|enable|disable]")
+        print("Usage: tusk auth [init|enable|disable|token]")
         sys.exit(1)
+
+    if args[0] == "token":
+
+        _handle_auth_token(args[1:])
+
+        return
+
 
     if args[0] == "init":
         config = get_config()
@@ -515,7 +522,81 @@ def handle_auth():
         print("Auth disabled (single-user mode)")
 
     else:
-        print("Usage: tusk auth [init|enable|disable]")
+        print("Usage: tusk auth [init|enable|disable|token]")
+        sys.exit(1)
+
+
+def _handle_auth_token(args: list[str]) -> None:
+    """`tusk auth token create <user> <name> [--expires-days N]`,
+    `tusk auth token list <user>`, `tusk auth token revoke <id>`.
+
+    Tokens are the credential for MCP clients and scripts; they inherit
+    the user's permissions. The plaintext is printed once and never
+    stored — copy it straight into the client config.
+    """
+    from tusk.core.config import get_config
+    from tusk.core.auth import get_user_by_username
+    from tusk.core.api_tokens import create_token, list_tokens, revoke_token
+
+    usage = ("Usage: tusk auth token create <username> <name> [--expires-days N]\n"
+             "       tusk auth token list <username>\n"
+             "       tusk auth token revoke <token-id>")
+    if get_config().auth_mode != "multi":
+        print("API tokens need multi-user mode. Run 'tusk auth enable' and 'tusk auth init' first.")
+        sys.exit(1)
+    if not args:
+        print(usage)
+        sys.exit(1)
+    cmd = args[0]
+    if cmd == "create":
+        if len(args) < 3:
+            print(usage)
+            sys.exit(1)
+        user = get_user_by_username(args[1])
+        if not user:
+            print(f"User not found: {args[1]}")
+            sys.exit(1)
+        expires = None
+        if "--expires-days" in args:
+            try:
+                expires = int(args[args.index("--expires-days") + 1])
+            except (IndexError, ValueError):
+                print("--expires-days needs a positive integer")
+                sys.exit(1)
+        token, plaintext = create_token(user.id, args[2], expires_days=expires)
+        print(f"Token created for {user.username} (id {token.id}"
+              + (f", expires {token.expires_at[:10]}" if token.expires_at else ", no expiry") + ")")
+        print("Copy it now - it will not be shown again:\n")
+        print(f"  {plaintext}\n")
+        print("MCP: claude mcp add --transport http tusk http://<host>:<port>/mcp "
+              f"--header \"Authorization: Bearer {plaintext}\"")
+    elif cmd == "list":
+        if len(args) < 2:
+            print(usage)
+            sys.exit(1)
+        user = get_user_by_username(args[1])
+        if not user:
+            print(f"User not found: {args[1]}")
+            sys.exit(1)
+        tokens = list_tokens(user.id)
+        if not tokens:
+            print(f"No active tokens for {user.username}")
+            return
+        print(f"{'ID':14} {'NAME':24} {'PREFIX':14} {'CREATED':12} {'LAST USED':12} EXPIRES")
+        for t in tokens:
+            print(f"{t.id:14} {t.name[:24]:24} {t.prefix + '...':14} {t.created_at[:10]:12} "
+                  f"{(t.last_used_at or '-')[:10]:12} {(t.expires_at or 'never')[:10]}")
+    elif cmd == "revoke":
+        if len(args) < 2:
+            print(usage)
+            sys.exit(1)
+        if revoke_token(args[1]):
+            print(f"Token {args[1]} revoked")
+        else:
+            print(f"Token not found or already revoked: {args[1]}")
+            sys.exit(1)
+    else:
+        print(usage)
         sys.exit(1)
 
 

@@ -115,6 +115,7 @@ PAGES_TO_CHECK = [
     ("/admin", "dash-grid"),
     ("/data", "git-branch"),
     ("/settings/ai", "settings-card"),
+    ("/profile", "Account information"),
     ("/login", "login"),
 ]
 

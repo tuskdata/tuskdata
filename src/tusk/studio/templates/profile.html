@@ -71,6 +71,95 @@
             </form>
         </div>
 
+        <!-- API tokens -->
+        {# Token list handed to Alpine through a JSON script tag: MiniJinja's
+           tojson inside a double-quoted attribute terminates the attribute at
+           the first quote. #}
+        <script type="application/json" id="api-tokens-data">{{ api_tokens | tojson }}</script>
+        <div class="card" style="padding:22px;margin-bottom:18px" x-data="apiTokens()">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px">
+                <h2 style="font-family:var(--serif);font-size:22px;line-height:1.1">API tokens</h2>
+                <button type="button" class="btn btn-brand btn-sm" @click="openCreate()">
+                    <i data-lucide="key-round" style="width:14px;height:14px"></i> New token
+                </button>
+            </div>
+            <p style="font-size:12px;color:var(--fg-3);margin-bottom:14px">
+                For MCP clients (Claude Code, Cursor) and scripts. A token acts as you: same connections, same permissions.
+                Send it as <code>Authorization: Bearer &lt;token&gt;</code>.
+            </p>
+
+            <template x-if="tokens.length === 0">
+                <div style="color:var(--fg-4);font-size:13px">No tokens yet.</div>
+            </template>
+            <template x-if="tokens.length > 0">
+                <table class="dtable" style="width:100%;font-size:13px">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left">Name</th>
+                            <th style="text-align:left">Token</th>
+                            <th style="text-align:left">Created</th>
+                            <th style="text-align:left">Last used</th>
+                            <th style="text-align:left">Expires</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="t in tokens" :key="t.id">
+                            <tr>
+                                <td x-text="t.name"></td>
+                                <td class="mono" style="color:var(--fg-3)" x-text="t.prefix + '…'"></td>
+                                <td x-text="(t.created_at || '').slice(0, 10)"></td>
+                                <td x-text="t.last_used_at ? t.last_used_at.slice(0, 10) : 'never'"></td>
+                                <td x-text="t.expires_at ? t.expires_at.slice(0, 10) : 'never'"></td>
+                                <td style="text-align:right">
+                                    <button type="button" class="btn btn-sm btn-ghost" title="Revoke" @click="revoke(t)">
+                                        <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </template>
+
+            <!-- Create modal -->
+            <div x-show="showCreate" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+                <div class="absolute inset-0" style="background:rgba(15,15,14,0.5);backdrop-filter:blur(4px)" @click="showCreate = false"></div>
+                <div class="relative card" style="max-width:30rem;width:100%;margin:0 16px;padding:22px" @click.stop>
+                    <template x-if="!created">
+                        <div>
+                            <h3 style="font-family:var(--serif);font-size:20px;margin-bottom:14px">New API token</h3>
+                            <div class="field">
+                                <label>Name</label>
+                                <input x-model="newName" placeholder="claude-code on my laptop" @keydown.enter="create()">
+                            </div>
+                            <div class="field">
+                                <label>Expires in (days, optional)</label>
+                                <input x-model="newExpires" type="number" min="1" placeholder="never">
+                            </div>
+                            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+                                <button type="button" class="btn btn-ghost" @click="showCreate = false">Cancel</button>
+                                <button type="button" class="btn btn-brand" @click="create()">Create</button>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="created">
+                        <div>
+                            <h3 style="font-family:var(--serif);font-size:20px;margin-bottom:8px">Copy your token</h3>
+                            <p style="font-size:12px;color:var(--fg-3);margin-bottom:10px">This is the only time it will be shown.</p>
+                            <div class="mono" style="word-break:break-all;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:12px" x-text="created.token"></div>
+                            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+                                <button type="button" class="btn btn-ghost" @click="copy()">
+                                    <i data-lucide="copy" style="width:14px;height:14px"></i> Copy
+                                </button>
+                                <button type="button" class="btn btn-brand" @click="showCreate = false; created = null">Done</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
         <!-- Groups & permissions -->
         <div class="card" style="padding:22px">
             <h2 style="font-family:var(--serif);font-size:22px;line-height:1.1;margin-bottom:16px">Groups &amp; permissions</h2>
@@ -103,4 +192,8 @@
         </div>
     </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/profile.js"></script>
 {% endblock %}

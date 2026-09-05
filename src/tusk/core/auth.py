@@ -233,6 +233,23 @@ def init_auth_db() -> None:
         )
     """)
 
+    # Personal API tokens (see core/api_tokens.py). Hashed; plaintext is
+    # shown once at creation.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            prefix TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT,
+            expires_at TEXT,
+            revoked_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
     # Audit log table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -248,6 +265,7 @@ def init_auth_db() -> None:
 
     # Create indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)")
@@ -616,6 +634,45 @@ def cleanup_expired_sessions() -> int:
 
 
 # Authentication
+BEARER_PREFIX = "bearer "
+
+
+def resolve_user(cookies, headers) -> User | None:
+    """The one place that turns a request into a User.
+
+    Order: ``Authorization: Bearer tusk_...`` (personal API token, see
+    core/api_tokens.py) first, then the ``tusk_session`` cookie. Returns
+    None in single-user mode (there is no user to be), for a missing or
+    invalid credential, and for inactive users.
+
+    Takes plain mappings rather than a Request so core stays free of the
+    web framework; `tusk.studio.routes.base.get_request_user` adapts it.
+    """
+    from tusk.core.config import get_config
+
+    if get_config().auth_mode != "multi":
+        return None
+
+    authorization = (headers.get("authorization") or headers.get("Authorization") or "").strip()
+    if authorization.lower().startswith(BEARER_PREFIX):
+        from tusk.core.api_tokens import verify_token
+
+        token = verify_token(authorization[len(BEARER_PREFIX):].strip())
+        if not token:
+            return None
+        user = get_user_by_id(token.user_id)
+        return user if user and user.is_active else None
+
+    session_id = cookies.get("tusk_session")
+    if not session_id:
+        return None
+    session = get_session(session_id)
+    if not session:
+        return None
+    user = get_user_by_id(session.user_id)
+    return user if user and user.is_active else None
+
+
 def authenticate(username: str, password: str) -> User | None:
     """Authenticate a user with username and password"""
     user = get_user_by_username(username)

@@ -216,14 +216,12 @@ class NotificationAPIController(Controller):
 
 
 def _get_user_id(request: Request) -> str:
-    """Extract user ID from session cookie, or empty string."""
+    """User id from the session cookie or an API token, or empty string."""
     try:
-        from tusk.core.auth import get_session
-        session_id = request.cookies.get("tusk_session")
-        if session_id:
-            session = get_session(session_id)
-            if session:
-                return session.get("user_id", "")
+        from tusk.studio.routes.base import get_request_user
+
+        user = get_request_user(request)
+        return user.id if user else ""
     except Exception:
         pass
     return ""

@@ -1,6 +1,7 @@
 """Authentication routes"""
 
-from litestar import Controller, get, post, Response, Request
+import msgspec
+from litestar import Controller, get, post, Response, Request, delete
 from litestar.params import Body
 from litestar.response import Redirect, Template
 
@@ -37,6 +38,7 @@ from tusk.core.auth import (
 )
 from tusk.core.config import get_config
 from tusk.core.logging import get_logger
+from tusk.studio.routes.base import get_request_user
 from tusk.studio.htmx import is_htmx, htmx_toast, htmx_error
 
 log = get_logger("auth")
@@ -75,17 +77,9 @@ class AuthController(Controller):
                 "permissions": list(PERMISSIONS.keys()),  # All permissions in single mode
             }
 
-        # Check session cookie
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if not session_id:
-            return {"auth_enabled": True, "user": None, "permissions": []}
-
-        session = get_session(session_id)
-        if not session:
-            return {"auth_enabled": True, "user": None, "permissions": []}
-
-        user = get_user_by_id(session.user_id)
-        if not user or not user.is_active:
+        # Session cookie or API token
+        user = get_request_user(request)
+        if not user:
             return {"auth_enabled": True, "user": None, "permissions": []}
 
         permissions = list(get_user_permissions(user.id))
@@ -286,21 +280,54 @@ class ProfileController(Controller):
             return Response(content="", status_code=200, headers=htmx_toast("Password changed successfully", "success"))
         return {"success": True}
 
+    # ── Personal API tokens ──────────────────────────────────
+
+    @get("/tokens")
+    async def list_tokens(self, request: Request) -> dict:
+        """The current user's active API tokens (never the secrets)."""
+        user = await self._get_current_user(request)
+        if not user:
+            return {"error": "Not authenticated", "tokens": []}
+        from tusk.core.api_tokens import list_tokens
+
+        return {"tokens": [msgspec.to_builtins(t) for t in list_tokens(user.id)]}
+
+    @post("/tokens")
+    async def create_token(self, request: Request, data: dict = Body()) -> dict:
+        """Mint a token. The plaintext comes back exactly once."""
+        user = await self._get_current_user(request)
+        if not user:
+            return {"error": "Not authenticated"}
+        from tusk.core.api_tokens import create_token
+
+        name = str(data.get("name") or "").strip()
+        expires_days = data.get("expires_days")
+        try:
+            expires_days = int(expires_days) if expires_days not in (None, "", 0, "0") else None
+            token, plaintext = create_token(user.id, name, expires_days=expires_days)
+        except (TypeError, ValueError) as e:
+            return {"error": str(e)}
+        ip_address = request.client.host if request.client else None
+        log_audit("token.create", user_id=user.id, resource=token.id, details=name, ip_address=ip_address)
+        return {"token": plaintext, "id": token.id, "name": token.name, "expires_at": token.expires_at}
+
+    @delete("/tokens/{token_id:str}", status_code=200)
+    async def revoke_token(self, request: Request, token_id: str) -> dict:
+        """Revoke one of the current user's tokens."""
+        user = await self._get_current_user(request)
+        if not user:
+            return {"error": "Not authenticated"}
+        from tusk.core.api_tokens import revoke_token
+
+        if not revoke_token(token_id, user_id=user.id):
+            return {"error": "Token not found"}
+        ip_address = request.client.host if request.client else None
+        log_audit("token.revoke", user_id=user.id, resource=token_id, ip_address=ip_address)
+        return {"success": True}
+
     async def _get_current_user(self, request: Request):
-        """Get current user from session"""
-        config = get_config()
-        if config.auth_mode != "multi":
-            return None
-
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if not session_id:
-            return None
-
-        session = get_session(session_id)
-        if not session:
-            return None
-
-        return get_user_by_id(session.user_id)
+        """Current user from the session cookie or an API token"""
+        return get_request_user(request)
 
 
 class UsersController(Controller):
@@ -510,16 +537,8 @@ class UsersController(Controller):
         return user is not None and user.is_admin
 
     async def _get_current_user(self, request: Request):
-        """Get current user from session"""
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if not session_id:
-            return None
-
-        session = get_session(session_id)
-        if not session:
-            return None
-
-        return get_user_by_id(session.user_id)
+        """Current user from the session cookie or an API token"""
+        return get_request_user(request)
 
 
 class GroupsController(Controller):
@@ -606,15 +625,7 @@ class GroupsController(Controller):
         if config.auth_mode != "multi":
             return True  # No auth = full access
 
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if not session_id:
-            return False
-
-        session = get_session(session_id)
-        if not session:
-            return False
-
-        user = get_user_by_id(session.user_id)
+        user = get_request_user(request)
         return user is not None and user.is_admin
 
 
@@ -774,13 +785,5 @@ class AuditLogController(Controller):
         if config.auth_mode != "multi":
             return True
 
-        session_id = request.cookies.get(SESSION_COOKIE)
-        if not session_id:
-            return False
-
-        session = get_session(session_id)
-        if not session:
-            return False
-
-        user = get_user_by_id(session.user_id)
+        user = get_request_user(request)
         return user is not None and user.is_admin

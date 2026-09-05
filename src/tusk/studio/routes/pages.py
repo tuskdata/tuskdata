@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import msgspec
 from litestar import get, Request
 from litestar.exceptions import NotFoundException
 from litestar.response import Template, Response, File
@@ -13,7 +14,7 @@ from tusk.core.auth import get_session, get_user_by_id, get_user_groups, get_use
 from tusk.core.config import get_config
 from tusk.core.connection import list_connections
 from tusk.plugins.templates import PLUGIN_STATIC_DIR
-from tusk.studio.routes.base import TuskController
+from tusk.studio.routes.base import TuskController, get_request_user
 
 # Plugin id format guard — keeps `..` and slashes out of the path.
 _PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
@@ -34,16 +35,7 @@ def _greeting_for(hour: int) -> str:
 def _resolve_user_name(request: Request) -> str:
     """Best-effort display name. Falls back to 'there' so the greeting
     still reads naturally in single-user mode."""
-    config = get_config()
-    if config.auth_mode != "multi":
-        return "there"
-    session_id = request.cookies.get(SESSION_COOKIE)
-    if not session_id:
-        return "there"
-    session = get_session(session_id)
-    if not session:
-        return "there"
-    user = get_user_by_id(session.user_id)
+    user = get_request_user(request)
     if not user:
         return "there"
     return user.display_name or user.username
@@ -270,21 +262,22 @@ class PageController(TuskController):
         user = None
         groups = []
         permissions = []
+        api_tokens = []
 
         if config.auth_mode == "multi":
-            session_id = request.cookies.get(SESSION_COOKIE)
-            if session_id:
-                session = get_session(session_id)
-                if session:
-                    user = get_user_by_id(session.user_id)
-                    if user:
-                        groups = [{"id": g.id, "name": g.name} for g in get_user_groups(user.id)]
-                        permissions = list(get_user_permissions(user.id))
+            user = get_request_user(request)
+            if user:
+                groups = [{"id": g.id, "name": g.name} for g in get_user_groups(user.id)]
+                permissions = list(get_user_permissions(user.id))
+                from tusk.core.api_tokens import list_tokens
+
+                api_tokens = [msgspec.to_builtins(t) for t in list_tokens(user.id)]
 
         return self.render(
             "profile.html",
             active_page="profile",
             profile_user=user,
+            api_tokens=api_tokens,
             profile_groups=groups,
             profile_permissions=permissions,
         )

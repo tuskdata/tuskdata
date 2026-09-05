@@ -2,6 +2,44 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.31] - 2026-09-05 — Personal API tokens; MCP for every user, audited
+
+**API tokens** (`core/api_tokens.py`)
+- Per-user tokens (`tusk_…`, SHA-256 at rest, plaintext shown once) that
+  stand in for the session cookie: same permissions, same ownership.
+  Optional expiry, immediate revocation, `token.create` / `token.revoke`
+  in the audit log.
+- Profile → **API tokens** card: create (copy-once modal), list, revoke.
+- CLI: `tusk auth token create <user> <name> [--expires-days N]`,
+  `list <user>`, `revoke <id>`.
+- One resolver for "who is this request": `tusk.core.auth.resolve_user`
+  (Bearer first, then cookie), used by the session middleware and by
+  every route that used to read the cookie by hand (admin/cluster
+  guards, profile, notifications, AI session key, export audit, greeting).
+- Bearer-only requests (no session cookie) skip the CSRF check — there is
+  no ambient cookie to forge.
+- Log lines emitted during an authenticated request carry `user=<name>`.
+
+**MCP**
+- Works in multi-user mode with a token:
+  `claude mcp add --transport http tusk <url>/mcp --header "Authorization: Bearer tusk_…"`.
+- Every tool call is audited as `mcp.<tool>` with user, connection and SQL
+  (refused queries as `mcp.run_query.rejected`).
+- `run_query` on DuckDB and SQLite connections too; new tools
+  `list_saved_queries` and `run_saved_query` (vetted SQL from Studio).
+
+**Fixed**
+- Multi-user mode: an unauthenticated API request got a 500 instead of a
+  401 (and browser navigations a 500 instead of the login redirect) — the
+  session middleware built a Litestar `Response` and awaited it as an
+  ASGI app, the same bug class as the CSRF one fixed in May. Found by the
+  first tests to exercise that path.
+
+**Docs**
+- New pages: MCP server (`docs/features/mcp.md`) and Users & API tokens
+  (`docs/features/auth.md`); index updated. Browser smoke test now covers
+  `/profile`.
+
 ## [0.4.30] - 2026-09-05 — Plugin assets survive worker recycles; CI browser tests
 
 **Plugin static assets wiped by any shutdown** (found during the CI fix)

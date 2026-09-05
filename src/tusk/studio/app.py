@@ -219,8 +219,15 @@ class CSRFMiddleware(ASGIMiddleware):
         path = request.url.path
         method = request.method
 
-        # Skip CSRF for exempt paths
+        # Skip CSRF for exempt paths, and for requests authenticated with a
+        # Bearer token and no session cookie: CSRF exploits the browser
+        # attaching cookies automatically, and a script that sets an
+        # Authorization header explicitly isn't that attack.
         exempt = any(path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES)
+        if not exempt and not request.cookies.get(SESSION_COOKIE):
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.lower().startswith("bearer "):
+                exempt = True
 
         if not exempt and method in _STATE_CHANGING_METHODS:
             cookie_token = request.cookies.get(CSRF_COOKIE)
@@ -307,12 +314,13 @@ class CorrelationIDMiddleware(ASGIMiddleware):
 
 
 class SessionRequiredMiddleware(ASGIMiddleware):
-    """Require a valid session cookie in multi-user mode.
+    """Require a valid credential in multi-user mode.
 
     Single-user mode is a no-op (anyone with network access is already
     trusted). In multi-user mode, every request outside the public
-    allowlist must carry a `tusk_session` cookie matching a live
-    session row, otherwise:
+    allowlist must carry either a `tusk_session` cookie matching a live
+    session row or an `Authorization: Bearer tusk_...` personal API
+    token (see core/api_tokens.py), otherwise:
 
     - HTML/HTMX navigations are redirected to `/login?redirect=…`
     - JSON / API requests get a 401
@@ -339,19 +347,21 @@ class SessionRequiredMiddleware(ASGIMiddleware):
             await next_app(scope, receive, send)
             return
 
-        # Validate session.
-        from tusk.core.auth import get_session, get_user_by_id
-        session_id = request.cookies.get(SESSION_COOKIE)
-        valid = False
-        if session_id:
-            session = get_session(session_id)
-            if session:
-                user = get_user_by_id(session.user_id)
-                if user and user.is_active:
-                    valid = True
+        # Validate the credential: a personal API token (Authorization:
+        # Bearer, used by MCP clients and scripts) or the session cookie.
+        from tusk.core.auth import resolve_user
+        from tusk.core.logging import _request_user
 
-        if valid:
-            await next_app(scope, receive, send)
+        user = resolve_user(request.cookies, request.headers)
+        if user:
+            # Downstream middleware/handlers read this instead of hitting
+            # users.db again; log lines carry the username.
+            scope.setdefault("state", {})["tusk_user_id"] = user.id
+            token = _request_user.set(user.username)
+            try:
+                await next_app(scope, receive, send)
+            finally:
+                _request_user.reset(token)
             return
 
         # Reject. HTMX boost / fetch get JSON; full nav gets a redirect.
@@ -359,24 +369,22 @@ class SessionRequiredMiddleware(ASGIMiddleware):
         is_html = "text/html" in accept and "application/json" not in accept
         is_htmx = request.headers.get("hx-request") == "true"
 
+        # Emit the rejection via the raw ASGI channel. A Litestar
+        # `Response` is not an ASGIApp — `await response(scope, ...)`
+        # produced a 500 instead of the 401/303 here (same class of bug
+        # as bugs/2026-05-19-csrf-middleware-500.md; found by the API
+        # token tests, which are the first to exercise this path).
+        redirect = f"/login?redirect={path}".encode("ascii", errors="replace")
         if is_htmx:
-            response = Response(
-                content="",
-                status_code=401,
-                headers={"HX-Redirect": f"/login?redirect={path}"},
-            )
+            status, headers, body = 401, [(b"hx-redirect", redirect)], b""
         elif is_html and request.method == "GET":
-            response = Response(
-                content="",
-                status_code=303,
-                headers={"Location": f"/login?redirect={path}"},
-            )
+            status, headers, body = 303, [(b"location", redirect)], b""
         else:
-            response = Response(
-                content={"error": "Authentication required"},
-                status_code=401,
-            )
-        await response(scope, receive, send)
+            status, body = 401, b'{"error": "Authentication required"}'
+            headers = [(b"content-type", b"application/json")]
+        headers.append((b"content-length", str(len(body)).encode("ascii")))
+        await send({"type": "http.response.start", "status": status, "headers": headers})
+        await send({"type": "http.response.body", "body": body})
 
 
 def get_route_handlers() -> list:

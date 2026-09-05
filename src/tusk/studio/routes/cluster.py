@@ -29,17 +29,12 @@ def _check_cluster_auth(connection: Request, _: object) -> None:
     if config.auth_mode != "multi":
         return
 
-    from tusk.core.auth import get_session, get_user_by_id
-    session_id = connection.cookies.get("tusk_session")
-    if not session_id:
+    from tusk.core.auth import resolve_user
+
+    user = resolve_user(connection.cookies, connection.headers)
+    if not user:
         raise NotAuthorizedException("Authentication required")
-
-    session = get_session(session_id)
-    if not session:
-        raise NotAuthorizedException("Invalid or expired session")
-
-    user = get_user_by_id(session.user_id)
-    if not user or not user.is_active:
+    if not user.is_active:
         raise NotAuthorizedException("User not found or inactive")
 
 log = get_logger("cluster_api")

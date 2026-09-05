@@ -35,14 +35,11 @@ log = structlog.get_logger()
 def _audit_export(request, fmt: str, filename: str, result: dict) -> None:
     """Record a data export to the audit log, best-effort."""
     try:
-        from tusk.core.auth import log_audit, get_session, get_user_by_id
+        from tusk.core.auth import log_audit
+        from tusk.studio.routes.base import get_request_user
         ip = request.client.host if request.client else None
-        session_id = request.cookies.get("tusk_session")
-        user_id = None
-        if session_id:
-            session = get_session(session_id)
-            if session:
-                user_id = session.user_id
+        user = get_request_user(request)
+        user_id = user.id if user else None
         details = msgspec.json.encode({
             "format": fmt,
             "filename": filename,
