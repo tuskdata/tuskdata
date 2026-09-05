@@ -43,6 +43,15 @@
         <span id="schema-zoom-label" class="chip chip-neutral">100%</span>
     </div>
 
+    <!-- Schema Watch panel (bottom-left). Re-fetched when the picker changes. -->
+    {% if pg_connections %}
+    <div id="schema-watch-host" class="schema-watch-host"
+         hx-get="/api/schema-watch/{{ pg_connections[0].id }}/panel"
+         hx-trigger="load, refresh"
+         hx-swap="innerHTML"
+         hx-on::after-settle="window.lucide && lucide.createIcons()"></div>
+    {% endif %}
+
     <!-- Pan/zoom transform wrapper. Entities + relations are children so
          a single transform on this layer drives both. -->
     <div id="schema-viewport" class="schema-viewport">

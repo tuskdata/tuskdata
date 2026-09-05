@@ -275,6 +275,36 @@ class MCPToolsController(Controller):
         return {"plan": [r[0] for r in result.rows], "analyzed": bool(analyze)}
 
     @get(
+        "/schema-changes",
+        mcp_tool="schema_changes",
+        mcp_description=(
+            "What changed in a connection's schema recently, as recorded by Schema "
+            "Watch: tables/columns/keys/indexes added, removed or altered, with a "
+            "timestamp. Use it to answer 'what changed since yesterday?' or to "
+            "explain why a query broke. Empty if the connection isn't watched."
+        ),
+    )
+    async def schema_changes_tool(self, request: Request, connection_id: str, days: int = 7) -> dict:
+        """Recent schema changes for a watched connection.
+
+        Args:
+            connection_id: id from list_connections.
+            days: look back this many days (default 7).
+        """
+        from tusk.core import schema_watch as sw
+
+        if get_connection(connection_id) is None:
+            return _not_found(connection_id)
+        _audit(request, "schema_changes", connection_id, f"days={days}")
+        latest = sw.latest_snapshot(connection_id)
+        changes = sw.list_changes(connection_id, since=sw.since_days(days), limit=50)
+        return {
+            "watched": latest is not None,
+            "last_snapshot_at": latest["taken_at"] if latest else None,
+            "changes": [{"detected_at": c["detected_at"], "summary": c["summary"], "diff": c["diff"]} for c in changes],
+        }
+
+    @get(
         "/saved-queries",
         mcp_tool="list_saved_queries",
         mcp_description=(

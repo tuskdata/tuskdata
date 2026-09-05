@@ -1,0 +1,47 @@
+{# Schema Watch panel — HTMX partial loaded into the Schema page.
+   Context: connection_id, latest (snapshot dict or None), changes (list). #}
+<div class="card" style="padding:14px 16px" id="schema-watch-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+            <i data-lucide="git-compare" style="width:16px;height:16px;color:var(--brand)"></i>
+            <span style="font-weight:600;font-size:13px">Schema watch</span>
+            {% if latest %}
+            <span class="chip chip-neutral" title="Last snapshot">{{ latest.taken_at[:16].replace('T', ' ') }} UTC</span>
+            {% else %}
+            <span class="chip chip-neutral">not watched yet</span>
+            {% endif %}
+        </div>
+        <button class="btn btn-sm" title="Snapshot the schema now and compare with the previous one"
+                hx-post="/api/schema-watch/{{ connection_id }}/run"
+                hx-swap="none"
+                hx-on::after-request="if (event.detail.successful) { const r = JSON.parse(event.detail.xhr.responseText); tuskToast(r.error || r.summary, r.error ? 'error' : (r.changed ? 'warning' : 'success')); htmx.trigger('#schema-watch-panel', 'refresh'); }">
+            <i data-lucide="refresh-cw" style="width:13px;height:13px"></i> Check now
+        </button>
+    </div>
+
+    {% if latest %}
+    <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
+        {{ latest.table_count }} tables · {{ latest.column_count }} columns in the last snapshot.
+        Schedule it under <a href="/scheduled" style="color:var(--brand)">Scheduled → Schema watch</a> to get notified on changes.
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
+        Take a first snapshot; every later check reports what changed (tables, columns, types, keys, indexes)
+        and raises <code>schema.changed</code> for your notification channels.
+    </div>
+    {% endif %}
+
+    {% if changes %}
+    <div style="font-size:11px;font-weight:600;color:var(--fg-3);letter-spacing:.06em;text-transform:uppercase;margin:8px 0 4px">Recent changes</div>
+    <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
+        {% for c in changes %}
+        <li style="font-size:12px;display:flex;gap:8px;align-items:flex-start">
+            <span class="mono" style="color:var(--fg-4);white-space:nowrap">{{ c.detected_at[:16].replace('T', ' ') }}</span>
+            <span>{{ c.summary }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% elif latest %}
+    <div style="font-size:12px;color:var(--fg-4)">No changes recorded since the baseline.</div>
+    {% endif %}
+</div>

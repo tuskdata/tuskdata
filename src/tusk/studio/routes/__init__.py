@@ -14,6 +14,7 @@ from tusk.studio.routes.notifications import NotificationPageController, Notific
 from tusk.studio.routes.ai import AICopilotController, AISettingsPageController
 from tusk.studio.routes.jobs import JobsController
 from tusk.studio.routes.mcp_tools import MCPToolsController
+from tusk.studio.routes.schema_watch import SchemaWatchController
 
 __all__ = [
     # Base
@@ -45,4 +46,5 @@ __all__ = [
     "AISettingsPageController",
     "JobsController",
     "MCPToolsController",
+    "SchemaWatchController",
 ]

@@ -131,7 +131,7 @@
                     <label class="sched-label">Name</label>
                     <input class="sched-input" type="text" x-model="form.name" placeholder="My nightly job">
 
-                    <template x-if="['backup', 'vacuum', 'analyze', 'query'].includes(form.kind)">
+                    <template x-if="['backup', 'vacuum', 'analyze', 'query', 'schema_watch'].includes(form.kind)">
                         <div>
                             <label class="sched-label">Connection</label>
                             <select class="sched-input" x-model="form.connection_id">

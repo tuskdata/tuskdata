@@ -590,60 +590,22 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
 
     try:
         from tusk.core.connection import get_connection
-        from tusk.engines.postgres import execute_query, get_row_counts
+        from tusk.engines.postgres import get_row_counts
 
         conn = get_connection(connection_id)
         if not conn or conn.type != "postgres":
             return ""
 
-        # Single pass: pull table+column info + PK/FK from pg_catalog.
-        sql = """
-            SELECT
-                ns.nspname  AS schema,
-                cl.relname  AS table_name,
-                att.attname AS column_name,
-                pg_catalog.format_type(att.atttypid, att.atttypmod) AS data_type,
-                CASE WHEN pk.contype = 'p' THEN 1 ELSE 0 END AS is_pk,
-                fk.confrelid::regclass::text AS fk_to_table,
-                fk_col.attname AS fk_to_column,
-                att.attnotnull AS notnull
-            FROM pg_attribute att
-            JOIN pg_class cl ON cl.oid = att.attrelid
-            JOIN pg_namespace ns ON ns.oid = cl.relnamespace
-            LEFT JOIN pg_constraint pk
-                ON pk.conrelid = cl.oid
-                AND pk.contype = 'p'
-                AND att.attnum = ANY(pk.conkey)
-            LEFT JOIN pg_constraint fk
-                ON fk.conrelid = cl.oid
-                AND fk.contype = 'f'
-                AND att.attnum = ANY(fk.conkey)
-            LEFT JOIN pg_attribute fk_col
-                ON fk_col.attrelid = fk.confrelid
-                AND fk_col.attnum = ANY(fk.confkey)
-            WHERE cl.relkind = 'r'
-              AND att.attnum > 0
-              AND NOT att.attisdropped
-              AND ns.nspname NOT IN ('pg_catalog', 'information_schema')
-            ORDER BY ns.nspname, cl.relname, att.attnum
-        """
-        result = await execute_query(conn, sql)
-        if result.error or not result.rows:
-            return ""
+        # Shared catalog snapshot (core/catalog.py — the same one Schema
+        # Watch diffs). Indexes aren't useful to the model; skip them.
+        from tusk.core.catalog import fetch_catalog
 
-        # Group by qualified table name.
-        tables: dict[str, dict] = {}
-        for row in result.rows:
-            schema, tname, col, dtype, is_pk, fk_to, fk_col, notnull = row
-            qname = f"{schema}.{tname}" if schema and schema != "public" else tname
-            t = tables.setdefault(qname, {"cols": [], "pks": [], "fks": []})
-            t["cols"].append({"name": col, "type": dtype, "nn": bool(notnull)})
-            if is_pk:
-                t["pks"].append(col)
-            if fk_to and fk_col:
-                # `fk_to` is the qualified relname. Strip "public." for parity.
-                fk_table = fk_to.replace("public.", "") if fk_to else fk_to
-                t["fks"].append({"col": col, "to_table": fk_table, "to_col": fk_col})
+        try:
+            tables = await fetch_catalog(conn, with_indexes=False)
+        except RuntimeError:
+            return ""
+        if not tables:
+            return ""
 
         # Row counts (best-effort — pg_stat_user_tables, fast).
         try:

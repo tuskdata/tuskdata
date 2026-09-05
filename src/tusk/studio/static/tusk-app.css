@@ -246,6 +246,7 @@ body[data-theme="dark"] .btn-primary{background:var(--fg);color:var(--ink)}
 .schema-canvas{position:relative;height:calc(100vh - 56px);overflow:hidden;background:var(--bg);background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:24px 24px}
 .schema-toolbar{position:absolute;top:16px;left:16px;display:flex;gap:8px;z-index:10}
 .schema-controls{position:absolute;top:16px;right:16px;display:flex;gap:8px;z-index:10}
+.schema-watch-host{position:absolute;left:16px;bottom:16px;width:min(420px,calc(100% - 32px));z-index:10}
 .entity{position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow);min-width:220px;font-size:12px;overflow:hidden}
 .entity.focus{border-color:var(--brand);box-shadow:var(--shadow-lg),0 0 0 3px var(--brand-soft)}
 .entity-head{padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}

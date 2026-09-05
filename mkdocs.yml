@@ -57,6 +57,7 @@ nav:
       - Explore: features/explore.md
       - Admin: features/admin.md
       - Analytics: features/analytics.md
+      - Schema Watch: features/schema-watch.md
       - MCP server: features/mcp.md
       - Users & API tokens: features/auth.md
   - Deployment:

@@ -725,6 +725,7 @@ class NotificationService:
             ("core.download.completed", "core", "Download Completed", "A scheduled download has completed"),
             ("core.download.failed", "core", "Download Failed", "A scheduled download has failed"),
             ("scheduler.job.error", "core", "Scheduled Job Failed", "A scheduled job raised an exception"),
+            ("schema.changed", "core", "Schema Changed", "Schema Watch found tables, columns, keys or indexes that changed"),
         ]
         for event_key, plugin_id, label, desc in core_events:
             self.register_event(event_key, plugin_id, label, desc)

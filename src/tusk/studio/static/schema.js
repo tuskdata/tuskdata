@@ -95,6 +95,13 @@
             els.picker.addEventListener('change', () => {
                 state.connId = els.picker.value || null;
                 if (state.connId) loadGraph(state.connId);
+                // Point the Schema Watch panel at the newly selected connection.
+                const watch = document.getElementById('schema-watch-host');
+                if (watch && state.connId && window.htmx) {
+                    watch.setAttribute('hx-get', `/api/schema-watch/${encodeURIComponent(state.connId)}/panel`);
+                    htmx.process(watch);
+                    htmx.trigger(watch, 'refresh');
+                }
             });
         }
 

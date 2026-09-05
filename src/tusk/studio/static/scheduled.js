@@ -57,6 +57,7 @@
                 { id: "backup", label: "Backup", icon: "hard-drive-download", desc: "pg_dump a Postgres database" },
                 { id: "vacuum", label: "VACUUM", icon: "wand-2", desc: "VACUUM ANALYZE all tables" },
                 { id: "analyze", label: "ANALYZE", icon: "activity", desc: "ANALYZE all tables" },
+                { id: "schema_watch", label: "Schema watch", icon: "git-compare", desc: "Snapshot the schema and notify on changes" },
                 { id: "plugin", label: "Plugin job", icon: "puzzle", desc: "Plugin-registered handler" },
             ],
 
@@ -247,7 +248,7 @@
 
             canProceedToTrigger() {
                 if (!this.form.name) return false;
-                if (["backup", "vacuum", "analyze"].includes(this.form.kind)) {
+                if (["backup", "vacuum", "analyze", "schema_watch"].includes(this.form.kind)) {
                     return Boolean(this.form.connection_id);
                 }
                 if (this.form.kind === "query") {
@@ -323,7 +324,7 @@
                             payload: parsedPayload,
                             trigger,
                         };
-                    } else if (kind === "backup" || kind === "vacuum" || kind === "analyze") {
+                    } else if (["backup", "vacuum", "analyze", "schema_watch"].includes(kind)) {
                         url = `/api/scheduler/jobs/${kind}`;
                         // Legacy endpoints expect flat cron fields; translate from JobSpec trigger.
                         body = { connection_id: this.form.connection_id };

@@ -16,6 +16,7 @@ from tusk.core.scheduler import get_scheduler
 from tusk.core.scheduled_tasks import (
     TUSK_DIR,
     add_backup_schedule,
+    add_schema_watch_schedule,
     add_vacuum_schedule,
     add_analyze_schedule,
     add_backup_once,
@@ -199,6 +200,20 @@ class SchedulerController(Controller):
                 owner_id=owner_id,
             )
 
+        return {"success": True, "job_id": job_id}
+
+    @post("/jobs/schema_watch")
+    async def add_schema_watch_job(self, request: Request, data: dict = Body()) -> dict:
+        connection_id = data.get("connection_id")
+        if not connection_id:
+            return {"error": "connection_id is required"}
+        job_id = add_schema_watch_schedule(
+            connection_id=connection_id,
+            hour=data.get("hour", 6),
+            minute=data.get("minute", 0),
+            day_of_week=data.get("day_of_week", "*"),
+            owner_id=_current_user_id(request),
+        )
         return {"success": True, "job_id": job_id}
 
     @post("/jobs/analyze")

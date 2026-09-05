@@ -44,6 +44,7 @@ from tusk.studio.routes import (
     AISettingsPageController,
     JobsController,
     MCPToolsController,
+    SchemaWatchController,
     health_check,
     metrics,
 )
@@ -414,6 +415,7 @@ def get_route_handlers() -> list:
         AISettingsPageController,
         JobsController,
         MCPToolsController,
+        SchemaWatchController,
         health_check,
         metrics,
     ]

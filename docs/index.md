@@ -33,6 +33,7 @@ You install one wheel. You run one process. You point a browser at it.
 | **Data** | ETL pipelines, file upload, export | (later) |
 | **Admin** | PostgreSQL admin: processes, locks, settings, backups, roles | [admin.md](features/admin.md) |
 | **Analytics** | Dashboards + embedded analytics SDK (tusk-bi plugin) | [analytics.md](features/analytics.md) |
+| **Schema Watch** | Snapshot + diff of a connection's schema, notify on changes | [schema-watch.md](features/schema-watch.md) |
 | **MCP server** | Let Claude Code, Cursor or any MCP client query your connections, read-only | [mcp.md](features/mcp.md) |
 | **Users & tokens** | Single vs multi-user mode, sessions, personal API tokens, audit log | [auth.md](features/auth.md) |
 | **Cluster** | Distributed query execution (tusk-cluster plugin) | (later) |

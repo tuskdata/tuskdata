@@ -2,6 +2,26 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.32] - 2026-09-05 — Schema Watch
+
+**Schema Watch** (`core/schema_watch.py`) — Data Contracts, layer 1.
+- Snapshot of a PostgreSQL connection's catalog (tables, columns with type
+  and nullability, PK/FK, indexes), diffed against the previous snapshot,
+  history kept in `~/.tusk/schema_watch.db` (last 30 snapshots per
+  connection; change records keep their own diff).
+- New scheduled kind **Schema watch** (Scheduled → New job), daily at
+  06:00 by default. First run is the baseline; later runs raise
+  `schema.changed` — a new core notification event — with a one-paragraph
+  summary and the structured diff in the context.
+- Schema page: *Schema watch* panel with last snapshot, recent changes and
+  **Check now**. API: `POST /api/schema-watch/{id}/run`, `GET …/status`,
+  `GET …/changes?days=`. Manual runs are audited.
+- MCP tool `schema_changes(connection_id, days)`.
+- The Copilot and Schema Watch now share one catalog reader
+  (`core/catalog.py`); the Copilot's grounding query moved there unchanged.
+- Tests: `tests/test_schema_watch.py` (diff, summary, storage, run loop,
+  scheduler wiring); exercised against a live Postgres with a probe table.
+
 ## [0.4.31] - 2026-09-05 — Personal API tokens; MCP for every user, audited
 
 **API tokens** (`core/api_tokens.py`)

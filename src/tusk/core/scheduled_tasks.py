@@ -43,6 +43,7 @@ class JobKind(StrEnum):
     QUERY = "query"
     PIPELINE = "pipeline"
     PLUGIN = "plugin"
+    SCHEMA_WATCH = "schema_watch"
 
 
 class JobSpec(msgspec.Struct):
@@ -891,6 +892,39 @@ _KIND_HANDLERS[JobKind.ANALYZE] = _handle_analyze
 _KIND_HANDLERS[JobKind.QUERY] = _handle_query
 _KIND_HANDLERS[JobKind.PIPELINE] = _handle_pipeline
 _KIND_HANDLERS[JobKind.PLUGIN] = _handle_plugin
+
+
+async def _handle_schema_watch(payload: dict) -> None:
+    """Snapshot + diff + notify (core/schema_watch.py). A changed schema is
+    NOT a failed run — the notification carries the news; a failed run
+    means the catalog could not be read at all."""
+    from tusk.core.schema_watch import run_watch
+
+    connection_id = payload.get("connection_id")
+    if not connection_id:
+        raise ValueError("schema_watch payload missing connection_id")
+    await run_watch(connection_id, notify=bool(payload.get("notify", True)))
+
+
+_KIND_HANDLERS[JobKind.SCHEMA_WATCH] = _handle_schema_watch
+
+
+def add_schema_watch_schedule(
+    connection_id: str,
+    hour: int = 6,
+    minute: int = 0,
+    day_of_week: str = "*",
+    owner_id: str | None = None,
+) -> str:
+    spec = JobSpec(
+        id=f"schema_watch_{connection_id}",
+        kind=JobKind.SCHEMA_WATCH,
+        name=f"Schema watch {connection_id}",
+        payload={"connection_id": connection_id, "notify": True},
+        trigger={"type": "cron", "hour": hour, "minute": minute, "day_of_week": day_of_week},
+        owner_id=owner_id or "",
+    )
+    return add_job(spec)
 
 
 # ─────────────────────────────────────────────────────────────
