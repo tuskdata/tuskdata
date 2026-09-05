@@ -2,6 +2,11 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [Unreleased]
+
+- Explore: the H3 resolution picker showed 5 while the grid used 8 on first
+  render (options were generated after the select bound its value).
+
 ## [0.4.44] - 2026-09-06 — Vector tiles from saved queries; H3 density grid
 
 - **Saved queries as vector tiles.** `GET /api/tiles/{query_id}/{z}/{x}/{y}`

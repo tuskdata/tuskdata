@@ -119,8 +119,9 @@
                 <div class="section-head"><h2><i data-lucide="map" class="w-4 h-4 text-fg-3"></i>Spatial columns</h2>
                     <div class="flex aic gap-2">
                         <span class="text-xs text-fg-3">checked on the first 20,000 rows</span>
-                        <select class="schema-prefix" x-model.number="h3Res" @change="loadH3()" title="H3 resolution (4 = ~1,770 km², 11 = ~2,150 m²)">
-                            <template x-for="r in [5,6,7,8,9,10]"><option :value="r" x-text="'H3 res ' + r"></option></template>
+                        <select class="schema-prefix" x-model.number="h3Res" @change="loadH3()" title="H3 resolution (5 ≈ 250 km² per cell, 10 ≈ 0.015 km²)">
+                            <option value="5">H3 res 5</option><option value="6">H3 res 6</option><option value="7">H3 res 7</option>
+                            <option value="8">H3 res 8</option><option value="9">H3 res 9</option><option value="10">H3 res 10</option>
                         </select>
                         <button type="button" class="btn btn-sm" @click="loadH3()" :disabled="h3Loading">
                             <i data-lucide="hexagon"></i><span x-text="h3Loading ? 'Aggregating…' : (h3 ? 'Refresh grid' : 'Density grid')"></span>
