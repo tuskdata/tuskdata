@@ -352,6 +352,58 @@ class AdminController(Controller):
             return Template("partials/admin/spatial.html", context=health)
         return health
 
+    @get("/{conn_id:str}/advisor")
+    async def get_advisor(self, request: Request, conn_id: str) -> dict | Template | Response:
+        """Catalog + statistics findings with the SQL to run; never applies anything."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return Response(content=b"") if is_htmx(request) else {"error": "PostgreSQL connection required"}
+        from tusk.core.advisor import analyze
+
+        report = await analyze(config)
+        data = report.to_dict()
+        if is_htmx(request):
+            return Template("partials/admin/advisor.html", context={**data, "conn_id": conn_id})
+        return data
+
+    @post("/{conn_id:str}/advisor/ai")
+    async def advisor_ai(self, request: Request, conn_id: str) -> dict:
+        """Two-paragraph, prioritised reading of the Advisor report by the configured model."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return {"error": "PostgreSQL connection required"}
+        from tusk.core.advisor import analyze, render_for_ai
+        from tusk.core.ai import get_provider
+        from tusk.core.ai_struct import complete_struct
+        import msgspec as _msgspec
+
+        provider = get_provider()
+        if not provider:
+            return {"error": "AI provider not configured (Settings → AI)"}
+        report = await analyze(config, with_plans=False)
+
+        class AdvisorSummary(_msgspec.Struct):
+            summary: str
+            priorities: list[str] = []
+
+        system = (
+            "You are a senior PostgreSQL DBA reviewing an automated health report. Write `summary` "
+            "(2-3 sentences: overall state and the single most valuable fix) and `priorities` "
+            "(3-6 ordered, concrete actions, each one line with the statement to run when the report "
+            "gives one). Do not invent tables or columns; if the report is empty say the database looks "
+            "healthy and suggest installing pg_stat_statements when it is missing. Answer with ONLY the JSON "
+            "object, under 1200 characters, no reasoning outside it.\n"
+            "Example: {\"summary\": \"Two foreign keys are scanned on every join; indexing them is the one "
+            "change that pays today. The rest is housekeeping.\", \"priorities\": [\"CREATE INDEX CONCURRENTLY "
+            "events_customer_id_idx ON events (customer_id);\", \"DROP INDEX CONCURRENTLY events_occurred_at_idx; "
+            "-- unused, 1 MB\", \"Install pg_stat_statements to see the slowest queries\"]}"
+        )
+        try:
+            out = await complete_struct(provider, render_for_ai(report), AdvisorSummary, system=system, max_tokens=1500, temperature=0.2)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+        return {"summary": out.summary, "priorities": out.priorities}
+
     @get("/{conn_id:str}/stats")
     async def get_stats(self, request: Request, conn_id: str) -> dict | Template:
         """Get server statistics"""

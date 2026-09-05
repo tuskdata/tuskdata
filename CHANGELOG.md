@@ -2,6 +2,24 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.43] - 2026-09-06 — Advisor
+
+- **Admin → Advisor**: findings from the catalog and statistics views, each
+  with the SQL to run and a copy button — foreign keys without an index,
+  sequential-scan-heavy tables, unused indexes (by size), duplicate
+  indexes, dead-tuple pile-ups, never-analysed tables; with
+  `pg_stat_statements`, the slowest queries by total time and the
+  sequential scans in their generic plans (PostgreSQL 16+). Ordered by
+  severity. Recommends, never applies.
+- **Ask AI to prioritise**: the configured model reads the report (never
+  the data) and returns a short summary plus an ordered action list.
+- MCP tool `advise(connection_id)` returns the same report to agents.
+- **Ollama: thinking disabled for Tusk's requests** (`think: false`, with a
+  retry for models that reject the flag). Thinking models (qwen3, deepseek)
+  spent the whole token budget reasoning and returned an empty answer —
+  "no JSON found" on the Copilot, plan insight and Advisor. Answers are
+  faster and never empty now.
+
 ## [0.4.42] - 2026-09-06 — Spatial health; geodata into PostGIS
 
 - **Admin → Spatial card** (PostGIS databases): every geometry/geography

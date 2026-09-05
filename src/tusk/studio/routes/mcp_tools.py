@@ -419,3 +419,28 @@ class MCPToolsController(Controller):
         out = await _run_read_query(conn, saved.sql, limit)
         out["query"] = {"id": saved.id, "name": saved.name}
         return out
+
+    @get(
+        "/advise",
+        mcp_tool="advise",
+        mcp_description=(
+            "Database health advice for a PostgreSQL connection: foreign keys without an index, "
+            "sequential-scan-heavy tables, unused or duplicate indexes, dead tuples, missing statistics, "
+            "and the slowest queries when pg_stat_statements is installed. Each finding carries the SQL "
+            "to run. Nothing is applied."
+        ),
+    )
+    async def advise_tool(self, request: Request, connection_id: str) -> dict:
+        """Args:
+            connection_id: a PostgreSQL connection id from list_connections.
+        """
+        conn = get_connection(connection_id)
+        if not conn:
+            return _not_found(connection_id)
+        if conn.type != "postgres":
+            return {"error": f"advise only supports PostgreSQL connections (this one is {conn.type})"}
+        from tusk.core.advisor import analyze
+
+        _audit(request, "advise", connection_id, "")
+        report = await analyze(conn)
+        return report.to_dict()

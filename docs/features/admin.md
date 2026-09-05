@@ -120,6 +120,25 @@ See [`bugs/2026-05-18-ssh-tunnel-hangs-admin.md`](https://github.com/tuskdata/tu
 - [studio.md](studio.md) — the "Query in Studio" buttons across Admin panels target this.
 - [analytics.md](analytics.md) — for dashboard-style monitoring views rather than the live process list.
 
+## Advisor
+
+The **Advisor** card reads the catalog and the statistics views and lists
+what a DBA would fix first, each with the statement to run and a copy
+button. Nothing is applied for you.
+
+- Foreign keys without an index (joins and cascading deletes scan the table).
+- Tables scanned sequentially far more often than by index, with their size.
+- Indexes never used since the last statistics reset, by size.
+- Duplicate indexes on the same columns.
+- Dead tuples piling up (autovacuum not keeping up).
+- Big tables that were never analysed.
+- With `pg_stat_statements`: the slowest queries by total time, and the
+  sequential scans their generic plan shows (PostgreSQL 16+).
+
+**Ask AI to prioritise** sends the report (not your data) to the configured
+model and gets a two-paragraph reading with an ordered list of actions.
+Agents get the same report through the MCP tool `advise`.
+
 ## Spatial (PostGIS)
 
 When the database has PostGIS, a **Spatial** card lists every geometry

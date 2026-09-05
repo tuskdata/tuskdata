@@ -90,7 +90,7 @@ container cannot write — they now live in `~/.tusk/plugin_templates`.
   via DuckDB spatial → table with geometry column, SRID and GIST. One-click
   OSM (bbox download already exists) → PostGIS with `tags jsonb`.
 
-## 0.4.43 — Advisor (~2 weeks)
+## 0.4.43 — Advisor (shipped 2026-09-06)
 
 Admin → Advisor: top queries from `pg_stat_statements` by total time,
 missing-index suggestions from EXPLAIN, the existing AI plan insight

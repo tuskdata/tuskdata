@@ -238,14 +238,29 @@ class OllamaProvider:
                 "num_ctx": int(os.environ.get("TUSK_AI_NUM_CTX", "16384")),
             },
         }
-        data = await asyncio.to_thread(
-            _http_request,
-            f"{self.base_url}/api/chat",
-            method="POST",
-            body=body,
-            timeout=120,
-        )
-        return data.get("message", {}).get("content", "").strip()
+        # Thinking models (qwen3, deepseek-r1…) put their reasoning in
+        # `message.thinking` and can spend the whole num_predict budget there,
+        # returning an empty `content`. We want the answer, not the essay:
+        # ask Ollama not to think. Models without the capability reject the
+        # flag with a 400, so retry once without it.
+        body["think"] = False
+        try:
+            data = await asyncio.to_thread(
+                _http_request, f"{self.base_url}/api/chat", method="POST", body=body, timeout=240,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if "think" not in str(exc).lower():
+                raise
+            body.pop("think", None)
+            data = await asyncio.to_thread(
+                _http_request, f"{self.base_url}/api/chat", method="POST", body=body, timeout=240,
+            )
+        msg = data.get("message", {}) or {}
+        content = (msg.get("content") or "").strip()
+        if not content and msg.get("thinking"):
+            # Last resort: some builds still answer inside the thinking field.
+            content = str(msg["thinking"]).strip()
+        return content
 
     async def list_models(self) -> list[str]:
         data = await asyncio.to_thread(
