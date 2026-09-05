@@ -2,6 +2,27 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.33] - 2026-09-05 — Data Contracts (frozen schemas)
+
+**Data Contracts** (`core/contracts.py`) — layer 2 on top of Schema Watch.
+- **Freeze** on the Schema page stores the current schema (columns with
+  type and nullability, PK, FKs — all tables or a subset via the API) as
+  the connection's contract. One active contract per connection;
+  **Re-freeze** accepts the current schema, **release** drops it.
+- Every Schema Watch snapshot is evaluated against the contract. Breaking
+  changes — table or column gone, type changed, nullability changed, PK
+  changed, FK gone — raise `contract.violated` once (same breakage on
+  later runs stays quiet) and `contract.restored` when fixed. Additions
+  never violate.
+- Panel shows `holds` / `violated` with the open violation; YAML export
+  (`GET /api/contracts/{id}/export.yaml`, no PyYAML dependency); API for
+  status, history and release. Freeze/release are audited.
+- MCP tool `contract_status(connection_id)`.
+- Schema page honours `?connection=<id>` so notification links land on the
+  right connection.
+- Tests: `tests/test_contracts.py` (evaluation, single active contract,
+  violation log + notify + resolve, run_watch integration, YAML).
+
 ## [0.4.32] - 2026-09-05 — Schema Watch
 
 **Schema Watch** (`core/schema_watch.py`) — Data Contracts, layer 1.

@@ -305,6 +305,37 @@ class MCPToolsController(Controller):
         }
 
     @get(
+        "/contract",
+        mcp_tool="contract_status",
+        mcp_description=(
+            "Whether the connection's frozen data contract (expected tables, columns, "
+            "types, keys) currently holds, and the open violation if not. Use it "
+            "before trusting a query result or to explain a broken report."
+        ),
+    )
+    async def contract_status_tool(self, request: Request, connection_id: str) -> dict:
+        """Data contract status for a connection.
+
+        Args:
+            connection_id: id from list_connections.
+        """
+        from tusk.core import contracts as ct
+
+        if get_connection(connection_id) is None:
+            return _not_found(connection_id)
+        _audit(request, "contract_status", connection_id)
+        contract = ct.active_contract(connection_id)
+        if not contract:
+            return {"has_contract": False, "holds": None, "hint": "no contract frozen for this connection"}
+        v = ct.open_violation(contract["id"])
+        return {
+            "has_contract": True,
+            "contract": {"id": contract["id"], "name": contract["name"], "frozen_at": contract["created_at"], "tables": contract["table_count"]},
+            "holds": v is None,
+            "violation": ({"detected_at": v["detected_at"], "summary": v["summary"], "items": v["violations"]} if v else None),
+        }
+
+    @get(
         "/saved-queries",
         mcp_tool="list_saved_queries",
         mcp_description=(

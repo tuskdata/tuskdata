@@ -61,13 +61,19 @@ class SchemaWatchController(Controller):
     @get("/{connection_id:str}/panel")
     async def panel(self, connection_id: str) -> Template:
         """HTMX partial for the Schema page."""
+        from tusk.core import contracts as ct
+
         latest = sw.latest_snapshot(connection_id)
         changes = sw.list_changes(connection_id, limit=10)
+        contract = ct.active_contract(connection_id)
+        violation = ct.open_violation(contract["id"]) if contract else None
         return Template(
             "partials/schema_watch_panel.html",
             context={
                 "connection_id": connection_id,
                 "latest": latest,
                 "changes": changes,
+                "contract": contract,
+                "violation": violation,
             },
         )

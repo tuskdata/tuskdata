@@ -45,6 +45,7 @@ from tusk.studio.routes import (
     JobsController,
     MCPToolsController,
     SchemaWatchController,
+    ContractsController,
     health_check,
     metrics,
 )
@@ -416,6 +417,7 @@ def get_route_handlers() -> list:
         JobsController,
         MCPToolsController,
         SchemaWatchController,
+        ContractsController,
         health_check,
         metrics,
     ]

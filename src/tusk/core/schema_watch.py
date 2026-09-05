@@ -291,11 +291,18 @@ async def run_watch(connection_id: str, *, notify: bool = True, keep_snapshots: 
     snapshot_id = save_snapshot(connection_id, catalog)
     prune_snapshots(connection_id, keep_last=keep_snapshots)
 
+    # Data Contracts (core/contracts.py): every snapshot is checked against
+    # the connection's active contract; violations notify on their own.
+    from tusk.core.contracts import check_contracts
+
+    violations = check_contracts(connection_id, catalog, snapshot_id=snapshot_id, notify=notify)
+
     if previous is None:
         log.info("schema_watch_baseline", connection_id=connection_id, tables=len(catalog))
         return {
             "changed": False, "first_run": True, "summary": f"Baseline taken: {len(catalog)} tables.",
             "diff": {}, "snapshot_id": snapshot_id, "table_count": len(catalog),
+            "contract_violations": violations,
         }
 
     diff = diff_catalogs(previous["catalog"], catalog)
@@ -311,6 +318,7 @@ async def run_watch(connection_id: str, *, notify: bool = True, keep_snapshots: 
     return {
         "changed": changed, "first_run": False, "summary": summary, "diff": diff,
         "snapshot_id": snapshot_id, "table_count": len(catalog),
+        "contract_violations": violations,
     }
 
 

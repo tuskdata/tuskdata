@@ -58,6 +58,7 @@ nav:
       - Admin: features/admin.md
       - Analytics: features/analytics.md
       - Schema Watch: features/schema-watch.md
+      - Data Contracts: features/data-contracts.md
       - MCP server: features/mcp.md
       - Users & API tokens: features/auth.md
   - Deployment:

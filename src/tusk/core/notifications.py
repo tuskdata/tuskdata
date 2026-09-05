@@ -726,6 +726,8 @@ class NotificationService:
             ("core.download.failed", "core", "Download Failed", "A scheduled download has failed"),
             ("scheduler.job.error", "core", "Scheduled Job Failed", "A scheduled job raised an exception"),
             ("schema.changed", "core", "Schema Changed", "Schema Watch found tables, columns, keys or indexes that changed"),
+            ("contract.violated", "core", "Contract Violated", "A frozen data contract no longer holds (table/column gone, type or key changed)"),
+            ("contract.restored", "core", "Contract Restored", "A previously violated data contract holds again"),
         ]
         for event_key, plugin_id, label, desc in core_events:
             self.register_event(event_key, plugin_id, label, desc)

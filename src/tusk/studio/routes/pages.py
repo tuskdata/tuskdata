@@ -197,13 +197,17 @@ class PageController(TuskController):
         return self.render("data.html", active_page="data")
 
     @get("/schema")
-    async def schema(self) -> Template:
-        """Schema viewer (ER diagram) — Postgres only."""
+    async def schema(self, request: Request) -> Template:
+        """Schema viewer (ER diagram) — Postgres only. `?connection=<id>`
+        (used by Schema Watch / contract notification links) preselects."""
         conns = list_connections()
         pg_conns = [
             {"id": c.id, "name": c.name, "database": c.database}
             for c in conns if c.type == "postgres"
         ]
+        wanted = request.query_params.get("connection", "")
+        if wanted and any(c["id"] == wanted for c in pg_conns):
+            pg_conns.sort(key=lambda c: c["id"] != wanted)
         return self.render(
             "schema.html",
             active_page="schema",

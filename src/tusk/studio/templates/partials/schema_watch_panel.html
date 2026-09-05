@@ -31,6 +31,51 @@
     </div>
     {% endif %}
 
+    {# ── Data contract ─────────────────────────────────────── #}
+    <div style="border-top:1px solid var(--border);margin:10px 0 8px;padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <i data-lucide="file-check-2" style="width:14px;height:14px;color:var(--fg-3)"></i>
+            {% if contract %}
+                <span style="font-weight:600">Contract</span>
+                <span style="color:var(--fg-3)">{{ contract.name }} · {{ contract.table_count }} tables</span>
+                {% if violation %}
+                <span class="chip chip-amber" title="{{ violation.summary }}">violated</span>
+                {% else %}
+                <span class="chip chip-green">holds</span>
+                {% endif %}
+            {% else %}
+                <span style="color:var(--fg-3)">No contract. Freeze the current schema to be told when something breaks it.</span>
+            {% endif %}
+        </div>
+        <div style="display:flex;gap:4px">
+            <button class="btn btn-sm" title="{{ 'Re-freeze: accept the current schema as the new contract' if contract else 'Freeze the current schema as this connection\'s contract' }}"
+                    hx-post="/api/contracts/{{ connection_id }}/freeze"
+                    hx-swap="none"
+                    hx-on::after-request="if (event.detail.successful) { const r = JSON.parse(event.detail.xhr.responseText); tuskToast(r.error || ('Contract frozen: ' + r.contract.table_count + ' tables'), r.error ? 'error' : 'success'); htmx.trigger('#schema-watch-panel', 'refresh'); }">
+                <i data-lucide="snowflake" style="width:13px;height:13px"></i> {{ 'Re-freeze' if contract else 'Freeze' }}
+            </button>
+            {% if contract %}
+            <a class="btn btn-sm btn-ghost" href="/api/contracts/{{ connection_id }}/export.yaml" title="Download as YAML">
+                <i data-lucide="download" style="width:13px;height:13px"></i>
+            </a>
+            {# Confirmation through tuskConfirm (Alpine modal), never the native confirm(). #}
+            <button class="btn btn-sm btn-ghost" title="Release the contract"
+                    hx-delete="/api/contracts/{{ connection_id }}"
+                    hx-trigger="confirmed"
+                    onclick="tuskConfirm('Release this contract? Violations will no longer be reported.').then(ok => ok && htmx.trigger(this, 'confirmed'))"
+                    hx-swap="none"
+                    hx-on::after-request="if (event.detail.successful) { tuskToast('Contract released', 'success'); htmx.trigger('#schema-watch-panel', 'refresh'); }">
+                <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% if violation %}
+    <div style="font-size:12px;color:var(--fg-2);background:color-mix(in srgb, var(--accent-amber) 12%, transparent);border:1px solid color-mix(in srgb, var(--accent-amber) 40%, transparent);border-radius:6px;padding:6px 8px;margin-bottom:8px">
+        <span class="mono" style="color:var(--fg-4)">{{ violation.detected_at[:16].replace('T', ' ') }}</span> {{ violation.summary }}
+    </div>
+    {% endif %}
+
     {% if changes %}
     <div style="font-size:11px;font-weight:600;color:var(--fg-3);letter-spacing:.06em;text-transform:uppercase;margin:8px 0 4px">Recent changes</div>
     <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">

@@ -15,6 +15,7 @@ from tusk.studio.routes.ai import AICopilotController, AISettingsPageController
 from tusk.studio.routes.jobs import JobsController
 from tusk.studio.routes.mcp_tools import MCPToolsController
 from tusk.studio.routes.schema_watch import SchemaWatchController
+from tusk.studio.routes.contracts import ContractsController
 
 __all__ = [
     # Base
@@ -47,4 +48,5 @@ __all__ = [
     "JobsController",
     "MCPToolsController",
     "SchemaWatchController",
+    "ContractsController",
 ]
