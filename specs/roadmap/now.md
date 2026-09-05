@@ -97,7 +97,7 @@ missing-index suggestions from EXPLAIN, the existing AI plan insight
 reading the result. Recommends, never applies. First to drop if time runs
 out; the product does not limp without it.
 
-## 0.4.44 — Vector tiles + H3 (~4 days)
+## 0.4.44 — Vector tiles + H3 (shipped 2026-09-06)
 
 - `/api/tiles/{saved_query_id}/{z}/{x}/{y}` with `ST_AsMVT`, so MapLibre
   clients (the territorial platform) consume Tusk layers directly.

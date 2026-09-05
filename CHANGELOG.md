@@ -2,6 +2,18 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.44] - 2026-09-06 — Vector tiles from saved queries; H3 density grid
+
+- **Saved queries as vector tiles.** `GET /api/tiles/{query_id}/{z}/{x}/{y}`
+  runs the saved query inside `ST_AsMVT`, so MapLibre / Mapbox / deck.gl
+  clients draw it as a live layer straight from PostGIS; every non-geometry
+  column becomes a feature property. `/api/tiles/{query_id}/tilejson` is the
+  TileJSON (bounds from the query's extent). In multi-user mode the URL
+  carries a personal API token (`?token=tusk_…`); read-only queries only.
+- **Explore → density grid**: any table with a geometry column or a lat/lon
+  pair aggregates into H3 hexagons (resolution 5-10) on a map, with counts
+  per cell. Pure Python `h3`, no database extension needed.
+
 ## [0.4.43] - 2026-09-06 — Advisor
 
 - **Admin → Advisor**: findings from the catalog and statistics views, each

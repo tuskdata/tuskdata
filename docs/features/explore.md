@@ -81,3 +81,11 @@ The strip below the header has two stats: **% complete** (1 − null ratio) and 
 On a PostGIS table the profile starts with its geometry columns: type,
 SRID, spatial index, invalid geometries in the sample and the extent —
 the same checks as the Admin Spatial card, for the table in front of you.
+
+![H3 density grid of the OSM points, resolution 8.](../screenshots/explore-h3.png){ .screenshot }
+
+**Density grid** aggregates the table's points (or the centroids of its
+polygons, or a lat/lon pair) into H3 hexagons at the resolution you pick
+(5 = country blocks, 10 = city blocks) and draws them on a map with the
+count per cell. It runs in Python on up to 200,000 rows; no `h3-pg`
+extension is needed.

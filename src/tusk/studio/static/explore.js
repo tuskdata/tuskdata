@@ -30,6 +30,7 @@ function exploreApp() {
             this.selectedTable = '';
             this.tables = [];
             this.profile = null;
+            this.h3 = null;
             this.error = '';
             if (!this.selectedConn) return;
             this.loadingTables = true;
@@ -95,6 +96,68 @@ function exploreApp() {
                 return;
             }
             this.profile = data;
+        },
+
+        // ── H3 density grid (Spatial card) ───────────────────
+        h3: null,
+        h3Res: 8,
+        h3Loading: false,
+        _h3Map: null,
+        async loadH3() {
+            const t = this.tables.find(x => x.qualified === this.selectedTable);
+            if (!t || !this.selectedConn) return;
+            this.h3Loading = true;
+            try {
+                const data = await window.tuskFetchJSON('/api/explore/h3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ connection_id: this.selectedConn, schema: t.schema, table: t.table, resolution: this.h3Res }),
+                    timeoutMs: 120000,
+                });
+                if (data.error) { tuskToast(data.error, 'error'); return; }
+                this.h3 = data;
+                this.$nextTick(() => this.renderH3(data));
+            } catch (e) {
+                tuskToast('Density grid failed: ' + e.message, 'error');
+            } finally {
+                this.h3Loading = false;
+            }
+        },
+        renderH3(fc) {
+            if (typeof maplibregl === 'undefined') { tuskToast('Map library not loaded', 'warning'); return; }
+            const el = document.getElementById('explore-h3-map');
+            if (!el) return;
+            const paint = {
+                'fill-color': ['interpolate', ['linear'], ['get', 'count'], 1, '#fde68a', Math.max(2, fc.max_count / 2), '#f97316', Math.max(3, fc.max_count), '#7f1d1d'],
+                'fill-opacity': 0.65,
+            };
+            const apply = (map) => {
+                if (map.getSource('h3')) {
+                    map.getSource('h3').setData(fc);
+                    map.setPaintProperty('h3-fill', 'fill-color', paint['fill-color']);
+                } else {
+                    map.addSource('h3', { type: 'geojson', data: fc });
+                    map.addLayer({ id: 'h3-fill', type: 'fill', source: 'h3', paint });
+                    map.addLayer({ id: 'h3-line', type: 'line', source: 'h3', paint: { 'line-color': '#7f1d1d', 'line-opacity': 0.25, 'line-width': 0.5 } });
+                    map.on('click', 'h3-fill', (e) => {
+                        const p = e.features[0].properties;
+                        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(`<div style="font:12px var(--font-mono)">${p.count} rows<br>${p.h3}</div>`).addTo(map);
+                    });
+                }
+                if (fc.features.length) {
+                    const b = new maplibregl.LngLatBounds();
+                    for (const f of fc.features) for (const c of f.geometry.coordinates[0]) b.extend(c);
+                    map.fitBounds(b, { padding: 30, duration: 0, maxZoom: 14 });
+                }
+            };
+            if (this._h3Map && this._h3Map.getContainer() === el) {
+                apply(this._h3Map);
+                return;
+            }
+            const map = new maplibregl.Map({ container: el, style: window.tuskBasemapStyle(), center: [0, 20], zoom: 1, attributionControl: false });
+            map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+            map.on('load', () => apply(map));
+            this._h3Map = map;
         },
 
         // ── Drill modal ───────────────────────────────────────

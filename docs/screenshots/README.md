@@ -23,7 +23,7 @@ another instance's pools would put its database names in the shot.
 | `home.png` | `features/home.md` |
 | `studio.png` | `features/studio.md` |
 | `schema.png` | `features/schema.md` |
-| `explore.png` | `features/explore.md` |
+| `explore.png`, `explore-h3.png` | `features/explore.md` |
 | `admin.png` | `features/admin.md` |
 | `analytics-overview.png` | `features/analytics.md` |
 | `analytics-dashboard.png` | `features/analytics.md` |

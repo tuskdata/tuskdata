@@ -1386,3 +1386,43 @@ class ExploreController(Controller):
             "columns": stats,
             "spatial": spatial_cols,
         }
+
+    @post("/h3")
+    async def explore_h3(self, data: dict = Body()) -> dict:
+        """Density grid: the table's points (geometry centroid or lat/lon)
+        aggregated into H3 cells at `resolution` (4-11), as GeoJSON."""
+        from tusk.core.connection import get_connection
+        from tusk.core.h3grid import MAX_POINTS, aggregate, points_sql
+        from tusk.core.spatial import table_spatial
+        from tusk.engines import postgres
+
+        connection_id = data.get("connection_id")
+        schema_name = data.get("schema")
+        table_name = data.get("table")
+        resolution = int(data.get("resolution") or 8)
+        if not connection_id or not schema_name or not table_name:
+            return {"error": "connection_id, schema and table are required"}
+        if not _IDENT_RE.match(schema_name) or not _IDENT_RE.match(table_name):
+            return {"error": "Invalid schema or table identifier"}
+        config = get_connection(connection_id)
+        if not config or config.type != "postgres":
+            return {"error": "H3 grid needs a PostgreSQL connection"}
+        geom_col = lat_col = lon_col = None
+        try:
+            cols = await table_spatial(config, schema_name, table_name)
+            geom_col = cols[0]["column"] if cols else None
+        except Exception:  # noqa: BLE001
+            geom_col = None
+        if not geom_col:
+            probe = await postgres.execute_query(config, f'SELECT * FROM "{schema_name}"."{table_name}" LIMIT 0')
+            names = {c.name.lower(): c.name for c in probe.columns} if not probe.error else {}
+            lat_col = next((names[n] for n in ("lat", "latitude", "latitud") if n in names), None)
+            lon_col = next((names[n] for n in ("lon", "lng", "long", "longitude", "longitud") if n in names), None)
+            if not (lat_col and lon_col):
+                return {"error": "the table has no geometry column and no lat/lon pair"}
+        result = await postgres.execute_query(config, points_sql(schema_name, table_name, geom_col, lat_col, lon_col, MAX_POINTS))
+        if result.error:
+            return {"error": result.error}
+        out = await asyncio.to_thread(aggregate, [(r[0], r[1]) for r in result.rows], resolution)
+        out["source"] = geom_col or f"{lat_col}, {lon_col}"
+        return out

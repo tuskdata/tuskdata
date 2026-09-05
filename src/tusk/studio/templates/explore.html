@@ -117,7 +117,16 @@
         <template x-if="profile?.spatial?.length">
             <div class="card" style="margin-bottom:16px">
                 <div class="section-head"><h2><i data-lucide="map" class="w-4 h-4 text-fg-3"></i>Spatial columns</h2>
-                    <span class="text-xs text-fg-3">checked on the first 20,000 rows</span></div>
+                    <div class="flex aic gap-2">
+                        <span class="text-xs text-fg-3">checked on the first 20,000 rows</span>
+                        <select class="schema-prefix" x-model.number="h3Res" @change="loadH3()" title="H3 resolution (4 = ~1,770 km², 11 = ~2,150 m²)">
+                            <template x-for="r in [5,6,7,8,9,10]"><option :value="r" x-text="'H3 res ' + r"></option></template>
+                        </select>
+                        <button type="button" class="btn btn-sm" @click="loadH3()" :disabled="h3Loading">
+                            <i data-lucide="hexagon"></i><span x-text="h3Loading ? 'Aggregating…' : (h3 ? 'Refresh grid' : 'Density grid')"></span>
+                        </button>
+                    </div>
+                </div>
                 <table class="dtable w-full">
                     <thead><tr><th>Column</th><th>Type</th><th>SRID</th><th>Index</th><th>Invalid</th><th>Extent</th></tr></thead>
                     <tbody>
@@ -133,6 +142,13 @@
                         </template>
                     </tbody>
                 </table>
+                <div x-show="h3" x-cloak style="border-top:1px solid var(--border)">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:12px;color:var(--fg-3)">
+                        <span x-text="h3 ? (h3.cells.toLocaleString() + ' cells · ' + h3.points.toLocaleString() + ' points · max ' + h3.max_count.toLocaleString() + ' per cell') : ''"></span>
+                        <span x-show="h3?.skipped" x-text="h3 ? h3.skipped + ' rows without coordinates' : ''"></span>
+                    </div>
+                    <div id="explore-h3-map" style="height:380px;border-radius:0 0 var(--r-lg) var(--r-lg);overflow:hidden"></div>
+                </div>
             </div>
         </template>
 
@@ -257,5 +273,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% from "components/map.html" import map_assets %}
+{{ map_assets() }}
 <script src="/static/explore.js"></script>
 {% endblock %}

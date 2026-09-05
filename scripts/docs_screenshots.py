@@ -209,6 +209,19 @@ async def _scenes(page, only: set[str] | None, theme: str) -> list[str]:
     # Explore
     await goto("/explore", settle=2000)
     await shot("explore")
+    # Explore: spatial card + H3 density grid on the OSM table
+    try:
+        await page.evaluate("""async () => { const c = Alpine.$data(document.querySelector('[x-data="exploreApp()"]')); c.selectedConn = 'demo'; await c.onConnChange(); }""")
+        await page.wait_for_timeout(1500)
+        await page.evaluate("""async () => { const c = Alpine.$data(document.querySelector('[x-data="exploreApp()"]')); const t = c.tables.find(t => t.qualified.endsWith('osm_pois')); c.selectedTable = t.qualified; await c.runProfile(); }""")
+        await page.wait_for_timeout(4000)
+        await page.evaluate("""() => { const c = Alpine.$data(document.querySelector('[x-data="exploreApp()"]')); c.h3Res = 8; return c.loadH3(); }""")
+        await page.wait_for_timeout(7000)
+        await page.evaluate("document.getElementById('explore-h3-map').scrollIntoView({block: 'center'})")
+        await page.wait_for_timeout(1000)
+        await shot("explore-h3")
+    except Exception as e:  # noqa: BLE001
+        print("  (explore-h3 scene skipped:", str(e)[:80], ")")
 
     # Scheduled
     await goto("/scheduled", settle=1500)

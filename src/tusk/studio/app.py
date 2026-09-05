@@ -47,6 +47,7 @@ from tusk.studio.routes import (
     SchemaWatchController,
     ContractsController,
     AlertsController,
+    TilesController,
     health_check,
     metrics,
 )
@@ -133,6 +134,9 @@ _PUBLIC_PREFIXES = (
     # answer 401, which restarts the pod forever.
     "/api/health",
     "/api/metrics",
+    # Vector tiles carry their own auth (?token= or the session); map clients
+    # cannot send headers for tile requests.
+    "/api/tiles/",
     "/favicon.ico",
     "/api/auth/login",
     "/api/auth/logout",
@@ -427,6 +431,7 @@ def get_route_handlers() -> list:
         SchemaWatchController,
         ContractsController,
         AlertsController,
+        TilesController,
         health_check,
         metrics,
     ]

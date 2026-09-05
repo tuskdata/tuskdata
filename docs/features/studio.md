@@ -149,3 +149,24 @@ provider as the rest of the Copilot (Settings → AI Copilot).
 a custom XYZ basemap for the map views (URL with `{z}/{x}/{y}` placeholders
 plus attribution) — a self-hosted OSM, Mapbox raster tiles or an internal
 tile server instead of the default OpenFreeMap basemap (keyless vector tiles, light or dark to match the theme).
+
+## Saved queries as vector tiles
+
+A saved query with a geometry column can be served as Mapbox Vector Tiles:
+
+```
+GET /api/tiles/<query id>/tilejson             # TileJSON: tiles URL, bounds, fields
+GET /api/tiles/<query id>/{z}/{x}/{y}          # one tile, straight from ST_AsMVT
+```
+
+Point a MapLibre `vector` source at the TileJSON and every non-geometry
+column of the query is a feature property, layer name `query`. The query
+runs inside `ST_AsMVT` per tile — no GeoJSON export, no copy, always the
+current data. Read-only queries on PostgreSQL connections only. In
+multi-user mode append `?token=tusk_…` (Profile → API tokens); tile
+requests cannot carry headers.
+
+```js
+map.addSource('shops', { type: 'vector', url: 'https://tusk.example.com/api/tiles/12/tilejson?token=tusk_…' });
+map.addLayer({ id: 'shops', type: 'circle', source: 'shops', 'source-layer': 'query' });
+```
