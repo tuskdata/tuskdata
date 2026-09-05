@@ -173,7 +173,7 @@ def handle_plugins():
 def print_usage(plugin_commands=None):
     """Print usage information"""
     print("""
-Tusk - Modern Data Platform
+Tusk - PostgreSQL admin + SQL studio with AI copilot and analytics
 
 Usage:
     tusk studio [options]     Start the web studio        [requires: studio]
@@ -206,6 +206,9 @@ Auth Commands:
     tusk auth init                      Initialize auth (create admin user)
     tusk auth enable                    Enable multi-user mode
     tusk auth disable                   Disable auth (single mode)
+    tusk auth token create USER NAME    Create a personal API token [--expires-days N]
+    tusk auth token list USER           List a user's tokens
+    tusk auth token revoke TOKEN_ID     Revoke a token
 
 AI Commands:
     tusk ai stats                       Hit-rate report from AI memory

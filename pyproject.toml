@@ -1,7 +1,7 @@
 [project]
 name = "tuskdata"
 version = "0.4.36"
-description = "Modern data platform - PostgreSQL admin + Analytics engine"
+description = "PostgreSQL admin and SQL studio with an AI copilot and light analytics"
 readme = "README.md"
 license = "MIT"
 authors = [

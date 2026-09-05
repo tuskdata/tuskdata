@@ -1,17 +1,17 @@
 # Tusk Studio
 
-A single-binary data platform for PostgreSQL teams. SQL editor + schema explorer + admin console + analytics + ETL, all in one container with no broker, no Redis, no docker-compose with five services.
+PostgreSQL admin and SQL studio with an AI copilot and light analytics. One process, one browser tab, state in `~/.tusk`.
 
 ## What it is
 
-Tusk Studio combines what would normally be 4-5 separate tools:
+The tool you open every day to work with your Postgres:
 
-- **A SQL editor** with multi-tab, schema autocomplete, results table/map/chart, AI Copilot.
-- **A schema visualizer** that draws your tables + foreign keys as an interactive graph.
-- **An auto-explore profile tool** that samples a table and emits per-column statistics.
+- **A SQL editor** with tabs, schema autocomplete, results as table / chart / map, and an AI Copilot grounded in the real catalog.
+- **A schema map** of tables and foreign keys, with Schema Watch and Data Contracts to catch drift.
+- **A table profiler** that samples a table and emits per-column statistics.
 - **A PostgreSQL admin console** for processes, locks, settings, backups, roles, extensions.
-- **A BI engine** for dashboards, embedded analytics, scheduled snapshots.
-- **A cluster mode** (via the `tusk-cluster` plugin) for distributed query execution.
+- **Dashboards** built in, plus scheduled jobs and notifications.
+- **An MCP server** so agents can query your connections read-only with your permissions.
 
 You install one wheel. You run one process. You point a browser at it.
 
@@ -19,7 +19,7 @@ You install one wheel. You run one process. You point a browser at it.
 
 **Good fit**: small-to-medium businesses running one or a few Postgres databases, internal-tool teams that want dashboards + admin without spinning up Metabase + pgAdmin + Datadog, anyone tired of `docker-compose up` with 6 sidecars.
 
-**Not the right fit (yet)**: high-availability multi-replica deployments (single-process by design — [ADR 0001](https://github.com/tuskdata/tuskdata/blob/main/specs/architecture/adrs/0001-single-process-by-default.md)), petabyte-scale lakehouse warehouses (use Snowflake / BigQuery / Trino), real-time CDC pipelines (on the roadmap, not 0.x).
+**Not the right fit**: high-availability multi-replica deployments (single-process by design — [ADR 0001](https://github.com/tuskdata/tuskdata/blob/main/specs/architecture/adrs/0001-single-process-by-default.md)), warehouse-scale analytics (use Snowflake / BigQuery / Trino), heavy ETL orchestration (use Airflow / dbt).
 
 ## Top-level features
 
@@ -39,7 +39,6 @@ You install one wheel. You run one process. You point a browser at it.
 | **MCP server** | Let Claude Code, Cursor or any MCP client query your connections, read-only | [mcp.md](features/mcp.md) |
 | **Desktop window** | `tusk app`: Studio in a native window (preview) | [desktop.md](features/desktop.md) |
 | **Users & tokens** | Single vs multi-user mode, sessions, personal API tokens, audit log | [auth.md](features/auth.md) |
-| **Cluster** | Distributed query execution (tusk-cluster plugin) | (later) |
 
 ## Get started
 

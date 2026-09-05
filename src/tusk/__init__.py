@@ -1,4 +1,4 @@
-"""Tusk - Modern data platform"""
+"""Tusk - PostgreSQL admin and SQL studio with an AI copilot."""
 
 # Resolve from the installed package metadata so version drift between
 # pyproject.toml and __init__.py is impossible. Falls back to the literal
