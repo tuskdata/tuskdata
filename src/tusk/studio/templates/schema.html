@@ -25,8 +25,12 @@
             <span id="schema-truncate-badge" class="chip chip-amber" style="display:none"
                   title="Backend capped the schema graph at 500 tables to keep the SVG renderer responsive."></span>
         </div>
-        <button id="schema-autolayout" class="btn btn-sm" title="Recompute deterministic grid layout">
+        <button id="schema-autolayout" class="btn btn-sm" title="Arrange tables by their foreign keys">
             <i data-lucide="layout-grid"></i>Auto-layout
+        </button>
+        <button id="schema-compact" class="btn btn-sm" title="Compact: show only keys per table; double-click a table to expand it"
+                aria-pressed="false">
+            <i data-lucide="rows-3"></i><span id="schema-compact-label">Compact</span>
         </button>
         <button id="schema-fit" class="btn btn-sm" title="Fit diagram to viewport">
             <i data-lucide="maximize-2"></i>Fit
@@ -97,5 +101,10 @@
 {% endblock %}
 
 {% block scripts %}
+{% if use_cdn is defined and use_cdn %}
+<script src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>
+{% else %}
+<script src="/static/vendor/dagre.min.js"></script>
+{% endif %}
 <script src="/static/schema.js"></script>
 {% endblock %}

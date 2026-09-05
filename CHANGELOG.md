@@ -2,7 +2,20 @@
 
 All notable changes to Tusk will be documented in this file.
 
-## [Unreleased]
+## [0.4.37] - 2026-09-05 — Schema diagrams that scale
+
+- **Schema: big schemas are readable.** Above 25 tables the diagram opens in
+  **Compact** mode (keys only, "N more columns" footer; double-click a table
+  to expand it). **Auto-layout** is now a real graph layout: Dagre over the
+  foreign keys using the measured card sizes (no overlaps), one block per
+  name prefix (`leasing_*`, `billing_*`…) or connected component, blocks
+  packed into rows to fit the screen, captions per block. Hub tables
+  referenced by a large share of the schema get a **N refs** badge and their
+  lines are drawn only when selected. Runs automatically the first time a
+  connection is opened; zoom-out floor lowered so **Fit** shows everything.
+- Data page: the pipeline canvas's Dagre script was missing from the vendor
+  set locally (`scripts/vendor.sh` already lists it) — documented; Schema
+  loads it the same way (CDN or vendored).
 
 - **`tusk studio` no longer orphans the server** when the launcher is
   terminated: SIGINT/SIGTERM are forwarded to the granian child and its

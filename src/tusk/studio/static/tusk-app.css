@@ -305,6 +305,14 @@ input:focus-visible+.switch{box-shadow:0 0 0 3px rgba(212,80,43,.25)}
 .entity-row .col-type{color:var(--fg-3);font-size:10.5px}
 .entity-row .pk{color:var(--accent-amber)}
 .entity-row .fk{color:var(--accent-violet)}
+/* Compact mode: only PK/FK rows, plus a footer that expands the table */
+.entity-more{display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:11px;color:var(--fg-3);background:var(--surface-2);cursor:pointer;border-top:1px solid var(--border)}
+.entity-more:hover{color:var(--brand)}
+.entity-more svg{width:12px;height:12px}
+.entity.expanded .entity-head{border-left:3px solid var(--brand)}
+.btn[aria-pressed="true"]{background:var(--brand-soft);border-color:var(--brand);color:var(--brand)}
+.entity-head .hub-chip{margin-left:6px;font-size:10px;padding:1px 5px}
+.entity-group-label{position:absolute;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-4);pointer-events:none;white-space:nowrap}
 .relations svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 .relations path{stroke:var(--fg-4);stroke-width:1.5;fill:none;stroke-dasharray:4 3}
 .relations path.related{stroke:var(--brand);stroke-width:2;stroke-dasharray:none}

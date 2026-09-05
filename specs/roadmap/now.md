@@ -77,14 +77,26 @@ Data Contracts, layer 2: contracts are inferred, not written.
 Decided in May (`later/tusk-bi-to-core.md`). Own release so any breakage
 is isolatable. One wheel to deploy instead of two.
 
-## 0.4.37 — docs site + component library (done, unreleased)
+## 0.4.37 — docs site, component library, schema diagrams that scale (shipped)
 
-Shipped on main after 0.4.36: generated screenshots (`scripts/demo_db.py`,
-`scripts/docs_screenshots.py`), Scheduled/Data/Notifications pages, GitHub
-Pages workflow (needs Pages enabled once), the macro library rebuilt on the
-design tokens with a render test, and three fixes found on the way
-(orphaned granian on SIGTERM, job names, compact dtypes in Data preview).
-Tag it as 0.4.37 with the next fix batch.
+Generated screenshots and demo database, Scheduled/Data/Notifications
+pages, GitHub Pages workflow, macro library rebuilt on the design tokens,
+and the Schema page made usable on real schemas: compact cards above 25
+tables, Dagre auto-layout per prefix block with hub-edge pruning, block
+captions, hub badges, first-open auto-arrange. Plus the orphaned-granian
+fix, job names, compact dtypes.
+
+## 0.4.38 — schema navigation + one metadata store (~1 week)
+
+- **Schema navigation**: table search that jumps and centres (reuse ⌘K),
+  filter by schema/prefix, "only related" toggle that hides everything but
+  the selected table's neighbourhood and re-lays it out. Minimap if cheap.
+- **`tusk.core.meta`**: one module owning every SQLite connection (today 55
+  `sqlite3.connect` sites in 16 files, 9 `.db` files). `connect(name)` plus a
+  30-line dialect shim; no behaviour change; existing tests as the net.
+  Collapse the per-component files into `tusk.db` (+ `plugins/<id>.db`) with
+  a one-time migration on boot. This is the cheap insurance that makes a
+  future Postgres meta backend a bounded job, not a rewrite.
 
 ## 0.5.0 — when Apple approves
 

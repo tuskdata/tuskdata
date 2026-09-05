@@ -1,4 +1,4 @@
-// Tusk Schema Viewer (v0.4.4)
+// Tusk Schema Viewer (v0.4.37)
 // Real ER diagram for a chosen Postgres connection.
 //
 // Responsibilities:
@@ -8,6 +8,9 @@
 //   • Persist drag-stop layout (debounced 500ms)
 //   • Pan + zoom via wheel + space-drag
 //   • Click entity → highlight related (FK neighbors)
+//   • Compact mode (keys only) for big schemas; double-click expands a table
+//   • Auto-layout: Dagre over the FK graph using measured box sizes, isolated
+//     tables packed in a grid below; masonry fallback when Dagre is missing
 
 (function () {
     'use strict';
@@ -24,7 +27,16 @@
         spaceDown: false,
         selected: null,      // currently focused table name
         saveTimer: null,
+        compact: false,      // keys-only boxes (auto when many tables)
+        expanded: new Set(), // tables shown in full while compact
+        layoutSource: 'grid',
+        hubs: new Set(),     // tables referenced by a large share of the schema
+        groups: [],          // [{label, tables}] for the block labels
     };
+
+    const COMPACT_THRESHOLD = 25;   // tables; above this compact mode is the default
+    const DAGRE_MAX_TABLES = 250;
+    const MIN_ZOOM = 0.08;   // above this Dagre gets slow; use the masonry packer
 
     // Refs (assigned after DOMContentLoaded)
     const els = {};
@@ -45,6 +57,8 @@
         els.zoomLabel = document.getElementById('schema-zoom-label');
         els.statusText = document.getElementById('schema-status-text');
         els.btnAuto = document.getElementById('schema-autolayout');
+        els.btnCompact = document.getElementById('schema-compact');
+        els.compactLabel = document.getElementById('schema-compact-label');
         els.btnFit = document.getElementById('schema-fit');
         els.btnZoomIn = document.getElementById('schema-zoom-in');
         els.btnZoomOut = document.getElementById('schema-zoom-out');
@@ -105,7 +119,8 @@
             });
         }
 
-        if (els.btnAuto) els.btnAuto.addEventListener('click', autoLayout);
+        if (els.btnAuto) els.btnAuto.addEventListener('click', () => { autoLayout(); fitToViewport(); });
+        if (els.btnCompact) els.btnCompact.addEventListener('click', toggleCompact);
         if (els.btnFit) els.btnFit.addEventListener('click', fitToViewport);
         if (els.btnZoomIn) els.btnZoomIn.addEventListener('click', () => zoomBy(1.2));
         if (els.btnZoomOut) els.btnZoomOut.addEventListener('click', () => zoomBy(1 / 1.2));
@@ -161,7 +176,19 @@
         state.totalTables = data.total_tables || state.tables.length;
         state.sizes = {};
         state.selected = null;
-        render();
+        state.expanded = new Set();
+        state.layoutSource = data.layout_source || 'saved';
+        computeHubs();
+        state.compact = readCompactPref(connId, state.tables.length > COMPACT_THRESHOLD);
+        updateCompactButton();
+        render(() => {
+            // Nobody has arranged this schema yet: place it by its FKs
+            // instead of the server's placeholder grid, and show it whole.
+            if (state.layoutSource !== 'saved') {
+                autoLayout();
+            }
+            fitToViewport();
+        });
         if (els.summary) {
             const summary = `${state.tables.length} tables · ${state.fks.length} FKs`;
             els.summary.textContent = summary;
@@ -201,13 +228,63 @@
     }
 
     // ─── Render ──────────────────────────────────────────
-    function render() {
+    function render(afterMeasure) {
         renderEntities();
         // Wait one frame so we can measure box sizes before drawing edges
         requestAnimationFrame(() => {
             measureSizes();
             redrawEdges();
+            renderGroupLabels();
             applyTransform();
+            if (afterMeasure) afterMeasure();
+        });
+    }
+
+    // ─── Compact mode ────────────────────────────────────
+    function compactKey(connId) { return `tusk_schema_compact_${connId}`; }
+
+    function readCompactPref(connId, fallback) {
+        try {
+            const v = localStorage.getItem(compactKey(connId));
+            if (v === '1') return true;
+            if (v === '0') return false;
+        } catch (_) { /* ignore */ }
+        return fallback;
+    }
+
+    function toggleCompact() {
+        state.compact = !state.compact;
+        state.expanded = new Set();
+        try { localStorage.setItem(compactKey(state.connId), state.compact ? '1' : '0'); } catch (_) {}
+        updateCompactButton();
+        // Box heights change a lot between modes; re-arrange so nothing overlaps.
+        render(() => { autoLayout(); fitToViewport(); });
+    }
+
+    function updateCompactButton() {
+        if (!els.btnCompact) return;
+        els.btnCompact.setAttribute('aria-pressed', state.compact ? 'true' : 'false');
+        if (els.compactLabel) els.compactLabel.textContent = state.compact ? 'Compact' : 'Full';
+    }
+
+    function isCollapsed(tableName) {
+        return state.compact && !state.expanded.has(tableName);
+    }
+
+    function toggleExpanded(tableName) {
+        if (!state.compact) return;
+        if (state.expanded.has(tableName)) state.expanded.delete(tableName);
+        else state.expanded.add(tableName);
+        // Re-render just this box in place; its neighbours keep their spots.
+        const old = els.entitiesLayer.querySelector(`.entity[data-table="${cssEscape(tableName)}"]`);
+        const t = state.tables.find((x) => x.name === tableName);
+        if (!old || !t) return;
+        const fresh = buildEntity(t);
+        old.replaceWith(fresh);
+        if (window.lucide) lucide.createIcons();
+        requestAnimationFrame(() => {
+            state.sizes[tableName] = { w: fresh.offsetWidth, h: fresh.offsetHeight };
+            if (state.selected) selectTable(state.selected); else redrawEdges();
         });
     }
 
@@ -215,61 +292,88 @@
         const layer = els.entitiesLayer;
         layer.innerHTML = '';
         for (const t of state.tables) {
-            const pos = state.layout[t.name] || { x: 0, y: 0 };
-            const div = document.createElement('div');
-            div.className = 'entity';
-            div.dataset.table = t.name;
-            div.style.left = pos.x + 'px';
-            div.style.top = pos.y + 'px';
-
-            const head = document.createElement('div');
-            head.className = 'entity-head';
-            const icon = document.createElement('i');
-            icon.setAttribute('data-lucide', 'table-2');
-            head.appendChild(icon);
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = t.name;
-            head.appendChild(nameSpan);
-            const count = document.createElement('span');
-            count.className = 'row-count';
-            count.textContent = formatCount(t.row_count);
-            head.appendChild(count);
-            div.appendChild(head);
-
-            for (const col of t.columns) {
-                const row = document.createElement('div');
-                row.className = 'entity-row';
-                const dot = document.createElement('span');
-                if (col.is_pk) {
-                    dot.className = 'pk';
-                    dot.textContent = '●';
-                } else if (col.is_fk) {
-                    dot.className = 'fk';
-                    dot.textContent = '●';
-                } else {
-                    dot.style.opacity = '0';
-                    dot.textContent = '●';
-                }
-                row.appendChild(dot);
-                const cn = document.createElement('span');
-                cn.className = 'col-name';
-                cn.textContent = col.name;
-                row.appendChild(cn);
-                const ct = document.createElement('span');
-                ct.className = 'col-type';
-                ct.textContent = col.type;
-                row.appendChild(ct);
-                div.appendChild(row);
-            }
-
-            attachDrag(div);
-            div.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectTable(t.name);
-            });
-            layer.appendChild(div);
+            layer.appendChild(buildEntity(t));
         }
         if (window.lucide) lucide.createIcons();
+    }
+
+    function buildEntity(t) {
+        const pos = state.layout[t.name] || { x: 0, y: 0 };
+        const div = document.createElement('div');
+        div.className = 'entity';
+        if (state.compact && state.expanded.has(t.name)) div.classList.add('expanded');
+        div.dataset.table = t.name;
+        div.style.left = pos.x + 'px';
+        div.style.top = pos.y + 'px';
+
+        const head = document.createElement('div');
+        head.className = 'entity-head';
+        const icon = document.createElement('i');
+        icon.setAttribute('data-lucide', 'table-2');
+        head.appendChild(icon);
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = t.name;
+        head.appendChild(nameSpan);
+        const count = document.createElement('span');
+        count.className = 'row-count';
+        count.textContent = formatCount(t.row_count);
+        head.appendChild(count);
+        if (state.hubs.has(t.name)) {
+            const refs = document.createElement('span');
+            refs.className = 'chip chip-violet hub-chip';
+            refs.textContent = `${state.hubRefs[t.name]} refs`;
+            refs.title = `Referenced by ${state.hubRefs[t.name]} tables — its lines show when you select a table`;
+            head.appendChild(refs);
+        }
+        div.appendChild(head);
+
+        const collapsed = isCollapsed(t.name);
+        const shown = collapsed ? t.columns.filter((c) => c.is_pk || c.is_fk) : t.columns;
+        for (const col of shown) {
+            const row = document.createElement('div');
+            row.className = 'entity-row';
+            const dot = document.createElement('span');
+            if (col.is_pk) {
+                dot.className = 'pk';
+                dot.textContent = '●';
+            } else if (col.is_fk) {
+                dot.className = 'fk';
+                dot.textContent = '●';
+            } else {
+                dot.style.opacity = '0';
+                dot.textContent = '●';
+            }
+            row.appendChild(dot);
+            const cn = document.createElement('span');
+            cn.className = 'col-name';
+            cn.textContent = col.name;
+            row.appendChild(cn);
+            const ct = document.createElement('span');
+            ct.className = 'col-type';
+            ct.textContent = col.type;
+            row.appendChild(ct);
+            div.appendChild(row);
+        }
+        if (collapsed) {
+            const hidden = t.columns.length - shown.length;
+            const more = document.createElement('div');
+            more.className = 'entity-more';
+            more.innerHTML = `<i data-lucide="chevron-down"></i>${hidden > 0 ? `${hidden} more column${hidden === 1 ? '' : 's'}` : 'no other columns'}`;
+            more.title = 'Show all columns';
+            more.addEventListener('click', (e) => { e.stopPropagation(); toggleExpanded(t.name); });
+            div.appendChild(more);
+        }
+
+        attachDrag(div);
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectTable(t.name);
+        });
+        head.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            toggleExpanded(t.name);
+        });
+        return div;
     }
 
     function measureSizes() {
@@ -278,6 +382,21 @@
             const name = node.dataset.table;
             state.sizes[name] = { w: node.offsetWidth, h: node.offsetHeight };
         });
+    }
+
+    // Tables referenced by a large share of the schema (users, companies,
+    // tenants…). Their FK lines are drawn only when they are selected or
+    // related; at the overview they would cross everything and say nothing.
+    function computeHubs() {
+        const degree = {};
+        for (const fk of state.fks) {
+            if (fk.from_table === fk.to_table) continue;
+            degree[fk.to_table] = (degree[fk.to_table] || 0) + 1;
+        }
+        const n = state.tables.length;
+        const hubMin = Math.max(12, Math.round(n * 0.08));
+        state.hubs = new Set(Object.keys(degree).filter((t) => degree[t] >= hubMin));
+        state.hubRefs = degree;
     }
 
     // ─── Edge rendering ──────────────────────────────────
@@ -294,6 +413,8 @@
         const parts = [];
         for (let i = 0; i < state.fks.length; i++) {
             const fk = state.fks[i];
+            const touchesHub = state.hubs.has(fk.to_table) || state.hubs.has(fk.from_table);
+            if (touchesHub && !(related && (fk.from_table === state.selected || fk.to_table === state.selected))) continue;
             const from = anchorPoint(fk.from_table, 'right');
             const to = anchorPoint(fk.to_table, 'left');
             if (!from || !to) continue;
@@ -423,7 +544,7 @@
         const cy = e.clientY - rect.top;
 
         const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-        const newZoom = clamp(state.zoom * factor, 0.2, 3);
+        const newZoom = clamp(state.zoom * factor, MIN_ZOOM, 3);
         // Anchor zoom to cursor: keep the world-point under the cursor stable
         const worldX = (cx - state.pan.x) / state.zoom;
         const worldY = (cy - state.pan.y) / state.zoom;
@@ -457,7 +578,7 @@
     }
 
     function zoomBy(factor) {
-        const newZoom = clamp(state.zoom * factor, 0.2, 3);
+        const newZoom = clamp(state.zoom * factor, MIN_ZOOM, 3);
         // Zoom toward viewport center
         const rect = els.page.getBoundingClientRect();
         const cx = rect.width / 2;
@@ -481,12 +602,18 @@
         if (!bbox.w || !bbox.h) return;
         const rect = els.page.getBoundingClientRect();
         const padding = 60;
-        const sx = (rect.width - padding * 2) / bbox.w;
-        const sy = (rect.height - padding * 2) / bbox.h;
-        const z = clamp(Math.min(sx, sy), 0.2, 3);
+        // The toolbar sits at the top and the Schema watch panel at the
+        // bottom-left; keep the diagram out from under both.
+        const topPad = 72;
+        const watch = document.getElementById('schema-watch-host');
+        const bottomPad = watch && watch.offsetHeight ? watch.offsetHeight + 40 : padding;
+        const availW = rect.width - padding * 2;
+        const availH = rect.height - topPad - bottomPad;
+        const z = clamp(Math.min(availW / bbox.w, availH / bbox.h), MIN_ZOOM, 3);
         state.zoom = z;
-        state.pan.x = padding;
-        state.pan.y = padding;
+        // Centre the diagram in whichever axis has room left over.
+        state.pan.x = Math.max(padding, (rect.width - bbox.w * z) / 2);
+        state.pan.y = Math.max(topPad, topPad + (availH - bbox.h * z) / 2);
         applyTransform();
     }
 
@@ -499,35 +626,243 @@
     }
 
     // ─── Auto-layout ─────────────────────────────────────
+    const GAP_X = 60, GAP_Y = 40, MARGIN = 80;
+
+    function nodeSize(name) {
+        const t = state.tables.find((x) => x.name === name);
+        const measured = state.sizes[name];
+        if (measured && measured.w && measured.h) return measured;
+        // Estimate before the first paint: header 38px + 29px per visible row.
+        const rows = t ? (isCollapsed(name) ? t.columns.filter((c) => c.is_pk || c.is_fk).length + 1 : t.columns.length) : 4;
+        return { w: 240, h: 38 + rows * 29 };
+    }
+
     function autoLayout() {
-        // Deterministic grid sorted by FK degree (high → low) then name.
+        const names = state.tables.map((t) => t.name);
+        if (!names.length) return;
         const degree = {};
         for (const fk of state.fks) {
+            if (fk.from_table === fk.to_table) continue;
             degree[fk.from_table] = (degree[fk.from_table] || 0) + 1;
             degree[fk.to_table] = (degree[fk.to_table] || 0) + 1;
         }
-        const sorted = state.tables.slice().sort((a, b) => {
-            const da = degree[a.name] || 0;
-            const db = degree[b.name] || 0;
-            if (da !== db) return db - da;
-            return a.name.localeCompare(b.name);
-        });
-        const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, sorted.length))));
-        const cellW = 280, cellH = 240, mx = 80, my = 80;
-        for (let i = 0; i < sorted.length; i++) {
-            const r = Math.floor(i / cols);
-            const c = i % cols;
-            const name = sorted[i].name;
-            const pos = { x: mx + c * cellW, y: my + r * cellH };
-            state.layout[name] = pos;
+        // Hubs (users, companies, tenants…) are referenced by half the schema.
+        // Ranking through them stacks every referrer in one giant column, so
+        // their edges are ignored for placement; the lines are still drawn.
+        const hubMin = Math.max(12, Math.round(names.length * 0.08));
+        const hubs = new Set(names.filter((n) => (degree[n] || 0) >= hubMin));
+
+        // One block per group (prefix such as `leasing_`, or connected
+        // component when there are no prefixes), laid out independently and
+        // then packed into rows. Keeps related tables together and the whole
+        // thing roughly screen-shaped instead of 30 screens tall.
+        const blocks = [];
+        for (const group of groupTables(names, degree)) {
+            // Only edges that survive inside this block count: a table whose
+            // sole relation is to a hub, or to another block, is "loose" here
+            // and goes to the grid instead of becoming a one-node Dagre rank.
+            const keepHubEdges = group.length <= 12;
+            const inBlock = new Set(group);
+            const localDegree = {};
+            for (const fk of state.fks) {
+                if (fk.from_table === fk.to_table) continue;
+                if (!inBlock.has(fk.from_table) || !inBlock.has(fk.to_table)) continue;
+                if (!keepHubEdges && (hubs.has(fk.to_table) || hubs.has(fk.from_table))) continue;
+                localDegree[fk.from_table] = (localDegree[fk.from_table] || 0) + 1;
+                localDegree[fk.to_table] = (localDegree[fk.to_table] || 0) + 1;
+            }
+            const linked = group.filter((n) => localDegree[n]);
+            const loose = group.filter((n) => !localDegree[n]).sort();
+            const canDagre = typeof dagre !== 'undefined' && linked.length && linked.length <= DAGRE_MAX_TABLES;
+            let block;
+            if (canDagre) {
+                block = dagreBlock(linked, hubs, keepHubEdges);
+            } else if (linked.length) {
+                block = masonryBlock(linked.sort((a, b) => (degree[b] || 0) - (degree[a] || 0) || a.localeCompare(b)));
+            } else {
+                block = { pos: {}, w: 0, h: 0 };
+            }
+            if (loose.length) {
+                const grid = masonryBlock(loose);
+                for (const [n, p] of Object.entries(grid.pos)) block.pos[n] = { x: p.x, y: p.y + block.h + (block.h ? GAP_Y : 0) };
+                block.w = Math.max(block.w, grid.w);
+                block.h += (block.h ? GAP_Y : 0) + grid.h;
+            }
+            blocks.push(block);
+        }
+        packBlocks(blocks);
+
+        for (const name of names) {
+            const pos = state.layout[name];
             const node = els.entitiesLayer.querySelector(`.entity[data-table="${cssEscape(name)}"]`);
-            if (node) {
+            if (node && pos) {
                 node.style.left = pos.x + 'px';
                 node.style.top = pos.y + 'px';
             }
         }
         redrawEdges();
+        renderGroupLabels();
         saveLayoutDebounced();
+    }
+
+    // A small caption above each prefix group ("leasing · 24 tables"). Placed
+    // at the group's top-left, so it survives reloads and most drags.
+    function renderGroupLabels() {
+        els.entitiesLayer.querySelectorAll('.entity-group-label').forEach((n) => n.remove());
+        const names = state.tables.map((t) => t.name);
+        if (names.length <= COMPACT_THRESHOLD) return;
+        for (const group of groupTables(names, {})) {
+            const label = commonPrefix(group);
+            if (!label || group.length < 3) continue;
+            let minX = Infinity, minY = Infinity;
+            for (const n of group) {
+                const pos = state.layout[n];
+                if (!pos) continue;
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+            }
+            if (!isFinite(minX)) continue;
+            const el = document.createElement('div');
+            el.className = 'entity-group-label';
+            el.textContent = `${label} · ${group.length} tables`;
+            el.style.left = minX + 'px';
+            el.style.top = (minY - 26) + 'px';
+            els.entitiesLayer.appendChild(el);
+        }
+    }
+
+    function commonPrefix(names) {
+        const keys = new Set(names.map((n) => {
+            const bare = n.includes('.') ? n.split('.').pop() : n;
+            const i = bare.indexOf('_');
+            return i > 0 ? bare.slice(0, i) : '';
+        }));
+        return keys.size === 1 ? [...keys][0] : '';
+    }
+
+    // Groups: by name prefix when the schema uses them (Django apps, Rails
+    // engines, `billing_*`), otherwise by connected component. Prefix groups
+    // need at least 3 tables; the rest fall into one shared group.
+    function groupTables(names, degree) {
+        const byPrefix = new Map();
+        for (const n of names) {
+            const bare = n.includes('.') ? n.split('.').pop() : n;
+            const i = bare.indexOf('_');
+            const key = i > 0 ? bare.slice(0, i) : '';
+            if (!byPrefix.has(key)) byPrefix.set(key, []);
+            byPrefix.get(key).push(n);
+        }
+        const groups = [];
+        const rest = [];
+        for (const [key, list] of byPrefix) {
+            if (key && list.length >= 3) groups.push(list);
+            else rest.push(...list);
+        }
+        if (groups.length >= 2) {
+            if (rest.length) groups.push(rest);
+            return groups.sort((a, b) => b.length - a.length);
+        }
+        // No usable prefixes: connected components, big ones first.
+        const adj = new Map();
+        for (const fk of state.fks) {
+            if (fk.from_table === fk.to_table) continue;
+            if (!adj.has(fk.from_table)) adj.set(fk.from_table, new Set());
+            if (!adj.has(fk.to_table)) adj.set(fk.to_table, new Set());
+            adj.get(fk.from_table).add(fk.to_table);
+            adj.get(fk.to_table).add(fk.from_table);
+        }
+        const seen = new Set();
+        const comps = [];
+        const loose = [];
+        for (const n of names) {
+            if (seen.has(n)) continue;
+            if (!degree[n]) { loose.push(n); seen.add(n); continue; }
+            const comp = [];
+            const stack = [n];
+            while (stack.length) {
+                const x = stack.pop();
+                if (seen.has(x)) continue;
+                seen.add(x);
+                comp.push(x);
+                for (const y of adj.get(x) || []) if (!seen.has(y)) stack.push(y);
+            }
+            comps.push(comp);
+        }
+        comps.sort((a, b) => b.length - a.length);
+        if (loose.length) comps.push(loose);
+        return comps;
+    }
+
+    // Layered layout of one block: referencing tables left, referenced right.
+    // Returns {pos: {name: {x, y}} relative to the block origin, w, h}.
+    function dagreBlock(names, hubs, keepHubEdges) {
+        const g = new dagre.graphlib.Graph({ multigraph: false });
+        g.setGraph({ rankdir: 'LR', nodesep: GAP_Y, ranksep: GAP_X + 30, marginx: 0, marginy: 0 });
+        g.setDefaultEdgeLabel(() => ({}));
+        const set = new Set(names);
+        for (const n of names) {
+            const size = nodeSize(n);
+            g.setNode(n, { width: size.w, height: size.h });
+        }
+        for (const fk of state.fks) {
+            if (fk.from_table === fk.to_table) continue;
+            if (!set.has(fk.from_table) || !set.has(fk.to_table)) continue;
+            if (!keepHubEdges && (hubs.has(fk.to_table) || hubs.has(fk.from_table))) continue;
+            g.setEdge(fk.from_table, fk.to_table);
+        }
+        dagre.layout(g);
+        const pos = {};
+        let w = 0, h = 0;
+        for (const n of names) {
+            const nd = g.node(n);
+            if (!nd) continue;
+            // Dagre gives centres; we position by top-left.
+            pos[n] = { x: Math.round(nd.x - nd.width / 2), y: Math.round(nd.y - nd.height / 2) };
+            w = Math.max(w, pos[n].x + nd.width);
+            h = Math.max(h, pos[n].y + nd.height);
+        }
+        return { pos, w, h };
+    }
+
+    // Column packer for one block: fixed column width, each column grows by
+    // the real height of what it holds. Never overlaps, whatever the sizes.
+    function masonryBlock(names) {
+        const cols = Math.max(1, Math.ceil(Math.sqrt(names.length * 1.6)));
+        // Column width follows the widest card: long table names make cards
+        // wider than the 220px minimum, and a fixed column would overlap them.
+        const maxW = Math.max(240, ...names.map((n) => nodeSize(n).w));
+        const colW = maxW + GAP_X;
+        const heights = new Array(cols).fill(0);
+        const pos = {};
+        for (const n of names) {
+            let c = 0;
+            for (let i = 1; i < cols; i++) if (heights[i] < heights[c]) c = i;
+            const size = nodeSize(n);
+            pos[n] = { x: c * colW, y: Math.round(heights[c]) };
+            heights[c] += size.h + GAP_Y;
+        }
+        return { pos, w: Math.min(names.length, cols) * colW - GAP_X, h: Math.max(0, Math.max(...heights) - GAP_Y) };
+    }
+
+    // Shelf-pack the blocks into rows so the canvas ends up roughly 16:9.
+    function packBlocks(blocks) {
+        const gap = GAP_X * 2;
+        const area = blocks.reduce((a, b) => a + (b.w + gap) * (b.h + gap), 0);
+        const rect = els.page.getBoundingClientRect();
+        const aspect = rect.height > 0 ? Math.max(1.2, rect.width / rect.height) : 16 / 9;
+        const widest = Math.max(...blocks.map((b) => b.w));
+        const rowLimit = Math.max(widest + MARGIN, Math.sqrt(area * aspect));
+        let x = MARGIN, y = MARGIN, rowH = 0;
+        for (const b of blocks) {
+            if (x > MARGIN && x + b.w > rowLimit) {
+                x = MARGIN;
+                y += rowH + gap;
+                rowH = 0;
+            }
+            for (const [n, p] of Object.entries(b.pos)) state.layout[n] = { x: x + p.x, y: y + p.y };
+            x += b.w + gap;
+            rowH = Math.max(rowH, b.h);
+        }
     }
 
     // ─── Helpers ─────────────────────────────────────────

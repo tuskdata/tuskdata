@@ -7,7 +7,6 @@ import time
 import uuid
 from pathlib import Path
 
-import msgspec
 from litestar import Controller, Request, get, post, put, delete
 from litestar.params import Body
 from litestar.response import Response
@@ -486,6 +485,9 @@ class APIController(Controller):
                 layout = json.loads(layout_path.read_text())
             except Exception:
                 layout = {}
+        # Tell the client whether these positions were chosen by a person.
+        # The frontend runs its FK-aware auto-layout when they were not.
+        layout_source = "saved" if layout else "grid"
 
         # Build deterministic grid for any tables not in saved layout. Sorting
         # by FK count then name gives a stable "popular tables in the middle"
@@ -516,6 +518,7 @@ class APIController(Controller):
             "tables": tables,
             "fks": fks,
             "layout": layout,
+            "layout_source": layout_source,
             "truncated": truncated,
             "total_tables": len(tables_map) if truncated else len(tables),
         }
