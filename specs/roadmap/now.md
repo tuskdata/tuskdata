@@ -1,117 +1,119 @@
-# Now — 2026-09-05
+# Now — 2026-09-06
 
-What's in flight or starting **this cycle (0.4.31 → 0.5.0)**. Higher-level than
-the task list — this is the "what does the user-visible product gain in the
-next weeks" view.
+What ships between here and 0.5.0, in order. Sizes are working days at
+the current pace (one medium release per session day); the calendar
+assumes 1-2 session days a week, so the whole list is roughly 4-5 months.
 
-## Context reset (2026-09-05)
+Positioning stays: **PostgreSQL admin and SQL studio with an AI copilot and
+light analytics.** Rule of thumb: one geo item and one admin item per
+cycle, never two geo cycles in a row.
 
-Three months idle, then a one-day revival: deps to Litestar 2.24 / Python
-3.13 / Polars 1.44, tusk-bi charts fixed (widgets.js was never loaded), AI
-grounding for large schemas, scheduled backups with destination + rotation,
-Windows console, MCP server via litestar-mcp, prod restart loop on the
-non-AVX VM fixed, plugin assets no longer wiped on worker recycle.
-Shipped as 0.4.28 – 0.4.30.
+Shipped this cycle: 0.4.28 – 0.4.37 (revival, deps, MCP + API tokens, Schema
+Watch, Data Contracts, Studio ergonomics, `tusk app` preview, tusk-bi into
+core, generated docs, component library on tokens, Schema diagrams that
+scale).
 
-Positioning agreed: **a modern pgAdmin with AI and lightweight analytics**,
-not a generic data platform. tusk-ci and tusk-security are gone, tusk-cluster
-is paused, Data/ETL is reduced (canvas stays, Ibis epics are dead), tusk-bi
-stays lean and moves to core. The May roadmap items in `later/` (semantic
-layer, CDC, HA, embedded SDK, license keys, notebooks) are parked.
+## 0.4.38 — Schema navigation + one metadata store (~1 week)
 
-**0.5.0 waits for the Apple Developer account** (needed to sign the desktop
-app). Until then everything ships as 0.4.x — one feature per release, each
-one deployable on its own, bugs found along the way go in the same release.
-
-## 0.4.31 — API tokens + MCP for everyone (~3-4 days)
-
-The foundation the rest builds on.
-- Per-user API tokens: `api_tokens` table, `tusk auth token create|list|revoke`,
-  `Authorization: Bearer` accepted by the session middleware. Scoped to the
-  user's connections/permissions.
-- MCP in multi-user mode via tokens. Every `tools/call` goes to the audit
-  log (user, tool, connection, SQL).
-- `run_query` on DuckDB/SQLite connections too; `list_saved_queries` +
-  run a saved query as a tool; `get_schema` also exposed as an MCP resource.
-- User identity in the HTTP access log.
-
-## 0.4.32 — Schema Watch (~2-3 days)
-
-Data Contracts, layer 1: the thing that evaluates them.
-- Scheduled kind `schema_watch` per connection: snapshot of tables /
-  columns / types / nullability / PK-FK / indexes (same catalog query the
-  Copilot uses), stored in SQLite, diffed against the previous run.
-- Diff → event `schema.changed` with the detail → Slack / webhook / in-app,
-  through the notification channels that already work end-to-end.
-- MCP tool `schema_changes(connection_id, since)`.
-
-## 0.4.33 — Frozen contracts (~3-4 days)
-
-Data Contracts, layer 2: contracts are inferred, not written.
-- "Freeze contract" on a connection or a set of tables: the current
-  snapshot becomes the expected schema. Rules that come for free: column
-  exists, type unchanged, not made nullable, PK/FK intact.
-- Contract shown as a table in the UI with ✅/⚠️ per table; every Schema
-  Watch run evaluates it; violations raise `contract.violated`.
-- Export to YAML is a button, not the workflow. Layer 3 (freshness, volume,
-  uniqueness rules — where YAML finally earns its place) comes after real use.
-
-## 0.4.34 — Studio ergonomics (~2 days)
-
-- Colour tabs and editor header by the connected server's colour.
-  Stops the DROP-on-prod-thinking-it's-dev class of accident.
-- Row cap for "open table" from the schema tree: `LIMIT` from a setting
-  instead of `SELECT *`.
-- AI Insight on EXPLAIN: wire the Copilot to the existing EXPLAIN viewer.
-- Custom XYZ tile provider for the map — small, we use geo.
-
-## 0.4.35 — `tusk app` (preview) (~1 day)
-
-- Optional extra `tuskdata[app]` (pywebview). `tusk app` boots Granian on a
-  free port and opens a native window; `tusk app --url http://...` wraps a
-  remote deploy instead. Labelled preview: no packaging, no signing, no
-  auto-update until the Apple account exists.
-
-## 0.4.36 — tusk-bi into core (~1-2 days, mechanical)
-
-Decided in May (`later/tusk-bi-to-core.md`). Own release so any breakage
-is isolatable. One wheel to deploy instead of two.
-
-## 0.4.37 — docs site, component library, schema diagrams that scale (shipped)
-
-Generated screenshots and demo database, Scheduled/Data/Notifications
-pages, GitHub Pages workflow, macro library rebuilt on the design tokens,
-and the Schema page made usable on real schemas: compact cards above 25
-tables, Dagre auto-layout per prefix block with hub-edge pruning, block
-captions, hub badges, first-open auto-arrange. Plus the orphaned-granian
-fix, job names, compact dtypes.
-
-## 0.4.38 — schema navigation + one metadata store (~1 week)
-
-- **Schema navigation**: table search that jumps and centres (reuse ⌘K),
-  filter by schema/prefix, "only related" toggle that hides everything but
-  the selected table's neighbourhood and re-lays it out. Minimap if cheap.
+- **Schema navigation**: search that jumps to and centres a table (reuse
+  ⌘K), filter by schema/prefix, **only related** toggle that hides
+  everything but the selected table's neighbourhood and re-lays it out.
 - **`tusk.core.meta`**: one module owning every SQLite connection (today 55
-  `sqlite3.connect` sites in 16 files, 9 `.db` files). `connect(name)` plus a
-  30-line dialect shim; no behaviour change; existing tests as the net.
-  Collapse the per-component files into `tusk.db` (+ `plugins/<id>.db`) with
-  a one-time migration on boot. This is the cheap insurance that makes a
-  future Postgres meta backend a bounded job, not a rewrite.
+  `sqlite3.connect` sites in 16 files, 9 `.db` files under `~/.tusk`).
+  `connect(name)` plus a small dialect shim; no behaviour change; the
+  existing suite is the net. Collapse the per-component files into
+  `tusk.db` (+ `plugins/<id>.db`) with a one-time migration on boot. This
+  is the cheap insurance that would make a Postgres meta backend a bounded
+  job — the backend itself is not planned.
+
+## 0.4.39 — Geo grounding for the Copilot (~1 week)
+
+Baseline (2026-09-05, statuos_dev, qwen3.5:9b): "show me the vegetarian
+restaurants in Piantini" → *no restaurant tables in this schema*. Three
+blind spots, all grounding:
+
+- **Spatial catalog**: PostGIS presence/version; per geometry column type
+  and SRID from `geometry_columns`; geography; lat/lon pairs; `h3` if
+  installed. A `### Spatial` prompt section with a short PostGIS cheat
+  sheet (`ST_Contains`, `ST_DWithin` on geography for metres,
+  `ST_SetSRID(ST_MakePoint(lon, lat), 4326)`, keep the geometry in SELECT).
+- **Column profiles**: for `jsonb` and low-cardinality text columns, top-20
+  keys/values from a 5k-row sample, stored with the Schema Watch snapshot.
+- **Gazetteer**: tables that look like places (polygon + name column); at
+  question time look up capitalised tokens of the prompt (`ILIKE` /
+  `pg_trgm`) and inject the matches. Deterministic retrieval beats
+  tool-calling with small models.
+- **Map**: Copilot SQL keeps the geometry column and Studio opens the map
+  tab; MCP `run_query` returns GeoJSON when a geometry column is present.
+
+## 0.4.40 — Kubernetes for real + published roadmap tells the truth (~2-3 days)
+
+Waits for the homelab k3s cluster.
+
+- Publish `ghcr.io/tuskdata/tuskdata:<tag>` from `publish.yml` on tag.
+- `TUSK_AUTH_MODE` (and `TUSK_PG_BIN_PATH`) as environment overrides.
+- `deploy/k8s/` manifest (Namespace, StatefulSet 1 replica, PVC, Service,
+  Traefik Ingress); `docs/deployment/kubernetes.md` corrected (image, env,
+  the real `~/.tusk` files, no HA date); tested: PVC survives restart,
+  `rollout restart` upgrade, liveness probe restarts a hung pod.
+- Move `roadmap/later/*` to `roadmap/archive/` with a dated reason each;
+  rewrite `next.md`; drop the public promises (Embedded SDK "0.7.x" in
+  analytics.md, HA "0.9.x" in kubernetes.md); rewrite TODO.md / TODO.es.md.
+
+## 0.4.41 — Alerts on a value + dashboards as files (~1 week)
+
+- **Alert rules**: *when <value> <op> <threshold> [for <duration>] → notify
+  <channel>*. Sources: a saved query, a dashboard widget, or an Admin
+  metric (connections %, replication lag, bloat, disk). Reuses the
+  notification channels and the scheduler tick. No write-back / reverse
+  ETL.
+- `tusk bi export` / `tusk bi import` in YAML (the JSON endpoint exists).
+  No `tusk apply`, no published JSON Schema.
+
+## 0.4.42 — Spatial health + geodata import (~1.5 weeks)
+
+- **Spatial health** in Admin, Schema and Explore: geometry columns without
+  a GIST index, SRID 0 or mixed, `ST_IsValid` counts, extent and a sample
+  map in Explore, SRID/type on Schema cards, SRID/type changes in Schema
+  Watch and Contracts.
+- **Import to PostGIS** from Data: GeoJSON / GeoParquet / GPKG / Shapefile
+  via DuckDB spatial → table with geometry column, SRID and GIST. One-click
+  OSM (bbox download already exists) → PostGIS with `tags jsonb`.
+
+## 0.4.43 — Advisor (~2 weeks)
+
+Admin → Advisor: top queries from `pg_stat_statements` by total time,
+missing-index suggestions from EXPLAIN, the existing AI plan insight
+reading the result. Recommends, never applies. First to drop if time runs
+out; the product does not limp without it.
+
+## 0.4.44 — Vector tiles + H3 (~4 days)
+
+- `/api/tiles/{saved_query_id}/{z}/{x}/{y}` with `ST_AsMVT`, so MapLibre
+  clients (the territorial platform) consume Tusk layers directly.
+- "Aggregate to H3 resolution N" on the Explore map when `h3-pg` exists.
 
 ## 0.5.0 — when Apple approves
 
-- Desktop packaging: PyInstaller/Briefcase, Developer ID + notarization,
-  Windows signing, auto-update.
-- Docs site live on GitHub Pages (workflow exists; enable Pages in repo settings).
-- Test coverage ≥ 45% (35% today; `routes/data.py`, `routes/auth.py`,
+Desktop packaging (own plan) plus a hygiene cut, no new features:
+
+- Test coverage ≥ 45 % (35 % today; `routes/data.py`, `routes/auth.py`,
   `admin/backup.py`, `engines/postgres.py` are the gap).
-- Ibis moved to an optional extra (prod has run with `ibis: unavailable`
-  for months; Data page falls back to Polars anyway).
-- TODO.md / TODO.es.md rewritten to reality.
+- Litestar 2.24 path-param deprecations (`{id:int}` → `FromPath[int]`),
+  before 3.0 lands (beta expected late 2026).
+- Ibis to an optional extra (prod has run with `ibis: unavailable`).
+- Docs complete for everything above.
+
+## Out, and the docs say so
+
+HA / multi-replica, Embedded SDK and license keys, semantic layer / OSI /
+agentic anomaly, CDC, notebooks, tusk-cluster (paused), more chart types
+in Analytics. Any of these comes back only when a named user asks for it.
 
 ## Open nits (fold into whichever release touches the area)
 
 - Horizontal scroll appears after confirmation modals in BI.
-- Litestar 2.24 deprecates inferred path params (`{id:int}` → `FromPath[int]`);
-  dozens of handlers, do before 3.0 lands (beta expected late 2026).
+- Copilot with a 9B model invents joins when the schema is thin
+  (`orders.product_id` in the demo); geo grounding will not fix that one —
+  a bigger model or a "verify columns" post-check would.
 - Gradual adoption of litestar-htmx (installed, unused) when touching routes.
