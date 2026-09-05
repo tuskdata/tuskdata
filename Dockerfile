@@ -9,7 +9,10 @@
 # Build args:
 #   TUSK_CLUSTER_REF   tusk-cluster ref (default: v0.2.1, public repo)
 #   WITH_CLUSTER       1 | 0 — bake tusk-cluster into the image
-#                      (default: 1)
+#                      (default: 0 — the plugin is paused)
+#   TUSK_POLARS        compat | avx — polars binary runtime. `compat` (default)
+#                      runs on any x86-64 (no AVX2 needed); `avx` is faster
+#                      but dies with SIGILL on CPUs without AVX2 (QEMU, old Xeons).
 #
 # Runtime env:
 #   TUSK_DEBUG, TUSK_LOG_LEVEL, TUSK_LOG_FORMAT, TUSK_QUERY_TIMEOUT
@@ -20,7 +23,8 @@
 FROM python:3.13-slim AS builder
 
 ARG TUSK_CLUSTER_REF=v0.2.1
-ARG WITH_CLUSTER=1
+ARG WITH_CLUSTER=0
+ARG TUSK_POLARS=compat
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -41,6 +45,19 @@ COPY src/ ./src/
 # Build TuskData itself + the [all] extras into the venv.
 RUN uv venv /opt/tusk-venv \
     && uv pip install --python /opt/tusk-venv/bin/python --no-cache "tuskdata[all] @ ."
+
+# Polars ≥1.37 ships its binary in a separate runtime package; PyPI's default
+# is `polars-runtime-32` (AVX2). On a CPU without AVX2 `import polars` aborts
+# with "Illegal instruction" and the container restart-loops. Install the
+# baseline runtime and drop the AVX one unless TUSK_POLARS=avx.
+RUN set -e ; \
+    PV=$(/opt/tusk-venv/bin/python -c "import importlib.metadata as m; print(m.version('polars'))") ; \
+    if [ "${TUSK_POLARS}" != "avx" ]; then \
+        echo "[polars] installing polars-runtime-compat==$PV" ; \
+        uv pip install --python /opt/tusk-venv/bin/python --no-cache "polars-runtime-compat==$PV" ; \
+        uv pip uninstall --python /opt/tusk-venv/bin/python polars-runtime-32 polars-runtime-64 2>/dev/null || true ; \
+    fi ; \
+    /opt/tusk-venv/bin/python -c "import polars, importlib.metadata as m; print('[polars]', polars.__version__, [d.metadata['Name'] for d in m.distributions() if d.metadata['Name'].startswith('polars-runtime')])"
 
 # Optionally bundle the public tusk-cluster plugin. Skip with WITH_CLUSTER=0
 # if you don't need distributed query support.
