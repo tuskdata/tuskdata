@@ -1,6 +1,6 @@
 {# Map Components — MapLibre GL
 
-   Reusable macros for MapLibre GL map containers with dark theme.
+   Reusable macros for MapLibre GL map containers (theme-aware popups).
    ALL maps in Tusk use MapLibre GL (no Leaflet).
 
    Macros: map_assets, map_container, map_dark_styles, carto_dark_style
@@ -29,35 +29,35 @@
        rounded: Whether to round corners (default true)
 #}
 <div id="{{ id }}"
-     class="w-full bg-[#0d1117] {% if rounded %}rounded-lg overflow-hidden{% endif %} {{ extra_classes }}"
+     class="w-full bg-surface-2 {% if rounded %}rounded-lg overflow-hidden{% endif %} {{ extra_classes }}"
      style="height: {{ height }}; min-height: 200px;">
 </div>
 {% endmacro %}
 
 
 {% macro map_dark_styles() %}
-{# Dark theme CSS for MapLibre popups. Outputs a <style> block.
+{# Token-based CSS for MapLibre popups (follows the app theme). Outputs a <style> block.
    Include once per page that uses map popups.
 #}
 <style>
 .maplibregl-popup-content {
-    background: #161b22 !important;
-    color: #c9d1d9 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+    background: var(--surface) !important;
+    color: var(--fg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r) !important;
+    box-shadow: var(--shadow-lg) !important;
 }
 .maplibregl-popup-tip {
-    border-top-color: #161b22 !important;
+    border-top-color: var(--surface) !important;
 }
 .maplibregl-popup-close-button {
-    color: #8b949e;
+    color: var(--fg-3);
     font-size: 16px;
     padding: 4px 8px;
 }
 .maplibregl-popup-close-button:hover {
-    color: white;
-    background: rgba(255,255,255,0.1);
+    color: var(--fg);
+    background: var(--surface-2);
 }
 .geo-popup .maplibregl-popup-content {
     background: transparent !important;

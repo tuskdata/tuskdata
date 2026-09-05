@@ -21,6 +21,13 @@ All notable changes to Tusk will be documented in this file.
   ("Backup Demo shop"), not its id.
 - Data preview headers show compact column types (`Decimal(38,2)`,
   `Datetime[us, UTC]`) instead of the full Polars repr.
+- **Component library rebuilt on the design tokens.** The MiniJinja macros
+  in `templates/components/` now use the v0.4 classes (`.chip`, `.btn`,
+  `.field`, `.dot`, new `.alert`, `.empty`, `.modal-*`, `.switch`) instead
+  of the pre-redesign palette; 23 macros nobody called were removed
+  (tables, tooltip, progress bar, spinner, confirmation dialog, extra
+  cards). Signatures of the macros plugins use are unchanged. A render
+  test covers every macro and rejects hard-coded colours.
 
 ## [0.4.36] - 2026-09-05 — tusk-bi is part of TuskData
 

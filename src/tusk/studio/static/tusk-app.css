@@ -133,6 +133,53 @@ body[data-theme="dark"] .btn-primary{background:var(--fg);color:var(--ink)}
 
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-sm)}
 
+/* ============ COMPONENT LIBRARY (templates/components/*.html) ============ */
+/* Token utilities so templates never spell a colour */
+.text-fg-2{color:var(--fg-2)}.text-fg-3{color:var(--fg-3)}.text-fg-4{color:var(--fg-4)}
+.bg-surface{background:var(--surface)}.bg-surface-2{background:var(--surface-2)}.border-line{border-color:var(--border)}
+.mono{font-family:var(--font-mono)}
+/* buttons */
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-danger:hover{opacity:.9;background:var(--red)}
+.icon-btn-sm{width:26px;height:26px}.icon-btn-sm svg{width:14px;height:14px}
+.icon-btn-danger:hover{color:var(--red);background:rgba(204,46,61,.08)}
+/* status dots (extends .dot) */
+.dot.violet{background:var(--accent-violet)}.dot.neutral{background:var(--fg-4)}
+.dot-xs{width:5px;height:5px}.dot-md{width:10px;height:10px}
+.dot.pulse{animation:tusk-pulse 1.4s ease-in-out infinite}
+@keyframes tusk-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* alert */
+.alert{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface-2);color:var(--fg-2)}
+.alert svg{width:16px;height:16px;flex-shrink:0;margin-top:1px}
+.alert .icon-btn{margin:-6px -6px -6px 0}
+.alert-info{border-color:rgba(111,90,214,.35);background:rgba(111,90,214,.08);color:var(--accent-violet)}
+.alert-success{border-color:rgba(31,138,76,.35);background:rgba(31,138,76,.08);color:var(--green)}
+.alert-warning{border-color:rgba(176,119,0,.35);background:rgba(176,119,0,.08);color:var(--accent-amber)}
+.alert-error{border-color:rgba(204,46,61,.35);background:rgba(204,46,61,.08);color:var(--red)}
+/* empty state */
+.empty{text-align:center;padding:48px 16px;color:var(--fg-3);font-size:13.5px}
+.empty>svg{width:40px;height:40px;margin:0 auto 12px;color:var(--fg-4)}
+.empty-title{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:4px}
+.empty a,.empty button{color:var(--brand);font-weight:500;background:none;border:0;cursor:pointer;font:inherit}
+.empty a:hover,.empty button:hover{text-decoration:underline}
+/* modal */
+.modal-mask{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,15,14,.45);backdrop-filter:blur(2px)}
+.modal-box{position:relative;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-xl);max-height:90vh;display:flex;flex-direction:column}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:15px;font-weight:600;margin:0;display:flex;align-items:center;gap:8px}
+.modal-head.danger h3{color:var(--red)}
+.modal-body{padding:16px 20px;overflow:auto}
+/* switch (toggle macro) */
+.switch{position:relative;display:inline-block;width:36px;height:20px;border-radius:999px;background:var(--border-strong);transition:background .15s;flex-shrink:0}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+input:checked+.switch{background:var(--brand)}
+input:checked+.switch::after{transform:translateX(16px)}
+input:focus-visible+.switch{box-shadow:0 0 0 3px rgba(212,80,43,.25)}
+/* cards with a header, stat number */
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:transparent;border-left:0;border-right:0;border-top:0;font:inherit;color:inherit}
+.section-head h2{font-size:14px;font-weight:600;margin:0;display:flex;align-items:center;gap:8px}
+.stat-value{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+
 /* ============ STUDIO ============ */
 .studio-grid{display:grid;grid-template-rows:auto 1fr;height:calc(100vh - 56px)}
 .studio-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg);padding:0 12px;height:38px;gap:2px}

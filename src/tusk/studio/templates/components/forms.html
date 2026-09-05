@@ -1,68 +1,42 @@
-{# Form Components
+{# Form components — every field is a `.field` (studio-redesign.css): label,
+   control, optional hint. Buttons use `.btn` variants from tusk-app.css.
 
-   Macros: text_input, textarea_input, select_input, checkbox, toggle,
-           button, icon_button, form_group
+   Plain macros render name/value for classic forms and HTMX; the alpine_*
+   variants bind to Alpine state with x-model instead.
+
+   Macros: text_input, textarea, select_input, checkbox, toggle, button,
+           icon_button, alpine_input, alpine_select, alpine_textarea, form_group
 #}
 
 {% macro text_input(name, label="", value="", placeholder="", type="text", required=false, disabled=false, help="") %}
-<div>
-    {% if label %}
-    <label for="{{ name }}" class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <input type="{{ type }}"
-           id="{{ name }}"
-           name="{{ name }}"
-           value="{{ value }}"
-           placeholder="{{ placeholder }}"
-           {% if required %}required{% endif %}
-           {% if disabled %}disabled{% endif %}
-           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                  focus:outline-none focus:border-[#58a6ff] transition-colors
-                  disabled:opacity-50 disabled:cursor-not-allowed">
-    {% if help %}
-    <p class="mt-1 text-xs text-[#8b949e]">{{ help }}</p>
-    {% endif %}
+<div class="field">
+    {% if label %}<label for="{{ name }}">{{ label }}</label>{% endif %}
+    <input type="{{ type }}" id="{{ name }}" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"
+           {% if required %}required{% endif %} {% if disabled %}disabled{% endif %}>
+    {% if help %}<span class="hint">{{ help }}</span>{% endif %}
 </div>
 {% endmacro %}
 
 
-{% macro textarea(name, label="", value="", placeholder="", rows=4, required=false, disabled=false) %}
-<div>
-    {% if label %}
-    <label for="{{ name }}" class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <textarea id="{{ name }}"
-              name="{{ name }}"
-              placeholder="{{ placeholder }}"
-              rows="{{ rows }}"
-              {% if required %}required{% endif %}
-              {% if disabled %}disabled{% endif %}
-              class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                     focus:outline-none focus:border-[#58a6ff] transition-colors resize-y
-                     disabled:opacity-50 disabled:cursor-not-allowed">{{ value }}</textarea>
+{% macro textarea(name, label="", value="", placeholder="", rows=4, required=false, disabled=false, mono=false) %}
+<div class="field">
+    {% if label %}<label for="{{ name }}">{{ label }}</label>{% endif %}
+    <textarea id="{{ name }}" name="{{ name }}" placeholder="{{ placeholder }}" rows="{{ rows }}"
+              {% if required %}required{% endif %} {% if disabled %}disabled{% endif %}
+              class="resize-y {% if mono %}mono{% endif %}">{{ value }}</textarea>
 </div>
 {% endmacro %}
 
 
 {% macro select_input(name, options, label="", selected="", required=false, disabled=false) %}
-<div>
-    {% if label %}
-    <label for="{{ name }}" class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <select id="{{ name }}"
-            name="{{ name }}"
-            {% if required %}required{% endif %}
-            {% if disabled %}disabled{% endif %}
-            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                   focus:outline-none focus:border-[#58a6ff] transition-colors
-                   disabled:opacity-50 disabled:cursor-not-allowed">
+{# options: list of {value, label} dicts or plain strings #}
+<div class="field">
+    {% if label %}<label for="{{ name }}">{{ label }}</label>{% endif %}
+    <select id="{{ name }}" name="{{ name }}" {% if required %}required{% endif %} {% if disabled %}disabled{% endif %}>
         {% for opt in options %}
         {% set opt_value = opt.value if opt.value is defined else opt %}
         {% set opt_label = opt.label if opt.label is defined else opt %}
-        <option value="{{ opt_value }}"
-                {% if opt_value == selected %}selected{% endif %}>
-            {{ opt_label }}
-        </option>
+        <option value="{{ opt_value }}" {% if opt_value == selected %}selected{% endif %}>{{ opt_label }}</option>
         {% endfor %}
     </select>
 </div>
@@ -70,129 +44,59 @@
 
 
 {% macro checkbox(name, label, checked=false, disabled=false) %}
-<label class="flex items-center gap-2 cursor-pointer {% if disabled %}opacity-50 cursor-not-allowed{% endif %}">
-    <input type="checkbox"
-           name="{{ name }}"
-           {% if checked %}checked{% endif %}
-           {% if disabled %}disabled{% endif %}
-           class="w-4 h-4 rounded border-[#30363d] bg-[#0d1117] text-blue-500
-                  focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
-    <span class="text-sm">{{ label }}</span>
+<label class="flex items-center gap-2 text-sm cursor-pointer {% if disabled %}opacity-50 cursor-not-allowed{% endif %}">
+    <input type="checkbox" name="{{ name }}" class="accent-[var(--brand)]"
+           {% if checked %}checked{% endif %} {% if disabled %}disabled{% endif %}>
+    <span>{{ label }}</span>
 </label>
 {% endmacro %}
 
 
 {% macro toggle(name, label, checked=false, disabled=false) %}
-<label class="flex items-center gap-3 cursor-pointer {% if disabled %}opacity-50 cursor-not-allowed{% endif %}">
-    <div class="relative">
-        <input type="checkbox"
-               name="{{ name }}"
-               {% if checked %}checked{% endif %}
-               {% if disabled %}disabled{% endif %}
-               class="sr-only peer">
-        <div class="w-10 h-6 bg-[#30363d] rounded-full peer
-                    peer-checked:bg-blue-500 transition-colors"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform
-                    peer-checked:translate-x-4"></div>
-    </div>
-    <span class="text-sm">{{ label }}</span>
+{# On/off switch (`.switch`). The input stays in the form as a normal checkbox. #}
+<label class="flex items-center gap-3 text-sm cursor-pointer {% if disabled %}opacity-50 cursor-not-allowed{% endif %}">
+    <input type="checkbox" name="{{ name }}" class="sr-only"
+           {% if checked %}checked{% endif %} {% if disabled %}disabled{% endif %}>
+    <span class="switch" aria-hidden="true"></span>
+    <span>{{ label }}</span>
 </label>
 {% endmacro %}
 
 
 {% macro button(text, type="button", variant="primary", icon="", disabled=false, size="md", full_width=false) %}
-{% set base_classes = "rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" %}
-{% set variant_classes = {
-    "primary": "bg-[#238636] hover:bg-[#2ea043] text-white",
-    "secondary": "bg-[#21262d] hover:bg-[#30363d] text-white",
-    "danger": "bg-[#da3633] hover:bg-[#f85149] text-white",
-    "ghost": "hover:bg-[#21262d] text-[#8b949e] hover:text-white"
-} %}
-{% set size_classes = {
-    "sm": "px-3 py-1.5 text-xs",
-    "md": "px-4 py-2 text-sm",
-    "lg": "px-6 py-3 text-base"
-} %}
-<button type="{{ type }}"
-        {% if disabled %}disabled{% endif %}
-        class="{{ base_classes }} {{ variant_classes[variant] }} {{ size_classes[size] }} {% if full_width %}w-full{% endif %}">
-    {% if icon %}<i data-lucide="{{ icon }}" class="w-4 h-4"></i>{% endif %}
+{# variant: primary (ink) | brand (coral) | secondary (outline) | danger | ghost #}
+{% set variants = {"primary": "btn-primary", "brand": "btn-brand", "secondary": "", "danger": "btn-danger", "ghost": "btn-ghost"} %}
+<button type="{{ type }}" {% if disabled %}disabled{% endif %}
+        class="btn {{ variants[variant] | default('') }} {% if size == 'sm' %}btn-sm{% endif %} {% if full_width %}w-full justify-center{% endif %}">
+    {% if icon %}<i data-lucide="{{ icon }}"></i>{% endif %}
     {{ text }}
 </button>
 {% endmacro %}
 
 
 {% macro icon_button(icon, title="", variant="ghost", size="md", disabled=false) %}
-{% set base_classes = "rounded-lg flex items-center justify-center transition-colors disabled:opacity-50" %}
-{% set variant_classes = {
-    "primary": "bg-[#238636] hover:bg-[#2ea043] text-white",
-    "secondary": "bg-[#21262d] hover:bg-[#30363d] text-white",
-    "danger": "bg-[#da3633] hover:bg-[#f85149] text-white",
-    "ghost": "hover:bg-[#21262d] text-[#8b949e] hover:text-white"
-} %}
-{% set size_classes = {
-    "sm": "p-1.5",
-    "md": "p-2",
-    "lg": "p-3"
-} %}
-{% set icon_sizes = {
-    "sm": "w-3 h-3",
-    "md": "w-4 h-4",
-    "lg": "w-5 h-5"
-} %}
-<button type="button"
-        {% if title %}title="{{ title }}"{% endif %}
-        {% if disabled %}disabled{% endif %}
-        class="{{ base_classes }} {{ variant_classes[variant] }} {{ size_classes[size] }}">
-    <i data-lucide="{{ icon }}" class="{{ icon_sizes[size] }}"></i>
+{# Square icon-only button (`.icon-btn`). variant danger tints it red on hover. #}
+<button type="button" {% if title %}title="{{ title }}" aria-label="{{ title }}"{% endif %} {% if disabled %}disabled{% endif %}
+        class="icon-btn {% if variant == 'danger' %}icon-btn-danger{% endif %} {% if size == 'sm' %}icon-btn-sm{% endif %}">
+    <i data-lucide="{{ icon }}"></i>
 </button>
 {% endmacro %}
 
 
 {% macro alpine_input(model, label="", type="text", placeholder="", mono=false, help="") %}
-{# Alpine.js reactive input with x-model binding. Use inside x-data scopes.
-   Unlike text_input(), this does NOT use name/value — it binds to Alpine state.
-
-   Args:
-       model: Alpine x-model expression (e.g. "form.name")
-       label: Label text
-       type: Input type (text, number, password, email)
-       placeholder: Placeholder text
-       mono: Use monospace font
-       help: Help text below input
-#}
-<div>
-    {% if label %}
-    <label class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <input x-model="{{ model }}"
-           type="{{ type }}"
-           placeholder="{{ placeholder }}"
-           class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                  focus:outline-none focus:border-[#58a6ff] transition-colors
-                  {% if mono %}font-mono{% endif %}">
-    {% if help %}
-    <p class="mt-1 text-xs text-[#8b949e]">{{ help }}</p>
-    {% endif %}
+{# Input bound to Alpine state: model is the x-model expression (e.g. "form.name"). #}
+<div class="field">
+    {% if label %}<label>{{ label }}</label>{% endif %}
+    <input x-model="{{ model }}" type="{{ type }}" placeholder="{{ placeholder }}" class="{% if mono %}mono{% endif %}">
+    {% if help %}<span class="hint">{{ help }}</span>{% endif %}
 </div>
 {% endmacro %}
 
 
 {% macro alpine_select(model, options, label="") %}
-{# Alpine.js reactive select with x-model binding.
-
-   Args:
-       model: Alpine x-model expression
-       options: List of {value, label} dicts OR simple strings
-       label: Label text
-#}
-<div>
-    {% if label %}
-    <label class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <select x-model="{{ model }}"
-            class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                   focus:outline-none focus:border-[#58a6ff] transition-colors">
+<div class="field">
+    {% if label %}<label>{{ label }}</label>{% endif %}
+    <select x-model="{{ model }}">
         {% for opt in options %}
         {% set opt_value = opt.value if opt.value is defined else opt %}
         {% set opt_label = opt.label if opt.label is defined else opt %}
@@ -204,41 +108,22 @@
 
 
 {% macro alpine_textarea(model, label="", placeholder="", rows=4, mono=false) %}
-{# Alpine.js reactive textarea with x-model binding.
-
-   Args:
-       model: Alpine x-model expression
-       label: Label text
-       placeholder: Placeholder text
-       rows: Number of rows
-       mono: Use monospace font
-#}
-<div>
-    {% if label %}
-    <label class="block text-sm text-[#8b949e] mb-1">{{ label }}</label>
-    {% endif %}
-    <textarea x-model="{{ model }}"
-              placeholder="{{ placeholder }}"
-              rows="{{ rows }}"
-              class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-sm
-                     focus:outline-none focus:border-[#58a6ff] transition-colors resize-y
-                     {% if mono %}font-mono{% endif %}"></textarea>
+<div class="field">
+    {% if label %}<label>{{ label }}</label>{% endif %}
+    <textarea x-model="{{ model }}" placeholder="{{ placeholder }}" rows="{{ rows }}" class="resize-y {% if mono %}mono{% endif %}"></textarea>
 </div>
 {% endmacro %}
 
 
 {% macro form_group(label="", help="", error="") %}
-{# Wrapper for form fields with label, help text, and error #}
-<div class="space-y-1">
-    {% if label %}
-    <label class="block text-sm text-[#8b949e]">{{ label }}</label>
-    {% endif %}
+{# Wrap a custom control so it lines up with the other fields. Use with {% call %}. #}
+<div class="field">
+    {% if label %}<label>{{ label }}</label>{% endif %}
     {{ caller() }}
-    {% if help and not error %}
-    <p class="text-xs text-[#8b949e]">{{ help }}</p>
-    {% endif %}
     {% if error %}
-    <p class="text-xs text-red-400">{{ error }}</p>
+    <span class="hint" style="color: var(--red)">{{ error }}</span>
+    {% elif help %}
+    <span class="hint">{{ help }}</span>
     {% endif %}
 </div>
 {% endmacro %}
