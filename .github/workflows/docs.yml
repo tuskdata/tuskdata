@@ -1,0 +1,48 @@
+name: Docs
+
+# Builds the mkdocs-material site and publishes it to GitHub Pages on
+# every push to main that touches the docs. Enable Pages once in the
+# repository settings (Settings → Pages → Source: GitHub Actions).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.13
+      - run: |
+          uv venv
+          uv pip install mkdocs-material
+          uv run mkdocs build --strict --site-dir site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

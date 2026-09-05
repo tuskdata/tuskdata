@@ -29,10 +29,11 @@ You install one wheel. You run one process. You point a browser at it.
 | **Studio** | Multi-tab SQL editor with results table, charts, maps | [studio.md](features/studio.md) |
 | **Schema** | Interactive ER diagram of your tables and foreign keys | [schema.md](features/schema.md) |
 | **Explore** | Auto-profile any table — per-column stats, histograms, distinct counts | [explore.md](features/explore.md) |
-| **Scheduled** | Cron-style query/pipeline scheduler with snapshot history | (later) |
-| **Data** | ETL pipelines, file upload, export | (later) |
+| **Scheduled** | Backups, vacuum/analyze, queries, pipelines and schema checks on a cron | [scheduled.md](features/scheduled.md) |
+| **Data** | Visual Polars ETL: files, Postgres, open data → transforms → export/import/pipeline | [data.md](features/data.md) |
 | **Admin** | PostgreSQL admin: processes, locks, settings, backups, roles | [admin.md](features/admin.md) |
-| **Analytics** | Dashboards + embedded analytics SDK (tusk-bi plugin) | [analytics.md](features/analytics.md) |
+| **Analytics** | Dashboards and charts, built in | [analytics.md](features/analytics.md) |
+| **Notifications** | Slack, Discord, Telegram, email or webhook for job, backup, schema and contract events | [notifications.md](features/notifications.md) |
 | **Schema Watch** | Snapshot + diff of a connection's schema, notify on changes | [schema-watch.md](features/schema-watch.md) |
 | **Data Contracts** | Freeze the schema as a contract; be told when something breaks it | [data-contracts.md](features/data-contracts.md) |
 | **MCP server** | Let Claude Code, Cursor or any MCP client query your connections, read-only | [mcp.md](features/mcp.md) |

@@ -1,5 +1,7 @@
 # Analytics
 
+![Analytics — a dashboard with auto-detected chart types.](../screenshots/analytics-dashboard.png){ .screenshot }
+
 Dashboards, saved queries, data sources, scheduled snapshots, embed tokens. The BI side of Tusk lives here. Built into TuskData since 0.4.36 (it started life as the `tusk-bi` plugin; nothing to install).
 
 ![Analytics — BI Engine overview with dashboards and embed tokens.](../screenshots/analytics-overview.png){ .screenshot }

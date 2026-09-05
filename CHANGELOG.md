@@ -2,6 +2,26 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [Unreleased]
+
+- **`tusk studio` no longer orphans the server** when the launcher is
+  terminated: SIGINT/SIGTERM are forwarded to the granian child and its
+  exit code is returned. Before, `kill`/`pkill`, systemd stop or a
+  container stop left workers running on the port with their database
+  pools open.
+- **Docs site**: `mkdocs-material` build published to GitHub Pages on every
+  push to `main` that touches `docs/` (`.github/workflows/docs.yml`; enable
+  Pages → Source: GitHub Actions once).
+- **Reproducible screenshots**: `scripts/demo_db.py` builds a synthetic
+  `tusk_demo` database and `scripts/docs_screenshots.py` boots a throwaway
+  Tusk against it and shoots every documented page with Playwright. All
+  feature pages now have a current screenshot, and Scheduled, Data and
+  Notifications got their own pages.
+- Backup and schema-watch jobs are named after the connection
+  ("Backup Demo shop"), not its id.
+- Data preview headers show compact column types (`Decimal(38,2)`,
+  `Datetime[us, UTC]`) instead of the full Polars repr.
+
 ## [0.4.36] - 2026-09-05 — tusk-bi is part of TuskData
 
 - **Analytics (tusk-bi) moved into the core package** as a built-in

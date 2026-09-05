@@ -1,5 +1,7 @@
 # MCP server
 
+![Ask AI in Studio — the same Copilot that grounds MCP answers.](../screenshots/studio-copilot.png){ .screenshot }
+
 Tusk exposes its connections to AI agents through the
 [Model Context Protocol](https://modelcontextprotocol.io). Claude Code,
 Cursor, Claude Desktop or any MCP client can list your connections, read a

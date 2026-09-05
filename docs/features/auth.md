@@ -1,5 +1,7 @@
 # Users, sessions and API tokens
 
+![Profile — account, password, API tokens.](../screenshots/profile.png){ .screenshot }
+
 Tusk runs in one of two modes.
 
 ## Single-user mode (default)

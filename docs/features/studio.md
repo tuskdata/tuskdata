@@ -132,6 +132,8 @@ cursor; **INSERT** still opens an insert template.
 
 ## Explain a plan with AI
 
+![Plan tab with the AI insight.](../screenshots/studio-plan.png){ .screenshot }
+
 In the **Plan** tab, **Explain with AI** sends the EXPLAIN output together
 with the SQL and the schema the Copilot already grounds on. You get a
 short summary of what the planner does, the nodes that dominate the cost
@@ -140,6 +142,8 @@ a configuration knob — or a plain "this plan is fine". It uses the same
 provider as the rest of the Copilot (Settings → AI Copilot).
 
 ## Studio settings
+
+![Settings → Studio.](../screenshots/settings-studio.png){ .screenshot }
 
 **Settings → Studio** holds the preview row cap, the editor font size and
 a custom XYZ basemap for the map views (URL with `{z}/{x}/{y}` placeholders

@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 import msgspec
 import structlog
@@ -909,6 +909,12 @@ async def _handle_schema_watch(payload: dict) -> None:
 _KIND_HANDLERS[JobKind.SCHEMA_WATCH] = _handle_schema_watch
 
 
+def _connection_label(connection_id: str) -> str:
+    """Connection name for job titles; falls back to the id if it is unknown."""
+    conn = get_connection(connection_id)
+    return conn.name if conn and getattr(conn, "name", None) else connection_id
+
+
 def add_schema_watch_schedule(
     connection_id: str,
     hour: int = 6,
@@ -919,7 +925,7 @@ def add_schema_watch_schedule(
     spec = JobSpec(
         id=f"schema_watch_{connection_id}",
         kind=JobKind.SCHEMA_WATCH,
-        name=f"Schema watch {connection_id}",
+        name=f"Schema watch {_connection_label(connection_id)}",
         payload={"connection_id": connection_id, "notify": True},
         trigger={"type": "cron", "hour": hour, "minute": minute, "day_of_week": day_of_week},
         owner_id=owner_id or "",
@@ -994,7 +1000,7 @@ def add_backup_schedule(
     spec = JobSpec(
         id=f"backup_{connection_id}",
         kind=JobKind.BACKUP,
-        name=f"Backup {connection_id}",
+        name=f"Backup {_connection_label(connection_id)}",
         payload={
             "connection_id": connection_id,
             "backup_dir": backup_dir,
@@ -1134,7 +1140,7 @@ def add_backup_once(
     spec = JobSpec(
         id=f"backup_once_{connection_id}_{run_date.strftime('%Y%m%d%H%M')}",
         kind=JobKind.BACKUP,
-        name=f"Backup {connection_id} (once)",
+        name=f"Backup {_connection_label(connection_id)} (once)",
         payload={"connection_id": connection_id, "backup_dir": backup_dir, "format": format},
         trigger={"type": "date", "run_date": run_date.isoformat()},
     )

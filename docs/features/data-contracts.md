@@ -1,5 +1,7 @@
 # Data Contracts
 
+![The Schema watch panel holds the contract controls: Freeze, export, release.](../screenshots/schema.png){ .screenshot }
+
 A data contract is the schema your consumers rely on: these tables, these
 columns, these types, these keys. In Tusk a contract is **frozen, not
 written** — you take the schema as it is today and Tusk tells you when

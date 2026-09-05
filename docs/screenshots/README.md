@@ -2,9 +2,21 @@
 
 This directory holds the public-facing screenshots referenced by the docs in `docs/features/*.md`.
 
-## How to add / replace a screenshot
+## How to regenerate
 
-The docs reference these filenames; drop the matching image in and the docs render it.
+Screenshots are generated, not hand-made. `scripts/demo_db.py` creates a
+synthetic `tusk_demo` PostgreSQL database (customers, products, orders,
+events); `scripts/docs_screenshots.py` boots a throwaway Tusk on port 8900
+with that single connection and shoots every page with Playwright at
+1440×900, 2x:
+
+```bash
+.venv/bin/python scripts/demo_db.py            # once
+.venv/bin/python scripts/docs_screenshots.py   # or --only studio,schema
+```
+
+Stop any other local Tusk first: `admin.png` shows `pg_stat_activity`, and
+another instance's pools would put its database names in the shot.
 
 | File | Page |
 |---|---|
@@ -14,7 +26,12 @@ The docs reference these filenames; drop the matching image in and the docs rend
 | `explore.png` | `features/explore.md` |
 | `admin.png` | `features/admin.md` |
 | `analytics-overview.png` | `features/analytics.md` |
-| `analytics-dashboard.png` | `features/analytics.md` (dashboard viewer flavor — optional) |
+| `analytics-dashboard.png` | `features/analytics.md` |
+| `studio-chart.png`, `studio-plan.png`, `studio-copilot.png` | `features/studio.md`, `features/mcp.md` |
+| `scheduled.png`, `data.png` | `features/scheduled.md`, `features/data.md` |
+| `settings.png`, `settings-studio.png` | `features/studio.md` |
+| `profile.png` | `features/auth.md` |
+| `notifications.png` | `features/notifications.md` |
 
 ## Sanitization checklist
 

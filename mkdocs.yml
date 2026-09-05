@@ -56,6 +56,9 @@ nav:
       - Schema: features/schema.md
       - Explore: features/explore.md
       - Admin: features/admin.md
+      - Scheduled: features/scheduled.md
+      - Data: features/data.md
+      - Notifications: features/notifications.md
       - Analytics: features/analytics.md
       - Schema Watch: features/schema-watch.md
       - Data Contracts: features/data-contracts.md

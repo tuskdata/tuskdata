@@ -3,7 +3,6 @@
 import hashlib
 import uuid
 import tempfile
-import os
 import asyncio
 import json
 from datetime import datetime, timezone
@@ -15,7 +14,7 @@ from litestar.datastructures import UploadFile
 import msgspec
 import structlog
 
-from tusk.engines import polars_engine
+from tusk.engines.polars_engine import short_dtype
 from tusk.engines.polars_engine import (
     Pipeline, DataSource, Transform,
     FilterTransform, SelectTransform, RenameTransform, SortTransform,
@@ -811,7 +810,7 @@ class DataController(Controller):
                         break
                 except asyncio.TimeoutError:
                     # Send keepalive
-                    yield f": keepalive\n\n"
+                    yield ": keepalive\n\n"
                     if import_task.done():
                         break
 
@@ -1163,7 +1162,7 @@ def _parse_transform(t: dict) -> Transform | None:
                 amount=t.get("amount", 0),
                 other_column=t.get("other_column"),
             )
-    except (KeyError, TypeError) as e:
+    except (KeyError, TypeError):
         pass
 
     return None
@@ -1172,7 +1171,7 @@ def _parse_transform(t: dict) -> Transform | None:
 def _polars_df_to_dict(df, engine_used: str = "polars") -> dict:
     """Shape a Polars DataFrame into the dict the frontend expects."""
     try:
-        columns = [{"name": c, "type": str(df.schema[c])} for c in df.columns]
+        columns = [{"name": c, "type": short_dtype(df.schema[c])} for c in df.columns]
         rows = df.rows()
         return {
             "columns": columns,

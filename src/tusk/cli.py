@@ -298,7 +298,7 @@ def start_studio():
     # Per-request timeouts live at the application layer (Litestar
     # middleware, separate P1 task) — Granian itself doesn't enforce
     # a per-handler budget.
-    subprocess.run([
+    _run_child([
         sys.executable, "-m", "granian",
         "--interface", "asgi",
         "--host", host,
@@ -309,6 +309,43 @@ def start_studio():
         "--workers-kill-timeout", "30s",
         "tusk.studio.app:app",
     ])
+
+
+def _run_child(cmd: list[str]) -> int:
+    """Run the server as a child and take it down with us.
+
+    `subprocess.run` alone leaves granian orphaned when *this* process gets
+    SIGTERM (kill, pkill, systemd, a container stop): the port stays busy
+    and the workers keep their database pools open. Forward SIGINT/SIGTERM
+    to the child, wait for it, and return its exit code.
+    """
+    import signal
+
+    proc = subprocess.Popen(cmd)
+
+    def _forward(signum, _frame):
+        if proc.poll() is None:
+            try:
+                proc.send_signal(signum)
+            except OSError:
+                pass
+
+    previous = {}
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        previous[sig] = signal.signal(sig, _forward)
+    try:
+        while True:
+            try:
+                return proc.wait()
+            except KeyboardInterrupt:
+                # Ctrl-C already reached the child (same foreground group);
+                # keep waiting for it to finish shutting down.
+                continue
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        if proc.poll() is None:
+            proc.kill()
 
 
 def handle_app():

@@ -1,5 +1,7 @@
 # Schema Watch
 
+![Schema page with the Schema watch panel (bottom-left).](../screenshots/schema.png){ .screenshot }
+
 Schema Watch takes a snapshot of a PostgreSQL connection's catalog — tables,
 columns with types and nullability, primary and foreign keys, indexes —
 compares it with the previous snapshot, keeps the history, and raises a

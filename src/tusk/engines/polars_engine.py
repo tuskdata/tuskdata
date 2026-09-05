@@ -787,13 +787,31 @@ def apply_transform(df: pl.DataFrame, transform: Transform, sources_map: dict[st
     return df
 
 
+def short_dtype(dtype) -> str:
+    """Compact label for a Polars dtype in column headers.
+
+    `Decimal(precision=38, scale=2)` → `Decimal(38,2)`;
+    `Datetime(time_unit='us', time_zone='UTC')` → `Datetime[us, UTC]`;
+    simple types are returned as they are.
+    """
+    if isinstance(dtype, pl.Decimal):
+        return f"Decimal({dtype.precision or '*'},{dtype.scale})"
+    if isinstance(dtype, pl.Datetime):
+        return f"Datetime[{dtype.time_unit}{', ' + dtype.time_zone if dtype.time_zone else ''}]"
+    if isinstance(dtype, pl.Duration):
+        return f"Duration[{dtype.time_unit}]"
+    if isinstance(dtype, pl.List):
+        return f"List[{short_dtype(dtype.inner)}]"
+    return str(dtype)
+
+
 def execute_pipeline(pipeline: Pipeline, limit: int | None = 100) -> dict:
     """Execute a pipeline and return results"""
     try:
         result = _run_pipeline(pipeline, limit)
 
         # Convert to dict for JSON serialization
-        columns = [{"name": name, "type": str(dtype)} for name, dtype in zip(result.columns, result.dtypes)]
+        columns = [{"name": name, "type": short_dtype(dtype)} for name, dtype in zip(result.columns, result.dtypes)]
         rows = result.rows()
 
         return {
@@ -833,7 +851,7 @@ def get_schema(path: str, osm_layer: str | None = None) -> dict:
 
         log.debug("Schema retrieved", columns=len(df.columns))
         return {
-            "columns": [{"name": name, "type": str(dtype)} for name, dtype in zip(df.columns, df.dtypes)]
+            "columns": [{"name": name, "type": short_dtype(dtype)} for name, dtype in zip(df.columns, df.dtypes)]
         }
 
     except Exception as e:
@@ -869,7 +887,7 @@ def preview_file(path: str, limit: int = 100, osm_layer: str | None = None) -> d
             return {"error": f"Unsupported file type: {p.suffix}"}
         t2 = time.perf_counter()
 
-        columns = [{"name": name, "type": str(dtype)} for name, dtype in zip(df.columns, df.dtypes)]
+        columns = [{"name": name, "type": short_dtype(dtype)} for name, dtype in zip(df.columns, df.dtypes)]
         rows = df.rows()
         t3 = time.perf_counter()
 
