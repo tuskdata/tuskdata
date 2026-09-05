@@ -1,0 +1,36 @@
+{# Widget partial: Funnel (label, value) — bars narrow as values decrease,
+   forming a pyramid. Each row tinted differently via CSS nth-child for a
+   funnel-ish visual.
+   Expects: widget, data {columns, rows}, widget_id, config
+   SQL must return (label_col, value_col). Order rows DESC by value for
+   the classic funnel shape — the first row is the widest.
+#}
+{% if error %}
+    <div class="text-xs" style="color:var(--red);padding:8px">{{ error }}</div>
+{% elif data and data.rows and data.rows | length > 0 %}
+    {% set top_v = namespace(value=0) %}
+    {% set first_row = data.rows[0] %}
+    {% if first_row | length > 1 %}
+        {% set top_v.value = first_row[1] | float %}
+    {% endif %}
+    {% set top = top_v.value if top_v.value > 0 else 1 %}
+    <div class="bi-funnel">
+        {% for row in data.rows[:8] %}
+            {% set label = row[0] if row | length > 0 else '' %}
+            {% set raw   = row[1] if row | length > 1 else 0 %}
+            {% set v     = raw | float %}
+            {% set pct   = (v / top) * 100 if top else 0 %}
+            <div class="bi-funnel-row">
+                <span class="bi-funnel-label">{{ label }}</span>
+                <div class="bi-funnel-bar-wrap">
+                    <div class="bi-funnel-bar" style="width: {{ '%.1f'|format(pct) }}%">
+                        {% if pct >= 18 %}{{ raw }}{% endif %}
+                    </div>
+                </div>
+                <span class="bi-funnel-count">{% if pct < 18 %}{{ raw }}{% endif %}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="text-xs" style="color:var(--fg-3);padding:8px">No data</div>
+{% endif %}

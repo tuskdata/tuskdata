@@ -1,0 +1,47 @@
+{# BI Sidebar — expects: dashboards (list), current_page (str), current_dashboard_id (int|None) #}
+<aside class="r-sidebar" style="width:220px;flex-shrink:0">
+    <div class="side-section">
+        <div class="side-label"><span>Navigation</span></div>
+        <a href="/bi/overview" class="side-item {% if current_page == 'overview' %}active{% endif %}">
+            <i data-lucide="layout-grid"></i> <span>Overview</span>
+        </a>
+        <a href="/bi/dashboards" class="side-item {% if current_page == 'dashboards' %}active{% endif %}">
+            <i data-lucide="layout-dashboard"></i> <span>Dashboards</span>
+        </a>
+        <a href="/bi/queries" class="side-item {% if current_page == 'queries' %}active{% endif %}">
+            <i data-lucide="bookmark"></i> <span>Saved Queries</span>
+        </a>
+        <a href="/bi/queries/new" class="side-item {% if current_page == 'query_editor' %}active{% endif %}">
+            <i data-lucide="terminal"></i> <span>Query Editor</span>
+        </a>
+        <a href="/bi/explore" class="side-item {% if current_page == 'explore' %}active{% endif %}">
+            <i data-lucide="database"></i> <span>Data Explorer</span>
+        </a>
+        <a href="/bi/query-builder" class="side-item {% if current_page == 'query_builder' %}active{% endif %}">
+            <i data-lucide="wand-2"></i> <span>Query Builder</span>
+        </a>
+    </div>
+
+    {% if dashboards is defined and dashboards %}
+    <div class="side-section">
+        <div class="side-label"><span>Dashboards</span></div>
+        <div style="max-height:240px;overflow-y:auto">
+            {% for d in dashboards %}
+            <a href="/bi/dashboards/{{ d.id }}"
+               class="side-item {% if current_dashboard_id is defined and current_dashboard_id == d.id %}active{% endif %}"
+               title="{{ d.name }}"
+               style="font-size:12px;padding:5px 10px 5px 18px">
+                <i data-lucide="bar-chart-3"></i>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.name }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:auto;padding:10px 4px;border-top:1px solid var(--border)">
+        <button @click="$dispatch('bi-new-dashboard')" class="btn btn-brand btn-sm" style="width:100%;justify-content:center">
+            <i data-lucide="plus"></i> New Dashboard
+        </button>
+    </div>
+</aside>

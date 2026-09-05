@@ -2,6 +2,19 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.36] - 2026-09-05 — tusk-bi is part of TuskData
+
+- **Analytics (tusk-bi) moved into the core package** as a built-in
+  plugin (`src/tusk/bi`). It keeps its plugin shape — tab, templates,
+  `/static/plugins/bi/`, storage in `~/.tusk/plugins/tusk_bi.db`, CLI,
+  notification events — so nothing changes for users: no data migration,
+  no URL changes, one wheel to deploy instead of two. The plugin registry
+  loads built-ins before entry points and skips a stale external
+  `tusk-bi` install.
+- The bi test suite (89 tests) now runs with the core suite.
+- `tuskdata-compose`: the plugin-wheel loop tolerates an empty match and
+  no longer ships `tusk_bi-*.whl`.
+
 ## [0.4.35] - 2026-09-05 — `tusk app` (preview)
 
 - **`tusk app`**: Tusk Studio in a native window via pywebview (OS

@@ -1,0 +1,31 @@
+{# Global dashboard filter bar partial
+   Expects: filters (list of DashboardFilter dicts)
+#}
+{% if filters %}
+<div class="flex items-center gap-3" style="padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:16px">
+    <i data-lucide="filter" class="w-4 h-4 flex-shrink-0" style="color:var(--fg-3)"></i>
+    {% for f in filters %}
+    <div class="flex items-center gap-1">
+        <label class="text-xs" style="color:var(--fg-3)">{{ f.label or f.name }}</label>
+        {% if f.filter_type == "date_range" %}
+        <input type="date" x-model="filterValues['{{ f.name }}_start']" class="text-xs">
+        <span class="text-xs" style="color:var(--fg-4)">to</span>
+        <input type="date" x-model="filterValues['{{ f.name }}_end']" class="text-xs">
+        {% elif f.filter_type == "select" and f.options %}
+        <select x-model="filterValues['{{ f.name }}']" class="text-xs">
+            <option value="">All</option>
+            {% for opt in f.options %}
+            <option value="{{ opt }}">{{ opt }}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" x-model="filterValues['{{ f.name }}']" placeholder="{{ f.label or f.name }}..."
+               class="text-xs" style="width:8rem">
+        {% endif %}
+    </div>
+    {% endfor %}
+    <button @click="applyFilters()" class="btn btn-brand btn-sm" style="margin-left:auto">
+        Apply
+    </button>
+</div>
+{% endif %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "components/feedback.html" import empty_state, badge %}
+{% from "components/forms.html" import button %}
+
+{% block title %}Queries - Analytics{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/plugins/bi/bi.css">
+{% endblock %}
+
+{% block content %}
+<div class="studio-shell" style="display:flex;height:100%;overflow:hidden">
+    {% include "plugins/bi/partials/bi_sidebar.html" %}
+
+    <main style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px">
+        <div class="flex items-center justify-between">
+            <h1 style="font-family:var(--serif);font-size:32px;letter-spacing:-0.01em">Saved Queries</h1>
+            <a href="/bi/queries/new" class="btn btn-brand">
+                <i data-lucide="plus"></i> New Query
+            </a>
+        </div>
+
+        {% if queries %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for q in queries %}
+            <a href="/bi/queries/{{ q.id }}" class="card" style="padding:16px 20px;text-decoration:none;color:inherit;display:block">
+                <div class="flex items-start justify-between mb-2">
+                    <h3 class="font-semibold text-sm truncate">{{ q.name }}</h3>
+                    {% if q.chart_type %}
+                    <span class="chip chip-neutral">{{ q.chart_type }}</span>
+                    {% endif %}
+                </div>
+                {% if q.description %}
+                <p class="text-xs line-clamp-2 mb-2" style="color:var(--fg-3)">{{ q.description }}</p>
+                {% endif %}
+                <div class="flex items-center gap-2 text-xs" style="color:var(--fg-4)">
+                    <span>{{ q.source_name }}</span>
+                    {% if q.last_executed_at %}
+                    <span>Last run: {{ q.last_executed_at[:10] }}</span>
+                    {% endif %}
+                </div>
+                {% if q.tags %}
+                <div class="flex gap-1 mt-2">
+                    {% for tag in q.tags.split(',') %}
+                    {% if tag.strip() %}
+                    <span class="chip chip-neutral">{{ tag.strip() }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="padding:64px 16px;display:flex;flex-direction:column;align-items:center;color:var(--fg-3)">
+            <i data-lucide="search" style="width:40px;height:40px;color:var(--fg-4);margin-bottom:14px"></i>
+            <p>No saved queries yet</p>
+            <p class="text-xs mt-1" style="color:var(--fg-4)">Create your first query to get started</p>
+            <a href="/bi/queries/new" class="btn btn-brand" style="margin-top:16px">New Query</a>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/plugins/bi/bi.js"></script>
+{% endblock %}

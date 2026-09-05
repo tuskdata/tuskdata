@@ -1,0 +1,45 @@
+{# Widget partial: Big number stat card (v0.3.0 layout).
+   Mockup pattern:
+       LABEL                  [icon]
+       128,400
+       ↑ +12.4% MoM
+       <full-width sparkline>
+   Expects: widget, data {columns, rows}, widget_id, config
+   Optional: sparkline_values (list of numbers), delta (str), delta_type ("up"/"down")
+   Threshold colors via config.thresholds: {"warning": 80, "critical": 95}
+#}
+{% if error %}
+    <div class="text-xs" style="color:var(--red);padding:8px">{{ error }}</div>
+{% elif data and data.rows and data.rows | length > 0 %}
+    {% set value = data.rows[0][0] if data.rows[0] else "—" %}
+    <div class="dash-card-v" id="stat-val-{{ widget_id }}" data-raw-value="{{ value }}">{{ value }}</div>
+
+    {% if delta %}
+    <div class="dash-card-d {{ delta_type or '' }}">
+        {% if delta_type == "up" %}<i data-lucide="trending-up"></i>
+        {% elif delta_type == "down" %}<i data-lucide="trending-down"></i>
+        {% endif %}{{ delta }}
+    </div>
+    {% endif %}
+
+    {% if data.columns and data.columns | length > 1 and data.rows[0] | length > 1 %}
+    <div class="text-xs" style="color:var(--fg-3)">{{ data.columns[1] }}: {{ data.rows[0][1] }}</div>
+    {% endif %}
+
+    {% if sparkline_values and sparkline_values | length > 1 %}
+    <div class="dash-spark">
+        <canvas id="sparkline-{{ widget_id }}" style="width:100%;height:100%"></canvas>
+    </div>
+    <script>
+    window.biRenderSparkline({{ widget_id }}, {{ sparkline_values | tojson }});
+    </script>
+    {% endif %}
+
+    {% if config and config.thresholds %}
+    <script>
+    window.biApplyStatThresholds({{ widget_id }}, {{ config.thresholds | tojson }});
+    </script>
+    {% endif %}
+{% else %}
+    <div class="dash-card-v" style="color:var(--fg-4)">—</div>
+{% endif %}

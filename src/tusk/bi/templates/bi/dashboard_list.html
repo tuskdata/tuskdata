@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "components/feedback.html" import empty_state %}
+
+{% block title %}Dashboards - Analytics{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/plugins/bi/bi.css">
+{% endblock %}
+
+{% block content %}
+<div class="studio-shell" style="display:flex;height:100%;overflow:hidden" x-data="dashboardList()"
+     @bi-new-dashboard.window="showCreate = true">
+    {% include "plugins/bi/partials/bi_sidebar.html" %}
+
+    <main style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px">
+        <div class="flex items-center justify-between">
+            <h1 style="font-family:var(--serif);font-size:32px;letter-spacing:-0.01em">Dashboards</h1>
+            <div class="flex items-center gap-2">
+                <button @click="showCreate = true" class="btn btn-brand">
+                    <i data-lucide="plus"></i> New Dashboard
+                </button>
+            </div>
+        </div>
+
+        {% if dashboards %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for d in dashboards %}
+            <a href="/bi/dashboards/{{ d.id }}" class="card" style="padding:16px 20px;text-decoration:none;color:inherit;display:block">
+                <div class="flex items-start justify-between mb-2">
+                    <h3 class="font-semibold text-sm">{{ d.name }}</h3>
+                    <div class="flex gap-1">
+                        {% if d.is_default %}
+                        <span class="chip chip-brand">default</span>
+                        {% endif %}
+                        {% if d.is_prebuilt %}
+                        <span class="chip chip-neutral">prebuilt</span>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-ghost" style="padding:2px;color:var(--fg-4)" title="Delete dashboard"
+                                data-name="{{ d.name }}"
+                                @click.prevent.stop="deleteDashboard({{ d.id }}, $el.dataset.name)">
+                            <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                        </button>
+                    </div>
+                </div>
+                {% if d.description %}
+                <p class="text-xs line-clamp-2" style="color:var(--fg-3)">{{ d.description }}</p>
+                {% endif %}
+                <div class="text-xs" style="color:var(--fg-4);margin-top:8px">
+                    {{ d.updated_at[:10] if d.updated_at else d.created_at[:10] }}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="padding:64px 16px;display:flex;flex-direction:column;align-items:center;color:var(--fg-3)">
+            <i data-lucide="layout-dashboard" style="width:40px;height:40px;color:var(--fg-4);margin-bottom:14px"></i>
+            <p>No dashboards yet</p>
+            <p class="text-xs mt-1" style="color:var(--fg-4)">Create a dashboard or save some queries first</p>
+        </div>
+        {% endif %}
+
+        <!-- Create dashboard modal -->
+        <div x-show="showCreate" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0" style="background:rgba(15,15,14,0.5);backdrop-filter:blur(4px)" @click="showCreate = false"></div>
+            <div class="relative card" style="max-width:28rem;width:100%;margin:0 16px" @click.stop>
+                <div class="flex items-center justify-between" style="padding:14px 20px;border-bottom:1px solid var(--border)">
+                    <h2 class="text-sm font-semibold">New Dashboard</h2>
+                    <button @click="showCreate = false" class="btn btn-sm btn-ghost" style="padding:4px">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+                    <div>
+                        <label class="text-xs mb-1 block" style="color:var(--fg-3)">Name</label>
+                        <input type="text" x-model="newName" placeholder="Dashboard name..." style="width:100%">
+                    </div>
+                    <div>
+                        <label class="text-xs mb-1 block" style="color:var(--fg-3)">Description</label>
+                        <input type="text" x-model="newDesc" placeholder="Optional description..." style="width:100%">
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="showCreate = false" class="btn btn-ghost">Cancel</button>
+                        <button @click="createDashboard()" class="btn btn-brand">Create</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/plugins/bi/bi.js"></script>
+<script src="/static/plugins/bi/dashboard-list.js"></script>
+{% endblock %}

@@ -1,0 +1,38 @@
+{# Widget partial: Query result as table
+   Expects: widget (dict), data (dict with columns/rows), widget_id (int), config (dict)
+   Supports conditional formatting via config.conditional_rules
+#}
+{% if error %}
+<div class="text-xs" style="color:var(--red);padding:8px">{{ error }}</div>
+{% elif data and data.columns and data.rows %}
+<div class="bi-scroll-y" style="height: calc(100% - 0.25rem);">
+    <table class="dtable">
+        <thead>
+            <tr>
+                {% for col in data.columns %}
+                <th>{{ col }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in data.rows %}
+            <tr>
+                {% for val in row %}
+                <td data-col="{{ data.columns[loop.index0] if loop.index0 < data.columns | length else '' }}"
+                    data-val="{{ val }}">{{ val }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if config and config.conditional_rules %}
+<script>
+window.biApplyTableRules({{ widget_id }}, {{ config.conditional_rules | tojson }});
+</script>
+{% endif %}
+{% else %}
+<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--fg-3);opacity:0.4">
+    <p>No data</p>
+</div>
+{% endif %}

@@ -32,7 +32,7 @@ import pytest
 playwright = pytest.importorskip("playwright.sync_api")
 # Also skip when the tusk-bi plugin isn't installed — CI installs only
 # `tuskdata[all]` (core + cluster); tusk-bi is an external plugin.
-pytest.importorskip("tusk_bi", reason="tusk-bi plugin not installed in this environment")
+pytest.importorskip("tusk.bi")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from _browser import require_chromium, tusk_binary  # noqa: E402

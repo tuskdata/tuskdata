@@ -2,7 +2,12 @@
 
 ## Status
 
-**Decided** 2026-05-18. Not yet executed.
+**Executed** 2026-09-05 in v0.4.36. Done as a *built-in plugin*: the package moved to
+`src/tusk/bi` and the registry loads `BIPlugin` from core before entry points, so the
+tab, templates, statics (`/static/plugins/bi/`), storage (`~/.tusk/plugins/tusk_bi.db`),
+CLI and notification events are unchanged — no data migration, no URL changes. A stale
+external `tusk-bi` wheel is skipped by the registry. The `tusk-bi` GitHub repo can be
+archived; the compose deploy no longer ships its wheel.
 
 ## Why this matters
 

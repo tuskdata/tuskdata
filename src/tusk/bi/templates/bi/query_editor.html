@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% from "components/forms.html" import text_input, select_input, button %}
+{% from "components/feedback.html" import empty_state, loading_spinner %}
+
+{% block title %}{% if query %}Edit Query{% else %}New Query{% endif %} - Analytics{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/plugins/bi/bi.css">
+{% endblock %}
+
+{% block content %}
+<div class="studio-shell" style="display:flex;height:100%;overflow:hidden">
+    {% include "plugins/bi/partials/bi_sidebar.html" %}
+
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden" x-data="queryEditor(window._biQueryEditorInitial || {})">
+        <!-- Header -->
+        <div class="flex items-center justify-between" style="padding:12px 24px;border-bottom:1px solid var(--border)">
+            <div class="flex items-center gap-3">
+                <a href="/bi/queries" class="btn btn-sm btn-ghost" style="padding:4px">
+                    <i data-lucide="arrow-left"></i>
+                </a>
+                <input type="text" x-model="name" placeholder="Query name..."
+                       class="text-lg font-semibold"
+                       style="background:transparent;border:none;outline:none;width:16rem">
+            </div>
+            <div class="flex items-center gap-2">
+                <select x-model="sourceId">
+                    <option value="">Select source...</option>
+                    {% for s in sources %}
+                    <option value="{{ s.id }}" {% if query and query.source_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+                <button @click="runQuery()" class="btn btn-brand">
+                    <i data-lucide="play"></i> Run
+                    <span class="text-xs" style="opacity:0.6;margin-left:4px">Cmd+Enter</span>
+                </button>
+                <button @click="saveQuery()" class="btn btn-ghost">
+                    <i data-lucide="save"></i> Save
+                </button>
+            </div>
+        </div>
+
+        <!-- Main area: Editor + Results -->
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+            <!-- SQL Editor -->
+            <div style="height:50%;overflow:hidden;border-bottom:1px solid var(--border)">
+                <div id="sql-editor" style="width:100%;height:100%"></div>
+            </div>
+
+            <!-- Results -->
+            <div style="height:50%;overflow:auto">
+                <div class="flex" style="border-bottom:1px solid var(--border)">
+                    <button @click="resultTab = 'table'"
+                            class="nav-tab" :class="resultTab === 'table' ? 'active' : ''">Table</button>
+                    <button @click="resultTab = 'chart'"
+                            class="nav-tab" :class="resultTab === 'chart' ? 'active' : ''">Chart</button>
+                </div>
+
+                <div x-show="loading" class="flex items-center justify-center" style="padding:32px">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2" style="border-color:var(--brand)"></div>
+                    <span style="margin-left:8px;color:var(--fg-3)">Executing...</span>
+                </div>
+
+                <div x-show="error" class="text-sm" style="padding:16px;color:var(--red)" x-text="error"></div>
+
+                <!-- Table view -->
+                <div x-show="resultTab === 'table' && !loading && !error && columns.length > 0" class="overflow-auto">
+                    <table class="dtable">
+                        <thead>
+                            <tr>
+                                <template x-for="col in columns" :key="col">
+                                    <th x-text="col"></th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(row, idx) in rows" :key="idx">
+                                <tr>
+                                    <template x-for="(val, cidx) in row" :key="cidx">
+                                        <td x-text="val"></td>
+                                    </template>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div class="text-xs" style="padding:8px 12px;color:var(--fg-3);border-top:1px solid var(--border)">
+                        <span x-text="rows.length"></span> rows
+                        <span x-show="truncated" style="color:var(--accent-amber)">(truncated)</span>
+                    </div>
+                </div>
+
+                <!-- Chart view -->
+                <div x-show="resultTab === 'chart' && !loading && !error && columns.length > 0" style="padding:16px">
+                    <div class="flex gap-2" style="margin-bottom:16px">
+                        <select x-model="chartType" @change="renderChart()">
+                            <option value="bar">Bar</option>
+                            <option value="line">Line</option>
+                            <option value="area">Area</option>
+                            <option value="pie">Pie</option>
+                            <option value="doughnut">Doughnut</option>
+                            <option value="horizontal_bar">Horizontal Bar</option>
+                            <option value="scatter">Scatter</option>
+                            <option value="radar">Radar</option>
+                        </select>
+                        <select x-model="xColumn" @change="renderChart()">
+                            <template x-for="col in columns" :key="col">
+                                <option :value="col" x-text="'X: ' + col"></option>
+                            </template>
+                        </select>
+                        <select x-model="yColumn" @change="renderChart()">
+                            <template x-for="col in columns" :key="col">
+                                <option :value="col" x-text="'Y: ' + col"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div style="position:relative;height:300px">
+                        <canvas id="result-chart"></canvas>
+                    </div>
+                </div>
+
+                <div x-show="!loading && !error && columns.length === 0" style="padding:32px;text-align:center;color:var(--fg-3)">
+                    Run a query to see results
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- CodeMirror 6 via CDN -->
+<script type="module">
+import {EditorView, basicSetup} from 'https://esm.sh/@codemirror/basic-setup@0.20.0';
+import {sql} from 'https://esm.sh/@codemirror/lang-sql@6.8.0';
+import {oneDark} from 'https://esm.sh/@codemirror/theme-one-dark@6.1.2';
+
+const initialSQL = {{ (query.sql if query else '') | tojson }};
+
+window._cmEditor = new EditorView({
+    doc: initialSQL,
+    extensions: [
+        basicSetup,
+        sql(),
+        oneDark,
+        EditorView.theme({
+            "&": {height: "100%"},
+            ".cm-scroller": {overflow: "auto"},
+        }),
+    ],
+    parent: document.getElementById('sql-editor'),
+});
+
+// Cmd+Enter to run query
+document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        document.querySelector('[x-data]').__x.$data.runQuery();
+    }
+});
+</script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="/static/plugins/bi/bi.js"></script>
+<script>
+window._biQueryEditorInitial = {
+    name: {{ (query.name if query else '') | tojson }},
+    sourceId: {{ (query.source_id if query else '') | tojson }},
+    queryId: {{ (query.id if query else 'null') | tojson }},
+    chartType: {{ (query.chart_type if query and query.chart_type else 'bar') | tojson }},
+};
+</script>
+<script src="/static/plugins/bi/query-editor.js"></script>
+{% endblock %}

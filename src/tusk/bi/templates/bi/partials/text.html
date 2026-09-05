@@ -1,0 +1,20 @@
+{# Widget partial: Text/markdown content
+   Expects: widget (dict), data (dict with columns/rows or None), widget_id (int), config (dict)
+#}
+<div class="text-sm leading-relaxed bi-scroll-y" style="height: calc(100% - 0.25rem); color:var(--fg-2)"
+     id="text-content-{{ widget_id }}">
+    {% if config and config.markdown_content %}
+    <div class="bi-markdown-content">{{ config.markdown_content }}</div>
+    {% elif config and config.text %}
+    {{ config.text }}
+    {% elif data and data.rows and data.rows | length > 0 %}
+    {{ data.rows[0][0] if data.rows[0] else "" }}
+    {% else %}
+    <span style="opacity: 0.3;">No content</span>
+    {% endif %}
+</div>
+{% if config and config.markdown_content %}
+<script>
+window.biRenderMarkdown({{ widget_id }});
+</script>
+{% endif %}

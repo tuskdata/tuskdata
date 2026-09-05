@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard.name if dashboard else 'Dashboard' }} - Analytics{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/plugins/bi/bi.css">
+{% endblock %}
+
+{% block content %}
+<div class="studio-shell" style="display:flex;height:100%;overflow:hidden" x-data="dashboardView()">
+    {% include "plugins/bi/partials/bi_sidebar.html" %}
+
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+        {% if dashboard %}
+        <div style="flex:1;overflow-y:auto" class="dash-page">
+
+            {# ── Header ─────────────────────────────────────────────── #}
+            <div class="dash-head">
+                <div style="min-width:0;flex:1">
+                    <h1 class="dash-title">{{ dashboard.name }}</h1>
+                    {% if dashboard.description %}
+                    <p class="dash-desc">{{ dashboard.description }}</p>
+                    {% endif %}
+                    <div class="dash-meta-row">
+                        <span>Updated <span id="bi-last-refresh-meta">just now</span></span>
+                        {% if dashboard.refresh_interval_seconds and dashboard.refresh_interval_seconds > 0 %}
+                        <span class="sep">·</span>
+                        <span class="dash-badge live"
+                              title="Auto-refreshes every {{ dashboard.refresh_interval_seconds }}s">
+                            <span class="pulse"></span>Live · {{ dashboard.refresh_interval_seconds }}s
+                        </span>
+                        {% endif %}
+                        {% if dashboard.is_public %}
+                        <span class="sep">·</span>
+                        <span class="dash-badge public" title="Anyone with the link can view">
+                            <i data-lucide="globe"></i>Public
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex items-center gap-2" style="flex-shrink:0">
+                    {# Time range filter #}
+                    <select x-model="timeRange" @change="onTimeRangeChange()" class="btn btn-sm" style="cursor:pointer">
+                        <option value="">All time</option>
+                        <option value="1h">Last 1h</option>
+                        <option value="6h">Last 6h</option>
+                        <option value="24h">Last 24h</option>
+                        <option value="7d">Last 7d</option>
+                        <option value="30d">Last 30d</option>
+                        <option value="90d">Last 90d</option>
+                    </select>
+
+                    {# Manual refresh control kept for users who want a beat
+                       in addition to the dashboard.refresh_interval_seconds. #}
+                    <select x-model="autoRefresh" @change="setupAutoRefresh()" class="btn btn-sm" style="cursor:pointer"
+                            title="Per-session manual refresh — overrides dashboard's Live setting if set">
+                        <option value="0">Refresh: Off</option>
+                        <option value="10">10s</option>
+                        <option value="30">30s</option>
+                        <option value="60">1m</option>
+                        <option value="300">5m</option>
+                    </select>
+
+                    <button @click="refreshAll()" class="btn btn-sm btn-ghost" title="Refresh now">
+                        <i data-lucide="refresh-cw"></i>
+                    </button>
+
+                    <button @click="showEmbedModal = true; $nextTick(() => lucide.createIcons())"
+                            class="btn btn-sm btn-ghost" title="Embed dashboard">
+                        <i data-lucide="code"></i>
+                    </button>
+
+                    <a href="/api/bi/dashboards/{{ dashboard.id }}/export" download class="btn btn-sm btn-ghost" title="Export JSON">
+                        <i data-lucide="download"></i>
+                    </a>
+
+                    <a href="/bi/dashboards/{{ dashboard.id }}/edit" class="btn btn-primary">
+                        <i data-lucide="edit-3"></i> Edit
+                    </a>
+                </div>
+            </div>
+
+            {# Variables bar #}
+            {% if variables %}
+            <div class="flex items-center gap-4" style="padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px">
+                <span class="text-xs" style="color:var(--fg-3);font-weight:500;letter-spacing:.04em;text-transform:uppercase">Variables</span>
+                {% for v in variables %}
+                <div class="flex items-center gap-2">
+                    <label class="text-xs" style="color:var(--fg-3)">{{ v.label or v.name }}</label>
+                    {% if v.var_type == 'select' and v.options %}
+                    <select x-model="vars['{{ v.name }}']" @change="refreshAll()" class="btn btn-sm" style="cursor:pointer">
+                        {% for opt in v.options.split(',') %}
+                        <option value="{{ opt | trim }}">{{ opt | trim }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="text" x-model="vars['{{ v.name }}']" @change="refreshAll()"
+                           placeholder="{{ v.default_value }}" class="btn btn-sm" style="width:9rem">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Tabs bar #}
+            {% if tabs and tabs | length > 0 %}
+            <div class="flex items-center gap-0.5" style="border-bottom:1px solid var(--border)">
+                <a href="/bi/dashboards/{{ dashboard.id }}"
+                   class="nav-tab {% if not active_tab_id %}active{% endif %}">All</a>
+                {% for tab in tabs %}
+                <a href="/bi/dashboards/{{ dashboard.id }}?tab_id={{ tab.id }}"
+                   class="nav-tab {% if active_tab_id == tab.id %}active{% endif %}">{{ tab.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# ── Widget grid (CSS grid, no GridStack on viewer) ───── #}
+            {% if widgets %}
+            <div class="dash-grid" id="dashboard-grid">
+                {% for w in widgets %}
+                {% set span = w.col_span or 6 %}
+                {% if span < 1 %}{% set span = 1 %}{% elif span > 12 %}{% set span = 12 %}{% endif %}
+                <div class="dash-card span-{{ span }}"
+                     id="widget-{{ w.id }}"
+                     style="{% if w.row_span and w.row_span > 4 %}grid-row: span {{ ((w.row_span / 4) | round(0, 'ceil')) | int }};{% endif %}">
+                    <div class="dash-card-h">
+                        <div style="min-width:0">
+                            <div class="l">{{ w.title or w.widget_type }}</div>
+                        </div>
+                        <div class="flex items-center gap-1" style="flex-shrink:0">
+                            {% if w.query_id %}
+                            <a href="/api/bi/queries/{{ w.query_id }}/export-csv" download
+                               class="btn btn-sm btn-ghost" style="padding:2px" title="Export CSV">
+                                <i data-lucide="file-spreadsheet" style="width:13px;height:13px"></i>
+                            </a>
+                            {% endif %}
+                            {% if w.widget_type == 'chart' %}
+                            <button @click="exportChartPng({{ w.id }})"
+                                    class="btn btn-sm btn-ghost" style="padding:2px" title="Export PNG">
+                                <i data-lucide="image" style="width:13px;height:13px"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-ghost" style="padding:2px" title="Expand"
+                                    @click="toggleExpand({{ w.id }})">
+                                <i data-lucide="maximize-2" style="width:13px;height:13px"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bi-widget-body"
+                         hx-get="/api/bi/widgets/{{ w.id }}/render"
+                         hx-trigger="load, refresh"
+                         hx-swap="innerHTML"
+                         hx-vals="js:{...window._biWidgetParams || {}}"
+                         style="flex:1;min-height:80px">
+                        <div class="flex items-center justify-center" style="height:100%;color:var(--fg-4);padding:24px">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2" style="border-color:var(--fg-3)"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div style="padding:64px 16px;display:flex;flex-direction:column;align-items:center;color:var(--fg-3)">
+                <i data-lucide="layout-grid" style="width:40px;height:40px;color:var(--fg-4);margin-bottom:14px"></i>
+                <p>No widgets yet</p>
+                <a href="/bi/dashboards/{{ dashboard.id }}/edit"
+                   class="btn btn-brand" style="margin-top:16px">Add Widgets</a>
+            </div>
+            {% endif %}
+
+            {# Embed modal #}
+            <div x-show="showEmbedModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center"
+                 @keydown.escape.window="showEmbedModal = false">
+                <div class="absolute inset-0" style="background:rgba(15,15,14,0.5);backdrop-filter:blur(4px)" @click="showEmbedModal = false"></div>
+                <div class="relative card" style="width:100%;max-width:32rem;margin:0 16px" @click.stop>
+                    <div class="flex items-center justify-between" style="padding:14px 20px;border-bottom:1px solid var(--border)">
+                        <h2 class="text-sm font-semibold flex items-center gap-2">
+                            <i data-lucide="code" style="color:var(--brand)"></i> Embed Dashboard
+                        </h2>
+                        <button @click="showEmbedModal = false" class="btn btn-sm btn-ghost" style="padding:4px">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+                    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+                        <p class="text-xs" style="color:var(--fg-3)">Generate an embed token to display this dashboard inside an iframe in external applications.</p>
+                        <div>
+                            <label class="text-xs block mb-1" style="color:var(--fg-3)">App ID (optional)</label>
+                            <input type="text" x-model="embedForm.app_id" placeholder="e.g. statuos, pymerio" style="width:100%">
+                        </div>
+                        <div>
+                            <label class="text-xs block mb-1" style="color:var(--fg-3)">Expires in</label>
+                            <select x-model="embedForm.expires_in" style="width:100%;cursor:pointer">
+                                <option value="3600">1 hour</option>
+                                <option value="86400">24 hours</option>
+                                <option value="604800">7 days</option>
+                                <option value="2592000">30 days</option>
+                                <option value="31536000">1 year</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs block mb-1" style="color:var(--fg-3)">RLS Clauses (JSON)</label>
+                            <textarea x-model="embedForm.rls_json" placeholder='{"company_id": "42"}' rows="2"
+                                      class="mono" style="width:100%;resize:vertical"></textarea>
+                            <p class="text-xs mt-1" style="color:var(--fg-4)">Row-level security filters. Only rows matching column=value pairs will be visible.</p>
+                        </div>
+                        <button @click="generateEmbed()" class="btn btn-brand" style="width:100%;justify-content:center">
+                            <i data-lucide="zap"></i> Generate Embed Token
+                        </button>
+                        <div x-show="embedResult.url" x-cloak style="display:flex;flex-direction:column;gap:12px;padding:12px;border-radius:var(--r);background:rgba(31,138,76,0.06);border:1px solid rgba(31,138,76,0.2)">
+                            <div>
+                                <label class="text-xs font-medium block mb-1" style="color:var(--green)">Embed URL</label>
+                                <input type="text" :value="embedResult.url" readonly
+                                       class="mono" style="width:100%;font-size:11px" @click="$el.select()">
+                            </div>
+                            <div>
+                                <label class="text-xs font-medium block mb-1" style="color:var(--green)">iframe Code</label>
+                                <textarea :value="embedResult.iframe" readonly rows="2"
+                                          class="mono" style="width:100%;font-size:11px;resize:none" @click="$el.select()"></textarea>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="navigator.clipboard.writeText(embedResult.url); tuskToast('URL copied', 'success')"
+                                        class="btn btn-ghost" style="flex:1;justify-content:center">
+                                    <i data-lucide="link"></i> Copy URL
+                                </button>
+                                <button @click="navigator.clipboard.writeText(embedResult.iframe); tuskToast('iframe copied', 'success')"
+                                        class="btn btn-ghost" style="flex:1;justify-content:center">
+                                    <i data-lucide="code"></i> Copy iframe
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Footer status bar #}
+        <div class="flex items-center" style="gap:16px;padding:6px 16px;background:var(--surface);border-top:1px solid var(--border);font-size:11px;color:var(--fg-3)">
+            <div class="flex items-center gap-2">
+                <span class="dot green" style="width:6px;height:6px;box-shadow:none"></span>
+                <span>Connected</span>
+            </div>
+            <span>BI Engine v{{ bi_version }}</span>
+            <span id="bi-last-refresh">Last refresh: just now</span>
+        </div>
+
+        {% else %}
+        <div class="flex-1 flex items-center justify-center">
+            <div style="padding:64px 16px;display:flex;flex-direction:column;align-items:center;color:var(--fg-3)">
+                <p>Dashboard not found</p>
+                <a href="/bi/dashboards" class="text-sm" style="color:var(--brand);margin-top:8px">Back to dashboards</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="/static/plugins/bi/bi.js"></script>
+<!-- widgets.js defines biRenderChart/Sparkline/Map/Markdown, called by the HTMX-loaded partials -->
+<script src="/static/plugins/bi/widgets.js"></script>
+<script>
+window._biDashboardCtx = {
+    dashboardId: {{ (dashboard.id if dashboard else 0) | tojson }},
+    refreshIntervalSeconds: {{ (dashboard.refresh_interval_seconds if dashboard else 0) | tojson }},
+    vars: {
+        {% if variables %}
+        {% for v in variables %}
+        '{{ v.name }}': '{{ v.default_value }}',
+        {% endfor %}
+        {% endif %}
+    },
+};
+</script>
+<script src="/static/plugins/bi/dashboard-view.js"></script>
+{% endblock %}

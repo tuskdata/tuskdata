@@ -1,6 +1,6 @@
 # Analytics
 
-Dashboards, saved queries, data sources, scheduled snapshots, embed tokens. The BI side of Tusk lives here. Powered by the `tusk-bi` plugin (will be promoted to core in 0.7.x — see [the spec](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/later/tusk-bi-to-core.md)).
+Dashboards, saved queries, data sources, scheduled snapshots, embed tokens. The BI side of Tusk lives here. Built into TuskData since 0.4.36 (it started life as the `tusk-bi` plugin; nothing to install).
 
 ![Analytics — BI Engine overview with dashboards and embed tokens.](../screenshots/analytics-overview.png){ .screenshot }
 
@@ -129,4 +129,4 @@ Most data tools treat dashboards as the **end** of the workflow: build, share, d
 
 - [studio.md](studio.md) — write the SQL once here, save it, embed it as a widget there.
 - [explore.md](explore.md) — confirm a column shape before wiring it into a widget.
-- The promotion plan: [`specs/roadmap/later/tusk-bi-to-core.md`](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/later/tusk-bi-to-core.md).
+- How and why it moved into core: [`specs/roadmap/later/tusk-bi-to-core.md`](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/later/tusk-bi-to-core.md).

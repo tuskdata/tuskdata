@@ -16,6 +16,15 @@ _plugins: dict[str, "TuskPlugin"] = {}
 _discovered: bool = False
 
 
+def _load_bi_plugin() -> "TuskPlugin":
+    from tusk.bi import BIPlugin
+
+    return BIPlugin()
+
+
+_BUILTIN_PLUGINS = [_load_bi_plugin]
+
+
 def discover_plugins() -> dict[str, "TuskPlugin"]:
     """Discover and load plugins from entry_points.
 
@@ -31,6 +40,18 @@ def discover_plugins() -> dict[str, "TuskPlugin"]:
     if _discovered:
         return _plugins
 
+    # Built-in plugins shipped inside the core package (tusk-bi moved in
+    # with 0.4.36). They keep the plugin shape — tab, templates, statics,
+    # storage, CLI — so nothing else in the app had to change; they just
+    # don't need an entry point or a separate wheel.
+    for loader in _BUILTIN_PLUGINS:
+        try:
+            plugin = loader()
+            _plugins[plugin.name] = plugin
+            log.info("Built-in plugin loaded", plugin=plugin.name, version=plugin.version)
+        except Exception as e:  # noqa: BLE001
+            log.error("Failed to load built-in plugin", error=str(e))
+
     # Python 3.10+ style
     if sys.version_info >= (3, 10):
         eps = entry_points(group="tusk.plugins")
@@ -42,6 +63,13 @@ def discover_plugins() -> dict[str, "TuskPlugin"]:
         try:
             plugin_class = ep.load()
             plugin = plugin_class()
+
+            # An external wheel of a plugin that is now built in (e.g. a
+            # stale tusk-bi install): the core copy wins.
+            if plugin.name in _plugins:
+                log.warning("Plugin already provided by core, skipping entry point",
+                            plugin=plugin.name, entry_point=ep.name)
+                continue
 
             # Check compatibility
             if not plugin.is_compatible():

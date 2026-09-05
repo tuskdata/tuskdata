@@ -1,0 +1,18 @@
+{# Widget partial: MapLibre map.
+   Expects: widget, data {columns, rows}, widget_id, config
+   config.map_style: 'points' (default) | 'bubbles' | 'choropleth'
+   Auto-detects (lat,lng) + optional (value, label) columns. In 'bubbles'
+   mode the circle radius scales by value and labels render inline.
+#}
+{% if error %}
+<div class="text-xs" style="color:var(--red);padding:8px">{{ error }}</div>
+{% elif data and data.rows %}
+<div id="map-{{ widget_id }}" class="w-full rounded overflow-hidden" style="height:100%;min-height:160px"></div>
+<script>
+window.biRenderMap({{ widget_id }}, {{ data | tojson }}, {{ config | tojson }});
+</script>
+{% else %}
+<div class="flex items-center justify-center text-xs" style="color:var(--fg-4);padding:24px">
+    No map data
+</div>
+{% endif %}

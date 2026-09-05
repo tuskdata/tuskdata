@@ -1,0 +1,21 @@
+{# Widget partial: Chart.js chart
+   Rendered server-side as HTML fragment for HTMX loading.
+   Expects: widget (dict), data (dict with columns/rows), widget_id (int), chart_config (dict)
+#}
+{% from "components/feedback.html" import empty_state %}
+{% if error %}
+<div class="flex items-center justify-center h-full text-xs" style="color:var(--red)">
+    <span>{{ error }}</span>
+</div>
+{% elif data and data.columns %}
+<div class="bi-chart-container">
+    <canvas id="widget-chart-{{ widget_id }}"></canvas>
+</div>
+<script>
+window.biRenderChart({{ widget_id }}, {{ chart_config | tojson }});
+</script>
+{% else %}
+<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--fg-3);opacity:0.4">
+    <p>No data</p>
+</div>
+{% endif %}

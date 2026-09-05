@@ -1,75 +1,96 @@
-# Now — 2026-05-19
+# Now — 2026-09-05
 
-What's in flight or starting **this cycle (0.5.x)**. Higher-level than the TaskCreate task list — this is the "what does the user-visible product gain in the next 3 months" view.
+What's in flight or starting **this cycle (0.4.31 → 0.5.0)**. Higher-level than
+the task list — this is the "what does the user-visible product gain in the
+next weeks" view.
 
-## Just shipped (2026-05-18 → 2026-05-19)
+## Context reset (2026-09-05)
 
-- **v0.4.12** — SSH tunnel fails fast (10s `connect_timeout`, 30s broken-session cooldown, inline admin error banners).
-- **v0.4.13** — CSRF middleware fixed (was returning 500 instead of 403, silently, since 0.3.x).
-- **tusk-bi v0.3.0** — Phase 1 dashboards redesign: CSS-grid viewer, .dash-head chrome, Top-N + Funnel widgets, map bubbles style, sparkline tinted by trend, `is_public` + `refresh_interval_seconds` (Live + Public badges), General tab in editor settings.
-- **PyPI publishing workflow** (OIDC trusted publishing, builds tagged `v*`).
-- **Engineering specs structure** (`specs/{architecture,bugs,features,roadmap}/`) — first audit cycle done.
+Three months idle, then a one-day revival: deps to Litestar 2.24 / Python
+3.13 / Polars 1.44, tusk-bi charts fixed (widgets.js was never loaded), AI
+grounding for large schemas, scheduled backups with destination + rotation,
+Windows console, MCP server via litestar-mcp, prod restart loop on the
+non-AVX VM fixed, plugin assets no longer wiped on worker recycle.
+Shipped as 0.4.28 – 0.4.30.
 
-## 0.5.x — Engineering hygiene + Data Contracts (next 3-4 weeks)
+Positioning agreed: **a modern pgAdmin with AI and lightweight analytics**,
+not a generic data platform. tusk-ci and tusk-security are gone, tusk-cluster
+is paused, Data/ETL is reduced (canvas stays, Ibis epics are dead), tusk-bi
+stays lean and moves to core. The May roadmap items in `later/` (semantic
+layer, CDC, HA, embedded SDK, license keys, notebooks) are parked.
 
-Per the SMB-first focus + audit findings.
+**0.5.0 waits for the Apple Developer account** (needed to sign the desktop
+app). Until then everything ships as 0.4.x — one feature per release, each
+one deployable on its own, bugs found along the way go in the same release.
 
-### Hygiene
-- [ ] `.github/workflows/ci.yml` — run pytest + ruff on PRs and pushes (tech-debt P1 #1).
-- [ ] Litestar middleware exception logging at ERROR with traceback regardless of debug flag (tech-debt P1 #2).
-- [ ] Migrate `AbstractMiddleware` → `ASGIMiddleware`, `StaticFilesConfig` → `create_static_files_router` (tech-debt P1 #3, #4).
-- [ ] Backfill basic happy-path tests for `studio/routes/admin.py` to reach 50% (tech-debt P1 #5).
+## 0.4.31 — API tokens + MCP for everyone (~3-4 days)
 
-### Feature
-- [ ] **Data Contracts at connection level** — YAML contract per Postgres connection, schema-drift detection feeds it, Slack/in-app alert when contract violated, AI Copilot reads contract for grounding context. ~2 weeks of focused work. See [features/data-contracts.md](../features/data-contracts.md) for the spec (TODO: write it).
+The foundation the rest builds on.
+- Per-user API tokens: `api_tokens` table, `tusk auth token create|list|revoke`,
+  `Authorization: Bearer` accepted by the session middleware. Scoped to the
+  user's connections/permissions.
+- MCP in multi-user mode via tokens. Every `tools/call` goes to the audit
+  log (user, tool, connection, SQL).
+- `run_query` on DuckDB/SQLite connections too; `list_saved_queries` +
+  run a saved query as a tool; `get_schema` also exposed as an MCP resource.
+- User identity in the HTTP access log.
 
-## 0.5.x — Process resilience (added 2026-05-20)
+## 0.4.32 — Schema Watch (~2-3 days)
 
-Distinct from HA. Single pod, single process — but the pod itself should
-survive its own hangs and stuck subsystems. The SSH tunnel freeze on
-2026-05-17 (see `bugs/2026-05-18-ssh-tunnel-hangs-admin.md`) made the
-pod unresponsive without crashing it; nothing kicked it. K8s liveness
-probe would have, if we had documented one.
+Data Contracts, layer 1: the thing that evaluates them.
+- Scheduled kind `schema_watch` per connection: snapshot of tables /
+  columns / types / nullability / PK-FK / indexes (same catalog query the
+  Copilot uses), stored in SQLite, diffed against the previous run.
+- Diff → event `schema.changed` with the detail → Slack / webhook / in-app,
+  through the notification channels that already work end-to-end.
+- MCP tool `schema_changes(connection_id, since)`.
 
-Concrete work, ranked by impact-per-effort:
+## 0.4.33 — Frozen contracts (~3-4 days)
 
-- [ ] **Granian worker timeout + recycle.** Set `--worker-timeout=30s`
-  (or whatever the right number is per profile) so a worker that
-  doesn't return inside the budget gets killed and respawned. Add
-  `--max-requests=N` so any slow leak in a long-running worker gets
-  cycled out periodically.
-- [ ] **Request-level timeout middleware.** Litestar middleware that
-  wraps the handler call in `asyncio.wait_for(coro, timeout=...)`.
-  Per-route override via decorator; sensible default (e.g. 60s for
-  read endpoints, longer for export/backup).
-- [ ] **Job max-duration watchdog.** Background jobs in
-  `tusk.core.jobs` already track `started_at`. A new periodic
-  watchdog (every 30s) kills jobs past their declared `max_duration`
-  and marks them `failed_timeout`. Default per kind: backup=1h,
-  dns_scan=30m, query=10m, etc.
-- [ ] **K8s deployment recipe** in `docs/deployment/kubernetes.md`
-  with tuned liveness + readiness probes:
-  - `livenessProbe`: GET `/api/health` every 30s, fail after 3 misses
-    (~90s before the kubelet kills the pod — matches the worker
-    timeout above).
-  - `readinessProbe`: same endpoint, every 10s, more aggressive.
-  - StatefulSet + PVC for `~/.tusk` (single replica until HA lands).
-- [ ] **Lint rule: subprocess inside `async def`.** Ruff custom rule
-  or grep-based pre-commit hook. Lesson #1 from the backup
-  post-mortem (`bugs/2026-04-30-backups-hang-and-lie.md`) was "never
-  call blocking I/O from an `async def` handler". Codify it.
+Data Contracts, layer 2: contracts are inferred, not written.
+- "Freeze contract" on a connection or a set of tables: the current
+  snapshot becomes the expected schema. Rules that come for free: column
+  exists, type unchanged, not made nullable, PK/FK intact.
+- Contract shown as a table in the UI with ✅/⚠️ per table; every Schema
+  Watch run evaluates it; violations raise `contract.violated`.
+- Export to YAML is a button, not the workflow. Layer 3 (freshness, volume,
+  uniqueness rules — where YAML finally earns its place) comes after real use.
 
-None of these need a broker, a second container, or HA infra. All of
-them help **even with `replicas: 1`**.
+## 0.4.34 — Studio ergonomics (~2 days)
 
-## 0.5.x exit criteria
+- Colour tabs and editor header by the connected server's colour.
+  Stops the DROP-on-prod-thinking-it's-dev class of accident.
+- Row cap for "open table" from the schema tree: `LIMIT` from a setting
+  instead of `SELECT *`.
+- AI Insight on EXPLAIN: wire the Copilot to the existing EXPLAIN viewer.
+- Custom XYZ tile provider for the map — small, we use geo.
 
-- Overall test coverage ≥ 45% (from 33% baseline).
-- All P1 tech-debt items closed.
-- All process-resilience knobs from the section above shipped (Granian
-  timeouts, request timeouts, job watchdog, documented K8s probes).
-- Data Contracts shipped with docs page + sample contract YAML.
-- mkdocs-material docs site live on GitHub Pages with: install, first
-  connection, plugin system, security model.
-- ADR 0001 in repo so the next person reading the codebase understands
-  why we deliberately don't have Redis/brokers (and when we will).
+## 0.4.35 — `tusk app` (preview) (~1 day)
+
+- Optional extra `tuskdata[app]` (pywebview). `tusk app` boots Granian on a
+  free port and opens a native window; `tusk app --url http://...` wraps a
+  remote deploy instead. Labelled preview: no packaging, no signing, no
+  auto-update until the Apple account exists.
+
+## 0.4.36 — tusk-bi into core (~1-2 days, mechanical)
+
+Decided in May (`later/tusk-bi-to-core.md`). Own release so any breakage
+is isolatable. One wheel to deploy instead of two.
+
+## 0.5.0 — when Apple approves
+
+- Desktop packaging: PyInstaller/Briefcase, Developer ID + notarization,
+  Windows signing, auto-update.
+- Docs site live on GitHub Pages (mkdocs is configured, no workflow yet).
+- Test coverage ≥ 45% (35% today; `routes/data.py`, `routes/auth.py`,
+  `admin/backup.py`, `engines/postgres.py` are the gap).
+- Ibis moved to an optional extra (prod has run with `ibis: unavailable`
+  for months; Data page falls back to Polars anyway).
+- TODO.md / TODO.es.md rewritten to reality.
+
+## Open nits (fold into whichever release touches the area)
+
+- Horizontal scroll appears after confirmation modals in BI.
+- Litestar 2.24 deprecates inferred path params (`{id:int}` → `FromPath[int]`);
+  dozens of handlers, do before 3.0 lands (beta expected late 2026).
+- Gradual adoption of litestar-htmx (installed, unused) when touching routes.

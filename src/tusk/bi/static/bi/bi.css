@@ -1,0 +1,1781 @@
+/* Tusk BI — Plugin-specific styles
+   Uses CSS variables from styles.css (--bg-primary, --bg-secondary, --border-color, etc.)
+   Core primitives (.btn*, .nav-tab, .dtable, .chip*, .settings-input, modals,
+   empty states) are inherited from tusk-app.css.
+*/
+
+/* ============================================
+   Dashboard Grid (Gridstack)
+   ============================================ */
+
+.grid-stack {
+    min-height: 400px;
+    width: 100% !important;
+}
+
+.grid-stack-item-content {
+    inset: 4px !important;
+}
+
+/* Editor canvas: widgets fill the grid cell completely */
+.ed-canvas-wrap .grid-stack-item-content {
+    inset: 3px !important;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.ed-canvas-wrap .grid-stack-item-content.ed-widget {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* ============================================
+   Widget Cards
+   ============================================ */
+
+.bi-widget {
+    overflow: hidden;
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.bi-widget:hover {
+    box-shadow: 0 0 0 1px var(--brand-soft);
+}
+
+/* Widget header row */
+.bi-widget-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    min-height: 1.5rem;
+}
+
+.bi-widget-header h3 {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.01em;
+}
+
+.bi-widget-header .bi-widget-meta {
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+/* Widget body fills remaining space */
+.bi-widget-body {
+    height: calc(100% - 2rem);
+    position: relative;
+}
+
+/* ============================================
+   Stat Widgets
+   ============================================ */
+
+.bi-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.bi-stat-label {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.bi-stat-delta {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+}
+
+.bi-stat-delta.up {
+    color: var(--green);
+    background: rgba(52, 211, 153, 0.1);
+}
+
+.bi-stat-delta.down {
+    color: var(--red);
+    background: rgba(248, 113, 113, 0.1);
+}
+
+/* ============================================
+   Chart container
+   ============================================ */
+
+.bi-chart-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* ============================================
+   Edit mode grid
+   ============================================ */
+
+.bi-grid-edit {
+    background-image:
+        linear-gradient(rgba(48, 54, 61, 0.25) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(48, 54, 61, 0.25) 1px, transparent 1px);
+    background-size: calc(100% / 12) 60px;
+}
+
+/* Widget resize handle */
+.bi-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    cursor: se-resize;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.bi-resize-handle::after {
+    content: '';
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--text-secondary);
+    border-bottom: 2px solid var(--text-secondary);
+    opacity: 0.4;
+}
+
+.bi-widget:hover .bi-resize-handle {
+    opacity: 1;
+}
+
+/* ============================================
+   Sparklines
+   ============================================ */
+
+.bi-sparkline {
+    width: 80px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Code/mono blocks
+   ============================================ */
+
+.bi-code {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Dashboard cards (list view)
+   ============================================ */
+
+.bi-dashboard-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    transition: all 0.2s ease;
+}
+
+.bi-dashboard-card:hover {
+    border-color: var(--brand-soft);
+    box-shadow: 0 0 0 1px var(--brand-soft);
+}
+
+/* ============================================
+   Embed-specific
+   ============================================ */
+
+.bi-embed-body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Scrollable widget body
+   ============================================ */
+
+.bi-scroll-y {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.bi-scroll-y::-webkit-scrollbar {
+    width: 4px;
+}
+
+.bi-scroll-y::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+/* ============================================
+   Query Editor
+   ============================================ */
+
+.bi-editor-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.bi-editor-pane .cm-editor {
+    height: 100%;
+}
+
+.bi-editor-pane .cm-scroller {
+    overflow: auto;
+}
+
+/* ============================================
+   BI Sidebar
+   ============================================ */
+
+.bi-sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.bi-sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.bi-sidebar::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+.bi-sidebar-section {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    padding: 0.75rem 0.75rem 0.25rem;
+}
+
+.bi-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    border-left: 2px solid transparent;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.bi-sidebar-item:hover {
+    color: var(--text-primary);
+    background: var(--brand-soft);
+}
+
+.bi-sidebar-item.active {
+    color: var(--accent-violet);
+    background: var(--brand-soft);
+    border-left-color: var(--accent-violet);
+}
+
+.bi-sidebar-item i,
+.bi-sidebar-item svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.bi-sidebar-dash-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem 0.25rem 1.25rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bi-sidebar-dash-item:hover {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
+.bi-sidebar-dash-item.active {
+    opacity: 1;
+    color: var(--accent-violet);
+}
+
+/* ============================================
+   Overview Stat Cards
+   ============================================ */
+
+.bi-overview-stat {
+    position: relative;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.bi-overview-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent-violet), var(--accent-violet));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.bi-overview-stat:hover::before {
+    opacity: 1;
+}
+
+.bi-overview-stat:hover {
+    border-color: var(--brand-soft);
+}
+
+/* ============================================
+   Sparkline Bars (CSS-only)
+   ============================================ */
+
+.bi-spark-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+}
+
+.bi-spark-bars .bar {
+    width: 4px;
+    border-radius: 1px;
+    background: var(--brand-soft);
+    transition: height 0.3s ease;
+    min-height: 2px;
+}
+
+.bi-spark-bars .bar:last-child {
+    background: var(--accent-violet);
+}
+
+/* ============================================
+   Connected App Cards
+   ============================================ */
+
+.bi-app-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.2s ease;
+}
+
+.bi-app-card:hover {
+    border-color: var(--brand-soft);
+    box-shadow: 0 0 12px var(--brand-soft);
+}
+
+.bi-app-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--brand-soft);
+    color: var(--accent-violet);
+    font-weight: 700;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Widget Colored Dots
+   ============================================ */
+
+.bi-widget-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Footer Status Bar
+   ============================================ */
+
+.bi-footer {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.375rem 1rem;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.bi-footer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Dashboard Editor — Top Bar
+   ============================================ */
+
+.ed-topbar {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 16px;
+    flex-shrink: 0;
+}
+
+.ed-back {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 7px;
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    text-decoration: none;
+}
+
+.ed-back:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.ed-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+    flex-shrink: 0;
+}
+
+.ed-name-input {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    padding: 4px 8px;
+    outline: none;
+    cursor: text;
+    letter-spacing: -0.3px;
+    transition: border-color 0.15s, background 0.15s;
+    min-width: 60px;
+}
+
+.ed-name-input:hover {
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.ed-name-input:focus {
+    border-color: var(--accent-violet);
+    background: var(--bg-tertiary);
+}
+
+.ed-desc-badge {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+
+.ed-desc-badge:hover {
+    opacity: 1;
+    background: var(--bg-tertiary);
+}
+
+/* ── Zoom / View Controls ── */
+.ed-view-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    padding: 2px;
+}
+
+.ed-vc-btn {
+    width: 28px;
+    height: 24px;
+    border-radius: 5px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.ed-vc-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+}
+
+.ed-zoom-val {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 0 6px;
+    min-width: 36px;
+    text-align: center;
+}
+
+.ed-btn-ghost {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 7px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+}
+
+.ed-btn-ghost:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.ed-btn-save {
+    height: 30px;
+    padding: 0 16px;
+    border-radius: 7px;
+    background: var(--accent-violet);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s;
+}
+
+.ed-btn-save:hover {
+    filter: brightness(1.1);
+}
+
+.ed-btn-save.saved {
+    background: var(--green);
+}
+
+/* ============================================
+   Dashboard Editor — Left Panel (Widget Library)
+   ============================================ */
+
+.ed-left {
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ed-panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.ed-panel-tab {
+    flex: 1;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.ed-panel-tab:hover {
+    opacity: 0.8;
+}
+
+.ed-panel-tab.active {
+    color: var(--text-primary);
+    opacity: 1;
+    border-bottom-color: var(--accent-violet);
+}
+
+.ed-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.ed-panel-body::-webkit-scrollbar {
+    width: 5px;
+}
+
+.ed-panel-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.ed-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    padding: 10px 4px 5px;
+}
+
+/* Widget tiles in library */
+.ed-wlib-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.ed-wlib-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 8px;
+    cursor: grab;
+    transition: all 0.18s;
+    text-align: center;
+    user-select: none;
+    position: relative;
+}
+
+.ed-wlib-item:hover {
+    border-color: var(--accent-violet);
+    background: var(--bg-secondary);
+    transform: translateY(-1px);
+}
+
+.ed-wlib-item:active {
+    cursor: grabbing;
+    transform: scale(0.97);
+}
+
+.ed-wlib-icon {
+    font-size: 20px;
+    margin-bottom: 5px;
+}
+
+.ed-wlib-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.ed-wlib-desc {
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    margin-top: 2px;
+}
+
+/* Query items in library */
+.ed-qlib-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.12s;
+    border: 1px solid transparent;
+}
+
+.ed-qlib-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+.ed-qlib-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-violet);
+    flex-shrink: 0;
+}
+
+.ed-qlib-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.ed-qlib-db {
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Variables panel */
+.ed-var-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+}
+
+.ed-var-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.ed-var-type {
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    margin-top: 2px;
+}
+
+.ed-var-default {
+    font-size: 11px;
+    color: var(--accent-violet);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.ed-add-btn {
+    width: 100%;
+    height: 32px;
+    border-radius: 7px;
+    background: transparent;
+    border: 1px dashed var(--border-color);
+    color: var(--text-secondary);
+    opacity: 0.5;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.ed-add-btn:hover {
+    border-color: var(--accent-violet);
+    color: var(--accent-violet);
+    opacity: 1;
+}
+
+/* ============================================
+   Dashboard Editor — Canvas Center
+   ============================================ */
+
+.ed-canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg-primary);
+    background-image: radial-gradient(circle, var(--border-color) 1px, transparent 1px);
+    background-size: 24px 24px;
+    position: relative;
+    min-width: 0;
+    width: 0; /* forces flex to calculate properly */
+}
+
+.ed-canvas-wrap.no-grid {
+    background-image: none;
+}
+
+/* Override GridStack for editor canvas */
+.ed-canvas-wrap .grid-stack {
+    min-height: 600px;
+    padding: 20px;
+    background: transparent;
+    width: 100%;
+}
+
+/* ── Canvas Widgets ── */
+.ed-widget {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    position: relative;
+    min-height: 100px;
+    animation: ed-fadeIn 0.2s ease both;
+}
+
+.ed-widget:hover {
+    border-color: var(--brand-soft);
+}
+
+.ed-widget.selected {
+    border-color: var(--accent-violet) !important;
+    box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.ed-widget.selected .ed-widget-head {
+    background: var(--brand-soft);
+}
+
+@keyframes ed-fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ed-widget-head {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+}
+
+.ed-type-badge {
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.ed-widget-title {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: text;
+    min-width: 0;
+}
+
+.ed-widget-body {
+    padding: 12px;
+}
+
+/* Widget action buttons (drag, delete) */
+.ed-widget-drag {
+    position: absolute;
+    top: 6px;
+    right: 28px;
+    width: 20px;
+    height: 20px;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.ed-widget:hover .ed-widget-drag,
+.ed-widget.selected .ed-widget-drag {
+    opacity: 0.5;
+}
+
+.ed-widget-drag:hover {
+    background: var(--bg-tertiary);
+    opacity: 1 !important;
+}
+
+.ed-widget-del {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.15s;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.ed-widget:hover .ed-widget-del,
+.ed-widget.selected .ed-widget-del {
+    opacity: 0.5;
+}
+
+.ed-widget-del:hover {
+    background: rgba(244, 63, 94, 0.12);
+    color: var(--red);
+    opacity: 1 !important;
+}
+
+/* Widget resize handle */
+.ed-widget-resize {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: se-resize;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 3px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.ed-widget:hover .ed-widget-resize,
+.ed-widget.selected .ed-widget-resize {
+    opacity: 0.5;
+}
+
+/* Drop zone */
+.ed-drop-zone {
+    height: 80px;
+    border: 2px dashed var(--border-color);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 16px 28px;
+}
+
+.ed-drop-zone:hover,
+.ed-drop-zone.drag-over {
+    border-color: var(--accent-violet);
+    color: var(--accent-violet);
+    opacity: 1;
+    background: var(--brand-soft);
+}
+
+/* ============================================
+   Dashboard Editor — Right Panel (Widget Config)
+   ============================================ */
+
+.ed-right {
+    width: 280px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.2s;
+}
+
+.ed-right.collapsed {
+    width: 0;
+    min-width: 0;
+    border-left: none;
+    overflow: hidden;
+    padding: 0;
+}
+
+.ed-right-head {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.ed-right-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.ed-right-close {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.ed-right-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    opacity: 1;
+}
+
+.ed-right-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.ed-right-tab {
+    flex: 1;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.ed-right-tab:hover {
+    opacity: 0.8;
+}
+
+.ed-right-tab.active {
+    color: var(--text-primary);
+    opacity: 1;
+    border-bottom-color: var(--accent-violet);
+}
+
+.ed-right-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.ed-right-body::-webkit-scrollbar {
+    width: 5px;
+}
+
+.ed-right-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* Config sections */
+.ed-cfg-section {
+    margin-bottom: 20px;
+}
+
+.ed-cfg-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    margin-bottom: 8px;
+}
+
+.ed-cfg-field {
+    margin-bottom: 10px;
+}
+
+.ed-cfg-field-label {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.ed-cfg-input {
+    width: 100%;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 0 10px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.ed-cfg-input:focus {
+    border-color: var(--accent-violet);
+}
+
+.ed-cfg-input:hover {
+    border-color: var(--brand-soft);
+}
+
+.ed-cfg-textarea {
+    width: 100%;
+    height: 72px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-primary);
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 8px 10px;
+    outline: none;
+    resize: none;
+    line-height: 1.6;
+    transition: border-color 0.15s;
+}
+
+.ed-cfg-textarea:focus {
+    border-color: var(--accent-violet);
+}
+
+.ed-cfg-select {
+    width: 100%;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 0 10px;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237b8ea8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    transition: border-color 0.15s;
+}
+
+.ed-cfg-select:focus {
+    border-color: var(--accent-violet);
+}
+
+/* Color picker row */
+.ed-color-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ed-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+    flex-shrink: 0;
+}
+
+.ed-color-swatch:hover {
+    border-color: var(--text-primary);
+}
+
+.ed-color-swatch.active {
+    border-color: var(--text-primary);
+}
+
+/* Column mapping */
+.ed-col-map {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.ed-col-map-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ed-col-map-row:last-child {
+    border-bottom: none;
+}
+
+.ed-col-map-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    width: 60px;
+    flex-shrink: 0;
+}
+
+.ed-col-map-arrow {
+    color: var(--text-secondary);
+    opacity: 0.3;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.ed-col-chip {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.ed-col-chip:hover {
+    border-color: var(--accent-violet);
+    color: var(--accent-violet);
+}
+
+.ed-col-chip.set {
+    color: var(--green);
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.07);
+}
+
+/* Toggle */
+.ed-tog-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.ed-tog-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.ed-toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.ed-toggle.on {
+    background: var(--accent-violet);
+    border-color: var(--accent-violet);
+}
+
+.ed-toggle::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.ed-toggle.on::after {
+    transform: translateX(16px);
+}
+
+/* No selection state */
+.ed-no-sel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.ed-no-sel-icon {
+    font-size: 28px;
+    margin-bottom: 4px;
+}
+
+.ed-no-sel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.ed-no-sel-hint {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    line-height: 1.5;
+}
+
+/* RLS badge */
+.ed-rls-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 7px;
+    padding: 8px 10px;
+}
+
+.ed-rls-text {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-secondary);
+}
+
+.ed-rls-text span {
+    color: var(--green);
+}
+
+/* ============================================
+   Dashboard Editor — Canvas Toolbar (bottom)
+   ============================================ */
+
+.ed-toolbar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.ed-kbd {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.ed-toolbar-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border-color);
+}
+
+.ed-dirty {
+    color: var(--accent-amber);
+    font-size: 11px;
+}
+
+.ed-saved {
+    color: var(--green);
+    font-size: 11px;
+}
+
+/* ============================================
+   Dashboard v0.3.0 — Redesigned viewer layout
+   CSS-grid based (no GridStack on viewer side).
+   Class names mirror the Tusk Redesign v3 mockup.
+   Editor still uses GridStack for drag-resize.
+   ============================================ */
+
+.dash-page {
+    padding: 24px 28px;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.dash-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.dash-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    color: var(--fg);
+}
+
+.dash-desc {
+    font-size: 13px;
+    color: var(--fg-3);
+    margin-top: 6px;
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.dash-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--fg-3);
+    flex-wrap: wrap;
+}
+
+.dash-meta-row .who {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg-2);
+}
+
+.dash-meta-row .who .av {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand, #d4502b), var(--accent-violet, #6f5ad6));
+    color: white;
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+}
+
+.dash-meta-row .sep {
+    color: var(--fg-4);
+}
+
+.dash-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 14px;
+    align-content: start;
+}
+
+.span-1  { grid-column: span 1; }
+.span-2  { grid-column: span 2; }
+.span-3  { grid-column: span 3; }
+.span-4  { grid-column: span 4; }
+.span-5  { grid-column: span 5; }
+.span-6  { grid-column: span 6; }
+.span-7  { grid-column: span 7; }
+.span-8  { grid-column: span 8; }
+.span-9  { grid-column: span 9; }
+.span-10 { grid-column: span 10; }
+.span-11 { grid-column: span 11; }
+.span-12 { grid-column: span 12; }
+
+/* Narrower viewports collapse columns. We cap at 6, then at 1. */
+@media (max-width: 1100px) {
+    .dash-grid { grid-template-columns: repeat(6, 1fr); }
+    .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 { grid-column: span 6; }
+    .span-5 { grid-column: span 6; }
+}
+@media (max-width: 640px) {
+    .dash-grid { grid-template-columns: 1fr; }
+    [class*="span-"] { grid-column: span 1; }
+}
+
+.dash-card {
+    background: var(--surface, var(--bg-secondary));
+    border: 1px solid var(--border, var(--border-color));
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;  /* allow internal scroll */
+}
+
+.dash-card-h {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dash-card-h .l {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-3, var(--text-secondary));
+}
+
+.dash-card-v {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg, var(--text-primary));
+}
+
+.dash-card-d {
+    font-size: 11.5px;
+    color: var(--green);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.dash-card-d.down { color: var(--accent-rose, var(--red)); }
+.dash-card-d.flat { color: var(--fg-3); }
+.dash-card-d i { width: 11px; height: 11px; }
+
+/* Wide sparkline at full card width below the value. */
+.dash-spark {
+    height: 36px;
+    width: 100%;
+    margin-top: 2px;
+}
+
+/* ============================================
+   Top-N list widget (horizontal bars + label)
+   ============================================ */
+
+.bi-value-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.bi-value-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bi-vbar {
+    position: relative;
+    height: 26px;
+    flex: 1;
+    background: var(--surface-2, var(--bg-tertiary));
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.bi-vbar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, var(--brand-soft, rgba(212,80,43,.15)), var(--brand, #d4502b) 140%);
+    border-radius: 5px;
+}
+
+.bi-vbar-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    color: var(--fg, var(--text-primary));
+    z-index: 1;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bi-vcount {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--fg-2, var(--text-primary));
+    min-width: 56px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Funnel widget — pyramid bars
+   ============================================ */
+
+.bi-funnel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.bi-funnel-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bi-funnel-label {
+    width: 110px;
+    font-size: 12px;
+    color: var(--fg-2, var(--text-primary));
+    flex-shrink: 0;
+}
+
+.bi-funnel-bar-wrap {
+    flex: 1;
+    height: 24px;
+    background: var(--surface-2, var(--bg-tertiary));
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.bi-funnel-bar {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* The first row is the widest (100% color); rows below use lower opacity
+   to mirror the mockup's funnel-tapered look. */
+.bi-funnel-row:nth-child(1) .bi-funnel-bar { background: var(--brand, #d4502b); }
+.bi-funnel-row:nth-child(2) .bi-funnel-bar { background: var(--accent-violet, #6f5ad6); opacity: .85; }
+.bi-funnel-row:nth-child(3) .bi-funnel-bar { background: var(--accent-teal, #0d8a72); opacity: .80; }
+.bi-funnel-row:nth-child(4) .bi-funnel-bar { background: var(--accent-amber, #b07700); opacity: .75; }
+.bi-funnel-row:nth-child(5) .bi-funnel-bar { background: var(--accent-rose, #c84064); opacity: .70; }
+.bi-funnel-row:nth-child(n+6) .bi-funnel-bar { background: var(--fg-3); opacity: .60; }
+
+.bi-funnel-count {
+    width: 80px;
+    text-align: right;
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--fg-3);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Header badges (live, public)
+   ============================================ */
+
+.dash-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-family: "Geist Mono", ui-monospace, monospace;
+}
+.dash-badge i { width: 11px; height: 11px; }
+.dash-badge.live   { background: rgba(31,138,76,.10); color: var(--green); }
+.dash-badge.public { background: var(--brand-soft, rgba(212,80,43,.10)); color: var(--brand, #d4502b); }
+.dash-badge.live .pulse {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 0 3px rgba(31,138,76,.18);
+    animation: dashPulse 1.6s ease-in-out infinite;
+}
+@keyframes dashPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

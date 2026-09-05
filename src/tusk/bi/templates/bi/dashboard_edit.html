@@ -1,0 +1,638 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ dashboard.name if dashboard else 'Dashboard' }} - Analytics{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css">
+<link rel="stylesheet" href="/static/plugins/bi/bi.css">
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full overflow-hidden" x-data="dashboardEditor(window._biDashboardEditorInitial)" data-dashboard-id="{{ dashboard.id if dashboard else '' }}">
+
+    <!-- ── EDITOR TOPBAR ── -->
+    <div class="ed-topbar">
+        <a href="/bi/dashboards/{{ dashboard.id }}" class="ed-back">
+            <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+            Dashboards
+        </a>
+        <div class="ed-sep"></div>
+        <div class="flex items-center gap-2">
+            <input type="text" class="ed-name-input" x-model="dashName" spellcheck="false"
+                   @blur="renameDashboard()">
+            <span class="ed-desc-badge" @click="editingDesc = !editingDesc">+ description</span>
+        </div>
+
+        <div class="flex items-center gap-2 ml-auto">
+            <!-- Zoom -->
+            <div class="ed-view-ctrl">
+                <button class="ed-vc-btn" @click="zoomLevel = Math.max(50, zoomLevel - 10); applyZoom()">−</button>
+                <span class="ed-zoom-val" x-text="zoomLevel + '%'"></span>
+                <button class="ed-vc-btn" @click="zoomLevel = Math.min(150, zoomLevel + 10); applyZoom()">+</button>
+            </div>
+
+            <!-- Grid toggle -->
+            <button class="ed-btn-ghost" @click="showGrid = !showGrid" :style="!showGrid ? 'color: var(--fg-3); opacity: 0.4;' : ''">
+                <i data-lucide="grid-3x3" class="w-3 h-3"></i> Grid
+            </button>
+
+            <!-- Preview -->
+            <a :href="'/bi/dashboards/' + dashboardId" class="ed-btn-ghost">
+                <i data-lucide="eye" class="w-3 h-3"></i> Preview
+            </a>
+
+            <div class="ed-sep"></div>
+
+            <!-- Settings -->
+            <button class="ed-btn-ghost" @click="showSettings = true; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="settings" class="w-3 h-3"></i>
+            </button>
+
+            <!-- Save -->
+            <button class="ed-btn-save" :class="{ saved: justSaved }" @click="saveLayout()">
+                <i data-lucide="save" class="w-3 h-3"></i>
+                <span x-text="saving ? 'Saving...' : justSaved ? 'Saved' : 'Save Layout'"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── EDITOR BODY (3-panel) ── -->
+    <div class="flex flex-1 min-h-0">
+
+        <!-- ═══ LEFT PANEL — Widget Library ═══ -->
+        <div class="ed-left">
+            <div class="ed-panel-tabs">
+                <button class="ed-panel-tab" :class="{ active: leftTab === 'widgets' }" @click="leftTab = 'widgets'">Widgets</button>
+                <button class="ed-panel-tab" :class="{ active: leftTab === 'queries' }" @click="leftTab = 'queries'">Queries</button>
+                <button class="ed-panel-tab" :class="{ active: leftTab === 'vars' }" @click="leftTab = 'vars'">Variables</button>
+            </div>
+
+            <div class="ed-panel-body">
+                <!-- WIDGETS TAB -->
+                <div x-show="leftTab === 'widgets'">
+                    <div class="ed-section-label">Stats</div>
+                    <div class="ed-wlib-grid">
+                        <div class="ed-wlib-item" @click="addWidgetByType('stat')">
+                            <div class="ed-wlib-icon"><i data-lucide="bar-chart-3" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Stat</div>
+                            <div class="ed-wlib-desc">Number + trend</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('stat')">
+                            <div class="ed-wlib-icon"><i data-lucide="trending-up" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Comparison</div>
+                            <div class="ed-wlib-desc">vs period</div>
+                        </div>
+                    </div>
+
+                    <div class="ed-section-label">Charts</div>
+                    <div class="ed-wlib-grid">
+                        <div class="ed-wlib-item" @click="addWidgetByType('chart')">
+                            <div class="ed-wlib-icon"><i data-lucide="trending-up" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Line</div>
+                            <div class="ed-wlib-desc">Trend</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('chart')">
+                            <div class="ed-wlib-icon"><i data-lucide="bar-chart" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Bar</div>
+                            <div class="ed-wlib-desc">Compare</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('chart')">
+                            <div class="ed-wlib-icon"><i data-lucide="pie-chart" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Donut</div>
+                            <div class="ed-wlib-desc">Distribution</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('chart')">
+                            <div class="ed-wlib-icon"><i data-lucide="area-chart" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Area</div>
+                            <div class="ed-wlib-desc">Volume</div>
+                        </div>
+                    </div>
+
+                    <div class="ed-section-label">Data</div>
+                    <div class="ed-wlib-grid">
+                        <div class="ed-wlib-item" @click="addWidgetByType('table')">
+                            <div class="ed-wlib-icon"><i data-lucide="table" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Table</div>
+                            <div class="ed-wlib-desc">Rows & cols</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('pivot')">
+                            <div class="ed-wlib-icon"><i data-lucide="rotate-3d" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Pivot</div>
+                            <div class="ed-wlib-desc">Cross-tab</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('top_n')">
+                            <div class="ed-wlib-icon"><i data-lucide="list-ordered" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Top-N</div>
+                            <div class="ed-wlib-desc">Ranked list</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('funnel')">
+                            <div class="ed-wlib-icon"><i data-lucide="filter" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Funnel</div>
+                            <div class="ed-wlib-desc">Stage drop-off</div>
+                        </div>
+                    </div>
+
+                    <div class="ed-section-label">Layout</div>
+                    <div class="ed-wlib-grid">
+                        <div class="ed-wlib-item" @click="addWidgetByType('text')">
+                            <div class="ed-wlib-icon"><i data-lucide="type" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Text</div>
+                            <div class="ed-wlib-desc">Markdown</div>
+                        </div>
+                        <div class="ed-wlib-item" @click="addWidgetByType('map')">
+                            <div class="ed-wlib-icon"><i data-lucide="map" class="w-5 h-5 mx-auto" style="color: var(--fg-3);"></i></div>
+                            <div class="ed-wlib-name">Map</div>
+                            <div class="ed-wlib-desc">Geospatial</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QUERIES TAB -->
+                <div x-show="leftTab === 'queries'" x-cloak>
+                    <div class="ed-section-label">Saved Queries</div>
+                    {% for q in queries %}
+                    <div class="ed-qlib-item" @click="addWidget({{ q.id }}, '{{ q.name }}')">
+                        <div class="ed-qlib-dot"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="ed-qlib-name truncate">{{ q.name }}</div>
+                            <div class="ed-qlib-db">{{ q.source_name }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not queries %}
+                    <div class="text-center py-6" style="color: var(--fg-3); opacity: 0.5;">
+                        <p class="text-xs">No saved queries yet</p>
+                        <a href="/bi/queries/new" class="text-xs mt-1 block" style="color: var(--brand);">Create one</a>
+                    </div>
+                    {% endif %}
+
+                    <div class="ed-section-label" style="margin-top: 10px;">Quick Query</div>
+                    <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; overflow: hidden;">
+                        <div class="mb-1">
+                            <select x-model="inlineQuery.source_id" @change="loadSourceTables()" class="ed-cfg-select" style="border-radius: 0; border: none; border-bottom: 1px solid var(--border);">
+                                <option value="">Select source</option>
+                                {% for s in sources %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div x-show="inlineQuery.tables.length > 0" x-cloak class="max-h-24 overflow-auto" style="border-bottom: 1px solid var(--border);">
+                            <template x-for="t in inlineQuery.tables" :key="t">
+                                <div class="flex items-center justify-between px-2 py-1 group text-xs cursor-default" style="color: var(--fg-3);">
+                                    <span class="truncate" x-text="t"></span>
+                                    <button @click="insertTableName(t)" class="opacity-0 group-hover:opacity-100 shrink-0 ml-1" style="color: var(--brand);" title="Use table">
+                                        <i data-lucide="corner-down-left" class="w-3 h-3"></i>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                        <textarea x-model="inlineQuery.sql" x-ref="inlineSql" placeholder="SELECT * FROM ..."
+                                  rows="4" style="width: 100%; background: transparent; border: none; outline: none; color: var(--fg); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 10px; resize: none; line-height: 1.6;"
+                                  spellcheck="false"
+                                  @keydown.ctrl.enter.prevent="runInlineQuery()" @keydown.meta.enter.prevent="runInlineQuery()"></textarea>
+                        <div style="border-top: 1px solid var(--border); padding: 6px 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 10.5px; color: var(--fg-3); opacity: 0.5; font-family: 'JetBrains Mono', monospace;" x-text="inlineQuery.source_id ? 'source #' + inlineQuery.source_id : '—'"></span>
+                            <button @click="runInlineQuery()" :disabled="!inlineQuery.sql.trim() || !inlineQuery.source_id"
+                                    style="height: 24px; padding: 0 10px; border-radius: 5px; background: var(--green); color: #fff; font-size: 11px; border: none; cursor: pointer; font-weight: 600;"
+                                    class="disabled:opacity-40 disabled:cursor-not-allowed">
+                                Run
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Run result -->
+                    <div x-show="inlineQuery.running" x-cloak class="text-xs text-center py-2" style="color: var(--fg-3);">Running...</div>
+                    <div x-show="inlineQuery.error" x-cloak class="text-xs p-2 mt-2 rounded" style="color: var(--red); background: rgba(244,63,94,0.08);" x-text="inlineQuery.error"></div>
+                    <div x-show="inlineQuery.hasResult && !inlineQuery.error" x-cloak class="text-xs p-2 mt-2 rounded" style="color: var(--green); background: rgba(16,185,129,0.08);">
+                        <span x-text="inlineQuery.rowCount + ' rows, ' + inlineQuery.colCount + ' columns'"></span>
+                        <div class="flex gap-1 mt-2">
+                            <button @click="showSaveInline = true" class="flex-1 px-2 py-1 rounded text-xs" style="background: rgba(61,127,255,0.12); color: var(--brand);">
+                                Save & Add Widget
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Save form -->
+                    <div x-show="showSaveInline" x-cloak class="space-y-2 p-2 mt-2 rounded" style="border: 1px solid var(--border);">
+                        <input type="text" x-model="inlineQuery.name" placeholder="Query name" class="ed-cfg-input">
+                        <div class="flex gap-1">
+                            <button @click="saveAndAddWidget()" :disabled="!inlineQuery.name.trim()"
+                                    class="ed-btn-save flex-1 text-xs justify-center disabled:opacity-40" style="height: 28px;">Save & Add</button>
+                            <button @click="showSaveInline = false" class="ed-btn-ghost flex-1 text-xs justify-center" style="height: 28px;">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VARIABLES TAB -->
+                <div x-show="leftTab === 'vars'" x-cloak>
+                    <div class="ed-section-label">Dashboard Variables</div>
+                    {% if variables %}
+                    {% for v in variables %}
+                    <div class="ed-var-item">
+                        <div class="flex items-center justify-between">
+                            <div class="ed-var-name">${{ v.name }}</div>
+                            <button @click="deleteVariable({{ v.id }}, '{{ v.name }}')"
+                                    style="color: var(--fg-3); opacity: 0.3;" class="hover:opacity-100">
+                                <i data-lucide="x" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                        <div class="ed-var-type">{{ v.var_type }}</div>
+                        {% if v.default_value %}
+                        <div class="ed-var-default">{{ v.default_value }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-xs py-2" style="color: var(--fg-3); opacity: 0.5;">No variables defined.</p>
+                    {% endif %}
+                    <button class="ed-add-btn" @click="showAddVar = !showAddVar">
+                        <i data-lucide="plus" class="w-3 h-3"></i> Add Variable
+                    </button>
+                    <div x-show="showAddVar" x-cloak class="space-y-2 mt-2 p-3 rounded" style="border: 1px solid var(--border);">
+                        <input type="text" x-model="newVar.name" placeholder="Variable name" class="ed-cfg-input">
+                        <select x-model="newVar.var_type" class="ed-cfg-select">
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                            <option value="select">Select</option>
+                        </select>
+                        <input type="text" x-model="newVar.default_value" placeholder="Default value" class="ed-cfg-input">
+                        <template x-if="newVar.var_type === 'select'">
+                            <input type="text" x-model="newVar.options" placeholder="opt1, opt2, opt3" class="ed-cfg-input">
+                        </template>
+                        <button @click="addVariable()" class="ed-btn-save w-full text-xs justify-center" style="height: 28px;">Add Variable</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ CENTER — Canvas ═══ -->
+        <div class="ed-canvas-wrap" :class="{ 'no-grid': !showGrid }">
+            <div class="grid-stack" id="edit-grid">
+                {% for w in widgets %}
+                <div class="grid-stack-item" gs-x="{{ w.col_start - 1 }}" gs-y="{{ w.row_start - 1 }}" gs-w="{{ w.col_span }}" gs-h="{{ w.row_span }}" gs-id="{{ w.id }}">
+                    <div class="grid-stack-item-content ed-widget" @click="selectWidget($event, {{ w.id }}, '{{ w.widget_type }}')">
+                        <div class="ed-widget-head">
+                            <span class="ed-type-badge">{{ w.widget_type }}</span>
+                            <input class="ed-widget-title" value="{{ w.title or w.query_name or 'Widget' }}" @click.stop @change="dirty = true">
+                        </div>
+                        <div class="ed-widget-body">
+                            <div class="flex items-center justify-center h-full text-xs" style="color: var(--fg-3); opacity: 0.5; min-height: 60px;">
+                                {{ w.col_span }}×{{ w.row_span }}
+                                {% if w.tab_id %}<span class="ml-1" style="color: var(--brand);">[tab]</span>{% endif %}
+                            </div>
+                        </div>
+                        <button class="ed-widget-del" @click.stop="removeWidget({{ w.id }})">
+                            <i data-lucide="x" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Drop zone below grid -->
+            <div class="ed-drop-zone">
+                <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+                Drag a widget here, or click any widget in the panel
+            </div>
+        </div>
+
+        <!-- ═══ RIGHT PANEL — Widget Config ═══ -->
+        <div class="ed-right" :class="{ collapsed: !showRightPanel }">
+            <div class="ed-right-head">
+                <span class="ed-right-title" x-text="selectedWidgetTitle || 'Widget Config'"></span>
+                <button class="ed-right-close" @click="showRightPanel = false; deselectAll()">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+            </div>
+            <div class="ed-right-tabs">
+                <button class="ed-right-tab" :class="{ active: rightTab === 'data' }" @click="rightTab = 'data'">Data</button>
+                <button class="ed-right-tab" :class="{ active: rightTab === 'style' }" @click="rightTab = 'style'">Style</button>
+                <button class="ed-right-tab" :class="{ active: rightTab === 'advanced' }" @click="rightTab = 'advanced'">Advanced</button>
+            </div>
+            <div class="ed-right-body">
+                <!-- No selection -->
+                <div x-show="!selectedWidgetId">
+                    <div class="ed-no-sel">
+                        <div class="ed-no-sel-icon"><i data-lucide="mouse-pointer" class="w-7 h-7 mx-auto" style="color: var(--fg-3); opacity: 0.3;"></i></div>
+                        <div class="ed-no-sel-title">Nothing selected</div>
+                        <div class="ed-no-sel-hint">Click a widget on the canvas to configure it</div>
+                    </div>
+                </div>
+
+                <!-- Data tab -->
+                <div x-show="selectedWidgetId && rightTab === 'data'">
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Data Source</div>
+                        <div class="ed-cfg-field">
+                            <div class="ed-cfg-field-label">Query</div>
+                            <select class="ed-cfg-select" x-model="selectedConfig.query_id">
+                                <option value="">Select query...</option>
+                                {% for q in queries %}
+                                <option value="{{ q.id }}">{{ q.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="ed-cfg-field">
+                            <div class="ed-cfg-field-label">Widget Type</div>
+                            <select class="ed-cfg-select" x-model="selectedConfig.widget_type">
+                                <option value="chart">Chart</option>
+                                <option value="table">Table</option>
+                                <option value="stat">Stat Card</option>
+                                <option value="pivot">Pivot Table</option>
+                                <option value="top_n">Top-N List</option>
+                                <option value="funnel">Funnel</option>
+                                <option value="map">Map</option>
+                                <option value="text">Text</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Assign to Tab</div>
+                        <select class="ed-cfg-select" x-model="selectedConfig.tab_id">
+                            <option value="">All tabs</option>
+                            {% for tab in tabs %}
+                            <option value="{{ tab.id }}">{{ tab.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Style tab -->
+                <div x-show="selectedWidgetId && rightTab === 'style'">
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Accent Color</div>
+                        <div class="ed-color-row">
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--green)' }" style="background: var(--green)" @click="selectedConfig.color = 'var(--green)'"></div>
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--brand)' }" style="background: var(--brand)" @click="selectedConfig.color = 'var(--brand)'"></div>
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--accent-amber)' }" style="background: var(--accent-amber)" @click="selectedConfig.color = 'var(--accent-amber)'"></div>
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--red)' }" style="background: var(--red)" @click="selectedConfig.color = 'var(--red)'"></div>
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--accent-violet)' }" style="background: var(--accent-violet)" @click="selectedConfig.color = 'var(--accent-violet)'"></div>
+                            <div class="ed-color-swatch" :class="{ active: selectedConfig.color === 'var(--accent-teal)' }" style="background: var(--accent-teal)" @click="selectedConfig.color = 'var(--accent-teal)'"></div>
+                        </div>
+                    </div>
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Size</div>
+                        <select class="ed-cfg-select">
+                            <option>3 columns (small)</option>
+                            <option>4 columns</option>
+                            <option>6 columns (half)</option>
+                            <option>8 columns (wide)</option>
+                            <option>12 columns (full)</option>
+                        </select>
+                    </div>
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Options</div>
+                        <div class="ed-tog-row">
+                            <span class="ed-tog-label">Show border</span>
+                            <div class="ed-toggle on" @click="$el.classList.toggle('on')"></div>
+                        </div>
+                        <div class="ed-tog-row">
+                            <span class="ed-tog-label">Compact mode</span>
+                            <div class="ed-toggle" @click="$el.classList.toggle('on')"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced tab -->
+                <div x-show="selectedWidgetId && rightTab === 'advanced'">
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Refresh</div>
+                        <select class="ed-cfg-select">
+                            <option>On dashboard refresh</option>
+                            <option>Every 30s</option>
+                            <option>Every 1m</option>
+                            <option>Every 5m</option>
+                        </select>
+                    </div>
+                    <div class="ed-cfg-section">
+                        <div class="ed-cfg-label">Widget ID</div>
+                        <input class="ed-cfg-input" :value="'w-' + selectedWidgetId" readonly style="font-family: 'JetBrains Mono', monospace; opacity: 0.5;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── CANVAS TOOLBAR (bottom) ── -->
+    <div class="ed-toolbar">
+        <span><span class="ed-kbd">Click</span> select</span>
+        <span class="ed-toolbar-sep"></span>
+        <span><span class="ed-kbd">Del</span> remove</span>
+        <span class="ed-toolbar-sep"></span>
+        <span><span class="ed-kbd">⌘S</span> save</span>
+        <span class="ed-toolbar-sep"></span>
+        <span x-text="widgetCount + ' widget' + (widgetCount !== 1 ? 's' : '')"></span>
+        <div class="flex items-center gap-2 ml-auto">
+            <span x-show="dirty" class="ed-dirty" x-cloak>● unsaved changes</span>
+            <span x-show="!dirty" class="ed-saved">● saved</span>
+        </div>
+    </div>
+
+    <!-- ═══ Settings Modal ═══ -->
+    <div x-show="showSettings" x-cloak class="fixed inset-0 z-50 flex items-center justify-center"
+         @keydown.escape.window="showSettings = false">
+        <div class="absolute inset-0" style="background:rgba(15,15,14,0.5);backdrop-filter:blur(4px)" @click="showSettings = false"></div>
+        <div class="relative card w-full max-w-lg mx-4" @click.stop>
+            <div class="flex items-center justify-between" style="padding:14px 20px;border-bottom:1px solid var(--border)">
+                <h2 class="text-sm font-semibold">Dashboard Settings</h2>
+                <button @click="showSettings = false" class="btn btn-sm btn-ghost" style="padding: 4px;"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="flex px-5" style="border-bottom: 1px solid var(--border);">
+                <template x-for="t in [{id:'general',label:'General',icon:'sliders'},{id:'tabs',label:'Tabs',icon:'layers'},{id:'schedules',label:'Schedules',icon:'clock'},{id:'links',label:'Links',icon:'link'},{id:'embed',label:'Embed',icon:'code'}]" :key="t.id">
+                    <button @click="settingsTab = t.id; if(t.id === 'embed') loadEmbedTokens(); $nextTick(() => lucide.createIcons())"
+                            class="nav-tab flex items-center gap-1" :class="settingsTab === t.id ? 'active' : ''">
+                        <i :data-lucide="t.icon" class="w-3 h-3"></i>
+                        <span x-text="t.label"></span>
+                    </button>
+                </template>
+            </div>
+            <div style="padding:20px;max-height:65vh;overflow-y:auto">
+                <!-- General settings (v0.3.0): public + live refresh -->
+                <div x-show="settingsTab === 'general'">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs font-medium block mb-2" style="color:var(--fg-2)">Visibility</label>
+                            <div class="flex items-center gap-2 p-3 rounded" style="background:var(--surface-2);border:1px solid var(--border)">
+                                <input type="checkbox" id="dash-is-public" x-model="dashboardSettings.is_public" @change="saveDashboardSettings()">
+                                <label for="dash-is-public" class="text-xs" style="color:var(--fg)">Public link enabled</label>
+                            </div>
+                            <p class="text-xs mt-1.5" style="color:var(--fg-3)">When on, anyone with the dashboard URL can view it (no login). Edit access stays restricted.</p>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium block mb-2" style="color:var(--fg-2)">Live refresh</label>
+                            <select class="ed-cfg-select" x-model.number="dashboardSettings.refresh_interval_seconds" @change="saveDashboardSettings()">
+                                <option value="0">Off</option>
+                                <option value="10">Every 10s</option>
+                                <option value="30">Every 30s</option>
+                                <option value="60">Every 1 minute</option>
+                                <option value="300">Every 5 minutes</option>
+                                <option value="900">Every 15 minutes</option>
+                                <option value="3600">Every hour</option>
+                            </select>
+                            <p class="text-xs mt-1.5" style="color:var(--fg-3)">When set, the viewer auto-refreshes all widgets on this cadence. Shown as a "Live · Ns" badge in the header.</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Tabs settings -->
+                <div x-show="settingsTab === 'tabs'">
+                    <div class="space-y-2 mb-4">
+                        {% if tabs %}
+                        {% for tab in tabs %}
+                        <div class="flex items-center justify-between p-2 rounded text-sm" style="background: var(--surface-2);">
+                            <span style="color: var(--fg);">{{ tab.name }}</span>
+                            <button @click="deleteTab({{ tab.id }})" style="color: var(--fg-3); opacity: 0.3;" class="hover:opacity-100 hover:text-red-400">
+                                <i data-lucide="x" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <p class="text-xs" style="color: var(--fg-3); opacity: 0.5;">No tabs created yet.</p>
+                        {% endif %}
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" x-model="newTabName" placeholder="Tab name"
+                               class="ed-cfg-input flex-1" @keydown.enter.prevent="addTab()">
+                        <button @click="addTab()" class="ed-btn-save text-xs" style="height: 32px;">Add</button>
+                    </div>
+                </div>
+                <!-- Schedules settings -->
+                <div x-show="settingsTab === 'schedules'">
+                    <div class="space-y-2 mb-4">
+                        {% if schedules %}
+                        {% for s in schedules %}
+                        <div class="flex items-center justify-between p-2 rounded text-sm" style="background: var(--surface-2);">
+                            <div class="flex-1 min-w-0">
+                                <div class="truncate text-xs" style="color: var(--fg);">{{ s.query_name }}</div>
+                                <div class="text-xs font-mono" style="color: var(--fg-3); opacity: 0.5;">{{ s.cron_expr }}</div>
+                            </div>
+                            <div class="flex items-center gap-1 ml-2">
+                                <button @click="toggleSchedule({{ s.id }}, {{ 'false' if s.enabled else 'true' }})"
+                                        class="text-xs px-1.5 py-0.5 rounded"
+                                        style="{% if s.enabled %}background: rgba(16,185,129,0.1); color: var(--green);{% else %}background: var(--bg); color: var(--fg-3);{% endif %}">
+                                    {{ 'On' if s.enabled else 'Off' }}
+                                </button>
+                                <button @click="deleteSchedule({{ s.id }})" style="color: var(--fg-3); opacity: 0.3;" class="hover:opacity-100 hover:text-red-400">
+                                    <i data-lucide="x" class="w-3 h-3"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <p class="text-xs" style="color: var(--fg-3); opacity: 0.5;">No schedules configured.</p>
+                        {% endif %}
+                    </div>
+                    <div class="space-y-2 p-3 rounded" style="border: 1px solid var(--border);">
+                        <select x-model="newSchedule.query_id" class="ed-cfg-select">
+                            <option value="">Select query</option>
+                            {% for q in queries %}
+                            <option value="{{ q.id }}">{{ q.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" x-model="newSchedule.cron_expr" placeholder="*/15 * * * *" class="ed-cfg-input" style="font-family: 'JetBrains Mono', monospace;">
+                        <input type="number" x-model="newSchedule.max_snapshots" placeholder="Max snapshots (100)" class="ed-cfg-input" min="1" max="10000">
+                        <button @click="addSchedule()" class="ed-btn-save w-full text-xs justify-center" style="height: 28px;">Add Schedule</button>
+                    </div>
+                </div>
+                <!-- Public Links -->
+                <div x-show="settingsTab === 'links'">
+                    <p class="text-xs mb-3" style="color: var(--fg-3); opacity: 0.5;">Generate shareable links for this dashboard.</p>
+                    <button @click="createPublicLink()" class="ed-btn-save">
+                        <i data-lucide="link" class="w-3 h-3"></i> Create Public Link
+                    </button>
+                </div>
+                <!-- Embed -->
+                <div x-show="settingsTab === 'embed'">
+                    <p class="text-xs mb-3" style="color: var(--fg-3); opacity: 0.5;">Generate embed tokens for iframe embedding. Supports row-level security (RLS).</p>
+                    <div class="space-y-2 mb-4">
+                        <template x-if="embedTokens.length === 0">
+                            <p class="text-xs" style="color: var(--fg-3); opacity: 0.5;">No active embed tokens.</p>
+                        </template>
+                        <template x-for="et in embedTokens" :key="et.id">
+                            <div class="p-2.5 rounded text-sm space-y-1.5" style="background: var(--surface-2);">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <i data-lucide="code" class="w-3 h-3 shrink-0" style="color: var(--brand);"></i>
+                                        <span class="text-xs truncate" style="color: var(--fg);" x-text="et.app_id || 'No app ID'"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <button @click="copyEmbedUrl(et)" style="color: var(--fg-3); opacity: 0.5;" title="Copy embed URL">
+                                            <i data-lucide="copy" class="w-3 h-3"></i>
+                                        </button>
+                                        <button @click="copyIframeCode(et)" style="color: var(--fg-3); opacity: 0.5;" title="Copy iframe">
+                                            <i data-lucide="code" class="w-3 h-3"></i>
+                                        </button>
+                                        <button @click="revokeEmbedToken(et.id)" style="color: var(--fg-3); opacity: 0.3;" class="hover:opacity-100 hover:text-red-400" title="Revoke">
+                                            <i data-lucide="x" class="w-3 h-3"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs" style="color: var(--fg-3); opacity: 0.5;">
+                                    <span x-text="'Expires: ' + new Date(et.expires_at).toLocaleString()"></span>
+                                    <template x-if="et.rls_clauses && et.rls_clauses !== '{}'">
+                                        <span style="color: var(--accent-amber);">RLS active</span>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="space-y-3 p-3 rounded" style="border: 1px solid var(--border);">
+                        <h4 class="text-xs font-medium" style="color: var(--fg);">New Embed Token</h4>
+                        <div>
+                            <label class="text-xs mb-1 block" style="color: var(--fg-3); opacity: 0.5;">App ID (optional)</label>
+                            <input type="text" x-model="newEmbed.app_id" placeholder="e.g. myapp" class="ed-cfg-input">
+                        </div>
+                        <div>
+                            <label class="text-xs mb-1 block" style="color: var(--fg-3); opacity: 0.5;">Expires in</label>
+                            <select x-model="newEmbed.expires_in" class="ed-cfg-select">
+                                <option value="3600">1 hour</option>
+                                <option value="86400">24 hours</option>
+                                <option value="604800">7 days</option>
+                                <option value="2592000">30 days</option>
+                                <option value="31536000">1 year</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs mb-1 block" style="color: var(--fg-3); opacity: 0.5;">RLS Clauses (JSON, optional)</label>
+                            <textarea x-model="newEmbed.rls_json" placeholder='{"company_id": "42"}' rows="2"
+                                      class="ed-cfg-textarea"></textarea>
+                        </div>
+                        <button @click="createEmbedToken()" class="ed-btn-save w-full text-xs justify-center" style="height: 28px;">
+                            <i data-lucide="plus" class="w-3 h-3"></i> Generate Token
+                        </button>
+                    </div>
+                    <div x-show="lastEmbedUrl" x-cloak class="mt-3 p-3 rounded space-y-2" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2);">
+                        <label class="text-xs font-medium" style="color: var(--green);">Embed URL created!</label>
+                        <input type="text" :value="lastEmbedUrl" readonly
+                               class="ed-cfg-input" style="font-size: 10px; font-family: 'JetBrains Mono', monospace;" @click="$el.select()">
+                        <div class="flex gap-2">
+                            <button @click="navigator.clipboard.writeText(lastEmbedUrl); tuskToast('URL copied', 'success')"
+                                    class="ed-btn-ghost flex-1 text-xs justify-center" style="height: 26px;">Copy URL</button>
+                            <button @click="copyLastIframe()"
+                                    class="ed-btn-ghost flex-1 text-xs justify-center" style="height: 26px;">Copy iframe</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+<script src="/static/plugins/bi/bi.js"></script>
+<script>
+window._biDashboardEditorInitial = {
+    dashName: {{ (dashboard.name if dashboard else '') | tojson }},
+    widgetCount: {{ widgets | length if widgets else 0 }},
+    isPublic: {{ (dashboard.is_public if dashboard else False) | tojson }},
+    refreshIntervalSeconds: {{ (dashboard.refresh_interval_seconds if dashboard else 0) | tojson }},
+    {% if queries %}
+    firstQueryId: {{ queries[0].id }},
+    firstQueryName: {{ queries[0].name | tojson }},
+    {% else %}
+    firstQueryId: null,
+    firstQueryName: '',
+    {% endif %}
+};
+</script>
+<script src="/static/plugins/bi/dashboard-edit.js"></script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{# Widget partial: Pivot table (cross-tab)
+   Expects: widget (dict), data (dict with columns/rows), widget_id (int), config (dict),
+            pivot_data (dict with row_headers, col_headers, pivot_rows)
+#}
+{% if error %}
+<div class="text-xs" style="color:var(--red);padding:8px">{{ error }}</div>
+{% elif pivot_data and pivot_data.row_headers and pivot_data.col_headers %}
+<div class="bi-scroll-y" style="height: calc(100% - 0.25rem);">
+    <table class="dtable">
+        <thead>
+            <tr>
+                <th style="border-right: 1px solid var(--border);">
+                    {{ config.row_field if config and config.row_field else "Row" }}
+                </th>
+                {% for ch in pivot_data.col_headers %}
+                <th style="text-align: right;">{{ ch }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for rh in pivot_data.row_headers %}
+            <tr>
+                <td style="font-weight: 500; border-right: 1px solid var(--border); white-space: nowrap;">{{ rh }}</td>
+                {% set row_idx = loop.index0 %}
+                {% for val in pivot_data.pivot_rows[row_idx] %}
+                <td class="num-cell">
+                    {% if val == 0 %}<span style="opacity: 0.2;">-</span>{% else %}{{ val }}{% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% elif data and data.columns %}
+<div class="text-xs" style="padding:12px;color:var(--fg-3)">
+    Configure pivot fields (row_field, col_field, value_field) in widget config.
+    <br>Available columns: {{ data.columns | join(", ") }}
+</div>
+{% else %}
+<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--fg-3);opacity:0.4">
+    <p>No data</p>
+</div>
+{% endif %}

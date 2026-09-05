@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Frame-Options" content="ALLOWALL">
+    <title>{{ dashboard.name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/tusk-app.css">
+    <link rel="stylesheet" href="/static/plugins/bi/bi.css">
+</head>
+<body style="height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--fg)" x-data="embedDashboard()">
+    <div class="flex-1 overflow-y-auto" style="padding:16px">
+        <!-- Header bar -->
+        <div class="flex items-center justify-between" style="margin-bottom:12px">
+            <h1 class="text-base font-semibold">{{ dashboard.name }}</h1>
+            <div class="flex items-center gap-2">
+                <select x-model="autoRefresh" @change="setupAutoRefresh()">
+                    <option value="0">Refresh: Off</option>
+                    <option value="30">30s</option>
+                    <option value="60">1m</option>
+                    <option value="300">5m</option>
+                </select>
+                <button @click="refreshAll()" class="btn btn-sm btn-ghost" title="Refresh">
+                    <i data-lucide="refresh-cw"></i>
+                </button>
+            </div>
+        </div>
+
+        {% if dashboard.description %}
+        <p class="text-xs" style="color:var(--fg-3);margin-bottom:12px">{{ dashboard.description }}</p>
+        {% endif %}
+
+        <!-- Tabs -->
+        {% if tabs and tabs | length > 1 %}
+        <div class="flex gap-0.5" style="border-bottom:1px solid var(--border);margin-bottom:16px">
+            <button class="nav-tab active" data-tab-id="all" @click="switchTab($el, 'all')">All</button>
+            {% for tab in tabs %}
+            <button class="nav-tab" data-tab-id="{{ tab.id }}" @click="switchTab($el, {{ tab.id }})">{{ tab.name }}</button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Widget Grid -->
+        <div class="grid-stack" id="embed-grid">
+            {% for w in widgets %}
+            <div class="grid-stack-item {% if w.tab_id %}embed-tab-content{% endif %}"
+                 {% if w.tab_id %}data-tab-id="{{ w.tab_id }}"{% endif %}
+                 gs-x="{{ w.col_start - 1 }}" gs-y="{{ w.row_start - 1 }}"
+                 gs-w="{{ w.col_span }}" gs-h="{{ w.row_span }}"
+                 gs-no-move="true" gs-no-resize="true">
+                <div class="grid-stack-item-content card bi-widget" style="padding:12px">
+                    <div class="bi-widget-header">
+                        <h3>{{ w.title }}</h3>
+                    </div>
+                    <div class="bi-widget-body"
+                         hx-get="/api/bi/widgets/{{ w.id }}/render{% if rls_param %}?rls={{ rls_param }}{% endif %}"
+                         hx-trigger="load, refresh"
+                         hx-swap="innerHTML">
+                        <div class="flex items-center justify-center" style="height:100%;color:var(--fg-4)">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2" style="border-color:var(--fg-3)"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if not widgets %}
+        <div style="padding:64px 16px;display:flex;flex-direction:column;align-items:center;color:var(--fg-3)">
+            <i data-lucide="layout-grid" style="width:40px;height:40px;color:var(--fg-4);margin-bottom:14px"></i>
+            <p>No widgets configured</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <footer style="text-align:center;padding:4px;font-size:10px;color:var(--fg-4);border-top:1px solid var(--border)">
+        Powered by Tusk Analytics
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+    <script src="/static/plugins/bi/bi.js"></script>
+    <!-- widgets.js defines biRenderChart/Sparkline/Map/Markdown, called by the HTMX-loaded partials -->
+    <script src="/static/plugins/bi/widgets.js"></script>
+    <script src="/static/plugins/bi/embed.js"></script>
+    <script>
+    document.addEventListener('htmx:afterSwap', () => lucide.createIcons());
+    </script>
+</body>
+</html>
