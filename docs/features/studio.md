@@ -148,4 +148,4 @@ provider as the rest of the Copilot (Settings → AI Copilot).
 **Settings → Studio** holds the preview row cap, the editor font size and
 a custom XYZ basemap for the map views (URL with `{z}/{x}/{y}` placeholders
 plus attribution) — a self-hosted OSM, Mapbox raster tiles or an internal
-tile server instead of the default CARTO Dark Matter.
+tile server instead of the default OpenFreeMap basemap (keyless vector tiles, light or dark to match the theme).

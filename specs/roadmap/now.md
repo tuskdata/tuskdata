@@ -13,7 +13,7 @@ Watch, Data Contracts, Studio ergonomics, `tusk app` preview, tusk-bi into
 core, generated docs, component library on tokens, Schema diagrams that
 scale).
 
-## 0.4.38 — Schema navigation + one metadata store (~1 week)
+## 0.4.38 — Schema navigation + one metadata store (shipped 2026-09-06)
 
 - **Schema navigation**: search that jumps to and centres a table (reuse
   ⌘K), filter by schema/prefix, **only related** toggle that hides
@@ -26,7 +26,7 @@ scale).
   is the cheap insurance that would make a Postgres meta backend a bounded
   job — the backend itself is not planned.
 
-## 0.4.39 — Geo grounding for the Copilot (~1 week)
+## 0.4.39 — Geo grounding for the Copilot (shipped 2026-09-06)
 
 Baseline (2026-09-05, statuos_dev, qwen3.5:9b): "show me the vegetarian
 restaurants in Piantini" → *no restaurant tables in this schema*. Three
@@ -45,6 +45,11 @@ blind spots, all grounding:
   tool-calling with small models.
 - **Map**: Copilot SQL keeps the geometry column and Studio opens the map
   tab; MCP `run_query` returns GeoJSON when a geometry column is present.
+- Result: on the demo database (OSM POIs + Voronoi sectors) qwen3.5:9b
+  answered the Piantini question with a correct `ST_Contains` +
+  `tags->>'diet:vegetarian'` query, confidence high, 53 s. Also fixed on
+  the way: CARTO basemaps now watermark "API KEY REQUIRED" → keyless
+  OpenFreeMap styles everywhere; Ollama `num_ctx` 16k.
 
 ## 0.4.40 — Kubernetes for real + published roadmap tells the truth (~2-3 days)
 

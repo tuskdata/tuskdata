@@ -4,13 +4,23 @@ Synthetic data only — customers, products, orders, order_items, events —
 so nothing private ever lands in a public screenshot. Idempotent: drops
 and recreates the database each run.
 
-    .venv/bin/python scripts/demo_db.py [--dsn postgresql://postgres@localhost:5432/postgres]
+With PostGIS available and network access, `--geo` (default: on) adds a
+small public geodata layer for the spatial Copilot demo: restaurants,
+cafés and bars of Santo Domingo's Distrito Nacional from OpenStreetMap
+(ODbL), and `sectors` — approximate neighbourhood polygons built as
+Voronoi cells around the OSM neighbourhood centres, since OSM has most of
+them only as points. Skipped quietly when PostGIS or Overpass is missing.
+
+    .venv/bin/python scripts/demo_db.py [--dsn postgresql://postgres@localhost:5432/postgres] [--no-geo]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import random
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta
 
 import psycopg
@@ -69,10 +79,95 @@ CATEGORIES = ["Coffee", "Tea", "Equipment", "Merch", "Subscriptions"]
 EVENT_KINDS = ["signup", "login", "cart_add", "checkout", "support_ticket", "churn_risk"]
 
 
+# ── Geo layer (OpenStreetMap, ODbL) ───────────────────────────────────
+
+OVERPASS = "https://overpass-api.de/api/interpreter"
+DN_BBOX = (18.42, -70.00, 18.52, -69.85)  # south, west, north, east — Distrito Nacional
+
+
+def _overpass(query: str) -> list[dict]:
+    body = urllib.parse.urlencode({"data": query}).encode()
+    req = urllib.request.Request(OVERPASS, data=body, headers={"User-Agent": "tuskdata-demo/1.0"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.load(r)["elements"]
+
+
+def add_geo(conn) -> bool:
+    """PostGIS + `osm_pois` + `sectors`. Returns False when it cannot run."""
+    try:
+        conn.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+    except Exception as exc:  # noqa: BLE001
+        print(f"geo: PostGIS not available ({exc}); skipping")
+        return False
+    bbox = ",".join(str(x) for x in DN_BBOX)
+    try:
+        pois = _overpass(f'[out:json][timeout:80];node["amenity"~"restaurant|cafe|bar|fast_food"]({bbox});out;')
+        places = _overpass(
+            f'[out:json][timeout:80];(node["place"~"neighbourhood|suburb|quarter"]({bbox});'
+            f'way["place"~"neighbourhood|suburb|quarter"]({bbox}););out tags center;'
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"geo: Overpass unreachable ({exc}); skipping")
+        return False
+
+    conn.execute("""
+        CREATE TABLE osm_pois (
+            id bigint PRIMARY KEY,
+            name text,
+            tags jsonb NOT NULL,
+            lat double precision NOT NULL,
+            lon double precision NOT NULL,
+            geom geometry(Point, 4326) NOT NULL
+        );
+        CREATE INDEX osm_pois_geom_idx ON osm_pois USING GIST (geom);
+        CREATE TABLE sectors (
+            id serial PRIMARY KEY,
+            name text NOT NULL UNIQUE,
+            kind text NOT NULL,
+            centre geometry(Point, 4326) NOT NULL,
+            geom geometry(Polygon, 4326) NOT NULL
+        );
+        CREATE INDEX sectors_geom_idx ON sectors USING GIST (geom);
+    """)
+    cur = conn.cursor()
+    cur.executemany(
+        "INSERT INTO osm_pois (id, name, tags, lat, lon, geom) VALUES (%s, %s, %s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))",
+        [(e["id"], e.get("tags", {}).get("name"), json.dumps(e.get("tags", {})), e["lat"], e["lon"], e["lon"], e["lat"]) for e in pois],
+    )
+    # One centre per name (OSM often has several ways for one neighbourhood).
+    centres: dict[str, tuple[str, float, float]] = {}
+    for e in places:
+        name = e.get("tags", {}).get("name")
+        lat, lon = (e.get("lat"), e.get("lon")) if e["type"] == "node" else (e.get("center", {}).get("lat"), e.get("center", {}).get("lon"))
+        if name and lat and lon and name not in centres:
+            centres[name] = (e["tags"].get("place", "neighbourhood"), lat, lon)
+    cur.execute("CREATE TEMP TABLE centres (name text, kind text, pt geometry(Point, 4326))")
+    cur.executemany("INSERT INTO centres VALUES (%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))",
+                    [(n, k, lon, lat) for n, (k, lat, lon) in centres.items()])
+    south, west, north, east = DN_BBOX
+    cur.execute(f"""
+        WITH env AS (SELECT ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326) AS g),
+        cells AS (
+            SELECT (ST_Dump(ST_VoronoiPolygons((SELECT ST_Collect(pt) FROM centres), 0, (SELECT g FROM env)))).geom AS cell
+        )
+        INSERT INTO sectors (name, kind, centre, geom)
+        SELECT c.name, c.kind, c.pt, ST_Intersection(cells.cell, env.g)
+        FROM cells
+        JOIN centres c ON ST_Contains(cells.cell, c.pt)
+        CROSS JOIN env
+        WHERE ST_GeometryType(ST_Intersection(cells.cell, env.g)) = 'ST_Polygon'
+    """)
+    n_pois = cur.execute("SELECT count(*) FROM osm_pois").fetchone()[0]
+    n_sec = cur.execute("SELECT count(*) FROM sectors").fetchone()[0]
+    print(f"geo: {n_pois} POIs, {n_sec} sectors (Voronoi around OSM neighbourhood centres)")
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dsn", default="postgresql://postgres@localhost:5432/postgres")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--no-geo", action="store_true", help="skip the PostGIS/OpenStreetMap layer")
     args = ap.parse_args()
     random.seed(args.seed)
 
@@ -123,6 +218,9 @@ def main() -> None:
         cur.executemany("INSERT INTO events (customer_id, kind, payload, occurred_at) VALUES (%s, %s, %s, %s)", events)
         conn.execute("ANALYZE")
         conn.commit()
+        if not args.no_geo:
+            add_geo(conn)
+            conn.commit()
     print(f"{DB} ready: 400 customers, 60 products, 6000 orders, {len(items)} items, 40000 events")
 
 

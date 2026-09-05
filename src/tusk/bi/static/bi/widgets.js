@@ -171,17 +171,12 @@
 
         const map = new maplibregl.Map({
             container: mapEl,
-            style: {
+            // Shared basemap (configured XYZ provider or keyless OpenFreeMap);
+            // the raster fallback only matters on pages without tusk-utils.js.
+            style: window.tuskBasemapStyle ? window.tuskBasemapStyle() : {
                 version: 8,
-                glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-                sources: {
-                    'carto-dark': {
-                        type: 'raster',
-                        tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-                        tileSize: 256,
-                    }
-                },
-                layers: [{ id: 'carto-dark-layer', type: 'raster', source: 'carto-dark' }]
+                sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors' } },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
             },
             center: [0, 20],
             zoom: 1.5,

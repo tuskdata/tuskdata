@@ -2597,7 +2597,7 @@ function _initDataMap() {
 
     mapInstance = new maplibregl.Map({
         container: container,
-        style: { version: 8, sources: { 'carto': { type: 'raster', tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'], tileSize: 256 } }, layers: [{ id: 'carto', type: 'raster', source: 'carto' }] },
+        style: window.tuskBasemapStyle(),
         center: [0, 20], zoom: 2
     });
     mapInstance.addControl(new maplibregl.NavigationControl());

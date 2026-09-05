@@ -36,6 +36,7 @@ You install one wheel. You run one process. You point a browser at it.
 | **Notifications** | Slack, Discord, Telegram, email or webhook for job, backup, schema and contract events | [notifications.md](features/notifications.md) |
 | **Schema Watch** | Snapshot + diff of a connection's schema, notify on changes | [schema-watch.md](features/schema-watch.md) |
 | **Data Contracts** | Freeze the schema as a contract; be told when something breaks it | [data-contracts.md](features/data-contracts.md) |
+| **AI Copilot** | Plain-language to SQL grounded in the real catalog, PostGIS-aware, place-name lookup; explains plans | [copilot.md](features/copilot.md) |
 | **MCP server** | Let Claude Code, Cursor or any MCP client query your connections, read-only | [mcp.md](features/mcp.md) |
 | **Desktop window** | `tusk app`: Studio in a native window (preview) | [desktop.md](features/desktop.md) |
 | **Users & tokens** | Single vs multi-user mode, sessions, personal API tokens, audit log | [auth.md](features/auth.md) |

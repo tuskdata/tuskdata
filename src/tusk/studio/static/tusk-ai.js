@@ -344,6 +344,8 @@
             // they can run independently.
             const r = STATE.last_response;
             if (!r || r.kind !== "sql" || !r.sql) return;
+            // Spatial answer → Studio switches to the map when it runs.
+            window._tuskAIWantsMap = /\bST_\w+\(|\bgeom\b|geometry|\blat\b|latitude/i.test(r.sql);
             if (typeof window.createTab === "function") {
                 window.createTab("AI suggestion", r.sql);
                 tuskToast("SQL opened in new tab", "success");

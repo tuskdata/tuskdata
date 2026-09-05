@@ -2,6 +2,37 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.39] - 2026-09-06 — Geo grounding for the Copilot
+
+- **The Copilot understands PostGIS databases.** The prompt now carries a
+  spatial catalog (PostGIS version, geometry/geography columns with type
+  and SRID, lat/lon pairs, `h3`), sampled values for `jsonb` and
+  categorical text columns (`amenity: restaurant | cafe`,
+  `diet:vegetarian: yes | only` — categorical keys first, names/addresses
+  skipped, stringified JSON unwrapped), and a gazetteer: capitalised
+  words in the question are looked up in place-like tables and injected as
+  exact matches (*"Piantini" → sectors.name = 'Piantini'*). Tables with
+  geometry are always detailed. On the demo database a 9B local model
+  turns "restaurantes vegetarianos en el sector Piantini" into a correct
+  `ST_Contains` query with `tags->>'diet:vegetarian'`, confidence high.
+- Studio opens the **map** view automatically when Copilot SQL returns
+  geometry.
+- MCP `run_query` returns `geometry_column` and a GeoJSON
+  `FeatureCollection` when the result has geometry; `get_schema` carries
+  the same spatial grounding.
+- Ollama requests set `num_ctx` (16k, `TUSK_AI_NUM_CTX`): the default
+  window truncated grounded prompts and the model answered nonsense.
+- Demo database: `scripts/demo_db.py` adds OpenStreetMap POIs of Santo
+  Domingo's Distrito Nacional and neighbourhood polygons (Voronoi around
+  OSM centres) when PostGIS and Overpass are reachable.
+- **Maps: basemap without an API key.** CARTO's free raster basemaps
+  started serving "API KEY REQUIRED" watermarks; every map (Studio, Data,
+  Analytics map widget) now uses OpenFreeMap's vector styles (positron /
+  dark, following the theme) through one helper, `tuskBasemapStyle()`.
+  Settings → Studio → map tiles URL still overrides it with any XYZ
+  provider.
+- New docs page: AI Copilot.
+
 ## [0.4.38] - 2026-09-06 — Schema navigation + one metadata store
 
 - **One metadata store.** Everything Tusk keeps about itself — users,

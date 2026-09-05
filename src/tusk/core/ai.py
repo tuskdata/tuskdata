@@ -230,6 +230,12 @@ class OllamaProvider:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
+                # Ollama's default context is small (4k on many builds) and a
+                # grounded prompt — schema overview, detailed tables, spatial
+                # catalog, sampled values — is 3-5k tokens on a real database.
+                # Overflow silently truncates the prompt and the model answers
+                # nonsense or no JSON at all. 16k costs memory, not quality.
+                "num_ctx": int(os.environ.get("TUSK_AI_NUM_CTX", "16384")),
             },
         }
         data = await asyncio.to_thread(

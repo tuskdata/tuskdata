@@ -81,3 +81,30 @@
     window.tuskFormatNumber = tuskFormatNumber;
     window.tuskQS = tuskQS;
 })();
+
+// ─── Basemap ────────────────────────────────────────────────────────
+// One place decides what a MapLibre map sits on. Settings → Studio can
+// point `map_tiles_url` at any XYZ raster provider (self-hosted OSM, a
+// keyed CARTO/Mapbox URL, an internal tile server); without it we use
+// OpenFreeMap's vector styles, which need no key. CARTO's free raster
+// basemaps started returning "API KEY REQUIRED" watermarks in 2026, which
+// is why the old default had to go.
+window.tuskBasemapStyle = function () {
+    const ui = window.TUSK_UI || {};
+    if (ui.map_tiles_url) {
+        return {
+            version: 8,
+            sources: {
+                basemap: {
+                    type: 'raster',
+                    tiles: [ui.map_tiles_url],
+                    tileSize: 256,
+                    attribution: ui.map_tiles_attribution || '',
+                },
+            },
+            layers: [{ id: 'basemap', type: 'raster', source: 'basemap', minzoom: 0, maxzoom: 22 }],
+        };
+    }
+    const dark = document.body && document.body.getAttribute('data-theme') === 'dark';
+    return dark ? 'https://tiles.openfreemap.org/styles/dark' : 'https://tiles.openfreemap.org/styles/positron';
+};

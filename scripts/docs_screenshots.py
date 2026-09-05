@@ -165,11 +165,27 @@ async def _scenes(page, only: set[str] | None, theme: str) -> list[str]:
     await page.wait_for_timeout(2500)
     await shot("studio-plan")
 
+    # Studio: a spatial query on the map (the demo DB carries OSM POIs + sectors)
+    try:
+        await page.click('button:has-text("+")', timeout=2000)
+    except Exception:  # noqa: BLE001 — tab bar variant without a plus button
+        await page.evaluate("window.createTab && window.createTab('Map', '')")
+    await page.wait_for_timeout(600)
+    geo_sql = ("SELECT o.name, o.tags->>'cuisine' AS cuisine, o.geom, s.name AS sector\n"
+               "FROM osm_pois o JOIN sectors s ON ST_Contains(s.geom, o.geom)\n"
+               "WHERE s.name = 'Piantini' AND o.tags->>'amenity' = 'restaurant'")
+    await page.evaluate("(sql) => { editor.dispatch({changes: {from: 0, to: editor.state.doc.length, insert: sql}}); window._tuskAIWantsMap = true; }", geo_sql)
+    await page.click('button:has-text("Run")')
+    await page.wait_for_timeout(6000)
+    await shot("studio-map")
+    await page.keyboard.press("Escape")  # close the map modal before the Copilot scene
+    await page.wait_for_timeout(500)
+
     # Studio: Copilot (only if a provider answers)
     try:
         await page.click('button[title*="Ask AI"]')
         await page.wait_for_timeout(600)
-        await page.fill('textarea[placeholder^="Ask in plain"]', "top 5 products by revenue, with total units sold")
+        await page.fill('textarea[placeholder^="Ask in plain"]', "vegetarian restaurants in the Piantini sector, on the map")
         await page.keyboard.press("Enter")
         for _ in range(30):
             await page.wait_for_timeout(5000)

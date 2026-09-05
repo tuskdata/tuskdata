@@ -42,8 +42,8 @@ response says whether the cap was hit.
 | Tool | What it does |
 |---|---|
 | `list_connections` | Configured connections: id, name, type, host, database. |
-| `get_schema(connection_id, focus?)` | Every table with row counts, plus full columns / PK / FK for the tables matching `focus` (a table or column name, or a few keywords). PostgreSQL only. This is the same grounding the AI Copilot uses. |
-| `run_query(connection_id, sql, limit?)` | One `SELECT` / `WITH` / `VALUES` statement on a PostgreSQL, DuckDB or SQLite connection. |
+| `get_schema(connection_id, focus?)` | Every table with row counts, plus full columns / PK / FK for the tables matching `focus` (a table or column name, or a few keywords). PostgreSQL only. This is the same grounding the [AI Copilot](copilot.md) uses, including the spatial catalog, sampled column values and place-name matches for `focus`. |
+| `run_query(connection_id, sql, limit?)` | One `SELECT` / `WITH` / `VALUES` statement on a PostgreSQL, DuckDB or SQLite connection. When a result column holds geometry (PostGIS, WKT, GeoJSON) the response also carries `geometry_column` and a GeoJSON `FeatureCollection` in `geojson`, ready for a map. |
 | `explain_query(connection_id, sql, analyze?)` | PostgreSQL execution plan as text lines. `analyze=true` runs the query. |
 | `list_saved_queries(connection_id?)` | The queries you saved in Studio. |
 | `run_saved_query(query_id, connection_id?, limit?)` | Run a saved query — vetted SQL the agent should prefer over writing its own. |

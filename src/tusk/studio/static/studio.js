@@ -513,6 +513,12 @@ function _updateResultChips(rowCount, execMs, isPaginated, hasGeo) {
     if (geo) geo.style.display = hasGeo ? '' : 'none';
     const mapBtn = document.getElementById('result-view-map');
     if (mapBtn) mapBtn.style.display = hasGeo ? '' : 'none';
+    // SQL that came from the Copilot and looks spatial: open the map straight
+    // away instead of leaving a table of WKT strings for the user to decode.
+    if (window._tuskAIWantsMap) {
+        window._tuskAIWantsMap = false;
+        if (hasGeo && typeof window.setResultView === 'function') window.setResultView('map');
+    }
     const parquet = document.getElementById('result-parquet-btn');
     if (parquet) parquet.style.display = (currentEngine === 'duckdb') ? '' : 'none';
 }
@@ -3406,28 +3412,7 @@ function initMap() {
 
     map = new maplibregl.Map({
         container: container,
-        style: {
-            version: 8,
-            sources: {
-                'carto-dark': {
-                    type: 'raster',
-                    // Settings → Studio can point this at any XYZ provider
-                    // (self-hosted OSM, Mapbox raster, an internal tile server).
-                    tiles: [(window.TUSK_UI && TUSK_UI.map_tiles_url) || 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-                    tileSize: 256,
-                    attribution: (window.TUSK_UI && TUSK_UI.map_tiles_url)
-                        ? (TUSK_UI.map_tiles_attribution || '')
-                        : '&copy; <a href="https://carto.com/">CARTO</a>'
-                }
-            },
-            layers: [{
-                id: 'carto-dark-layer',
-                type: 'raster',
-                source: 'carto-dark',
-                minzoom: 0,
-                maxzoom: 22
-            }]
-        },
+        style: window.tuskBasemapStyle(),
         center: center,
         zoom: 2
     });

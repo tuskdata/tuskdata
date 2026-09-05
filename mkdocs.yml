@@ -62,6 +62,7 @@ nav:
       - Analytics: features/analytics.md
       - Schema Watch: features/schema-watch.md
       - Data Contracts: features/data-contracts.md
+      - AI Copilot: features/copilot.md
       - MCP server: features/mcp.md
       - Users & API tokens: features/auth.md
   - Desktop window (preview): features/desktop.md

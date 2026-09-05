@@ -338,6 +338,10 @@ class AICopilotController(Controller):
             "user specifies a different dialect. "
             "Use the `### Detailed schema` section below as your source "
             "of truth for table and column names. "
+            "If a `### Spatial` section is present the database has PostGIS: "
+            "use its geometry columns and SRIDs, the sampled `### Column values` "
+            "for jsonb keys and categorical filters, and the exact matches under "
+            "`### Places mentioned` for place names — never guess a place's spelling. "
             "If a previous conversation turn or the user's `Current "
             "SQL:` block references a column that contradicts the "
             "Detailed schema, prefer the schema and rewrite the SQL "
@@ -763,6 +767,16 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
                     expanded.add(target)
         priority_set = expanded
 
+        # Spatial grounding (core/spatial.py): PostGIS catalog, sampled
+        # column values and place names found in the question. Tables that
+        # carry geometry or lat/lon are always detailed — a question about
+        # "restaurants in Piantini" never names the OSM table.
+        from tusk.core import spatial as _spatial
+
+        spatial_info = await _spatial.fetch_spatial(conn, tables)
+        if spatial_info.enabled:
+            priority_set |= set(spatial_info.geometry) | set(spatial_info.latlon)
+
         # Build the output.
         out_lines: list[str] = []
         out_lines.append("### Available tables")
@@ -856,6 +870,25 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             out_lines.append(block)
             used += len(block)
             seen.add(tname)
+
+        if spatial_info.enabled:
+            try:
+                _spatial.remember_catalog_columns(conn.id, tables)
+                spatial_tables = set(spatial_info.geometry) | set(spatial_info.latlon)
+                profiles = await _spatial.profile_columns(
+                    conn, tables, only_tables=spatial_tables | priority_set, first=spatial_tables,
+                )
+                places = _spatial.place_tables(tables, spatial_info)
+                found = await _spatial.lookup_places(
+                    conn, places, _spatial.candidate_place_tokens(prompt or ""),
+                )
+                section = _spatial.render_spatial_section(
+                    spatial_info, profiles, found, sanitize=_sanitize_for_prompt,
+                )
+                if section:
+                    out_lines.append("\n" + section)
+            except Exception as exc:  # noqa: BLE001 — grounding is best-effort
+                log.warning("spatial_grounding_failed", error=str(exc))
 
         return "\n".join(out_lines)
     except Exception as e:

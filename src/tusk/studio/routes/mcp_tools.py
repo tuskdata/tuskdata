@@ -142,7 +142,7 @@ async def _run_read_query(conn, sql: str, limit: int) -> dict:
         return {"error": result.error, "sql": sql}
     rows = [list(r) for r in result.rows[:limit]]
     columns = [c.name if hasattr(c, "name") else str(c) for c in result.columns]
-    return {
+    out = {
         "columns": columns,
         "rows": rows,
         "row_count": len(rows),
@@ -150,6 +150,20 @@ async def _run_read_query(conn, sql: str, limit: int) -> dict:
         "limit": limit,
         "engine": str(conn.type),
     }
+    # Geometry in the result (WKT/GeoJSON/hex-WKB text or a PostGIS column):
+    # hand agents and map clients a FeatureCollection as well, so a
+    # "restaurants in Piantini" answer can be drawn without another hop.
+    try:
+        from tusk.core.geo import detect_geometry_columns, rows_to_geojson, to_dict
+
+        col_dicts = [{"name": c.name, "type": getattr(c, "type", "")} for c in result.columns]
+        geo_idx = detect_geometry_columns(col_dicts, [tuple(r) for r in rows])
+        if geo_idx:
+            out["geometry_column"] = columns[geo_idx[0]]
+            out["geojson"] = to_dict(rows_to_geojson(col_dicts, [tuple(r) for r in rows], geo_idx[0]))
+    except Exception as exc:  # noqa: BLE001 — never fail a query over the map extra
+        log.debug("mcp_geojson_skipped", error=str(exc))
+    return out
 
 
 class MCPToolsController(Controller):

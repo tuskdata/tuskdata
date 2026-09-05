@@ -79,25 +79,8 @@
 
 
 {% macro carto_dark_style() %}
-{# CARTO Dark Matter basemap style object for MapLibre GL.
-   Use directly in JS as the style parameter for new maplibregl.Map().
-#}
-{
-    version: 8,
-    sources: {
-        'carto-dark': {
-            type: 'raster',
-            tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
-        }
-    },
-    layers: [{
-        id: 'carto-dark-layer',
-        type: 'raster',
-        source: 'carto-dark',
-        minzoom: 0,
-        maxzoom: 22
-    }]
-}
+{# Basemap style for `new maplibregl.Map({ style: ... })`. Kept under its
+   historical name; resolves to the configured XYZ provider (Settings →
+   Studio) or OpenFreeMap's keyless vector styles, matching the theme. #}
+window.tuskBasemapStyle()
 {% endmacro %}
