@@ -708,3 +708,14 @@ def test_case_when_through_http(client, tmp_path):
     for row in body["rows"]:
         tiers[row[id_idx]] = row[tier_idx]
     assert tiers == {1: "young", 2: "adult", 3: "senior"}
+
+
+def test_health_is_public_in_multi_user_mode(client, monkeypatch):
+    """Docker HEALTHCHECK and Kubernetes probes send no cookie; 0.4.40."""
+    from tusk.core import config as cfg
+
+    monkeypatch.setattr(cfg.get_config(), "auth_mode", "multi")
+    r = client.get("/api/health")
+    assert r.status_code == 200, r.text
+    r = client.get("/api/metrics")
+    assert r.status_code == 200

@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.39"
+version = "0.4.40"
 description = "PostgreSQL admin and SQL studio with an AI copilot and light analytics"
 readme = "README.md"
 license = "MIT"
@@ -134,13 +134,15 @@ packages = ["src/tusk"]
 [tool.hatch.targets.wheel.sources]
 "src" = ""
 
-# Include non-Python files (templates, static assets)
+# Include non-Python files (templates, static assets) for EVERY package
+# that ships them — core studio and built-in plugins alike. 0.4.39 listed
+# only studio/, so tusk/bi/templates never reached the wheel and /bi was a
+# 500 in production. tests/test_packaging.py guards this.
 [tool.hatch.build]
 include = [
     "src/tusk/**/*.py",
-    "src/tusk/studio/templates/**/*.html",
-    "src/tusk/studio/static/**/*.js",
-    "src/tusk/studio/static/**/*.css",
+    "src/tusk/**/templates/**/*",
+    "src/tusk/**/static/**/*",
 ]
 
 [tool.ruff]

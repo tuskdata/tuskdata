@@ -1,5 +1,6 @@
 """Global configuration for Tusk"""
 
+import os
 import tomllib
 import tomli_w
 from pathlib import Path
@@ -71,12 +72,28 @@ def get_config() -> TuskConfig:
     return _config
 
 
+def _apply_env_overrides(cfg: "TuskConfig") -> None:
+    """Container-friendly overrides. A pod has no shell session to run
+    `tusk auth enable` in; the environment is where its config lives.
+
+    TUSK_AUTH_MODE    single | multi
+    TUSK_PG_BIN_PATH  directory holding pg_dump / psql
+    """
+    mode = os.environ.get("TUSK_AUTH_MODE", "").strip().lower()
+    if mode in ("single", "multi"):
+        cfg.auth_mode = mode
+    pg_bin = os.environ.get("TUSK_PG_BIN_PATH", "").strip()
+    if pg_bin:
+        cfg.pg_bin_path = pg_bin
+
+
 def load_config() -> TuskConfig:
     """Load configuration from file"""
     global _config
 
     if not CONFIG_FILE.exists():
         _config = TuskConfig()
+        _apply_env_overrides(_config)
         return _config
 
     try:
@@ -96,6 +113,7 @@ def load_config() -> TuskConfig:
             session_lifetime=data.get("auth", {}).get("session_lifetime", 86400),
             allow_registration=data.get("auth", {}).get("allow_registration", False),
         )
+        _apply_env_overrides(_config)
         return _config
 
     except Exception:

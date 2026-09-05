@@ -1,0 +1,132 @@
+# Tusk on Kubernetes — one StatefulSet, one replica, one volume.
+#
+# Tusk is a single process by design (see docs/deployment/kubernetes.md and
+# specs/architecture/adrs/0001-single-process-by-default.md): the scheduler,
+# sessions and the metadata store (~/.tusk/tusk.db) live in the pod, so
+# `replicas` must stay 1. Scale vertically.
+#
+#   kubectl apply -f deploy/k8s/tusk.yaml
+#   kubectl -n tuskdata port-forward svc/tusk 8000:80   # http://127.0.0.1:8000
+#
+# Multi-user mode: set TUSK_AUTH_MODE=multi, then create the admin user once:
+#   kubectl -n tuskdata exec statefulset/tusk -- tusk auth init
+#
+# Ingress: the Traefik example at the bottom matches k3s defaults; swap the
+# class and TLS for your cluster.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tuskdata
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tusk
+  namespace: tuskdata
+spec:
+  selector:
+    app: tusk
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tusk
+  namespace: tuskdata
+spec:
+  serviceName: tusk
+  replicas: 1                      # single process by design — do not scale out
+  selector:
+    matchLabels:
+      app: tusk
+  volumeClaimTemplates:
+    - metadata:
+        name: tusk-home
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app: tusk
+    spec:
+      securityContext:
+        fsGroup: 1000              # the image runs as uid 1000 (`tusk`)
+      containers:
+        - name: tusk
+          image: ghcr.io/tuskdata/tuskdata:0.4.40
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: TUSK_AUTH_MODE
+              value: "single"      # "multi" for logins, groups, API tokens
+            - name: TUSK_LOG_FORMAT
+              value: "json"
+            - name: TUSK_LOG_LEVEL
+              value: "info"
+            - name: TUSK_REQUEST_TIMEOUT
+              value: "60"          # seconds per request; raise for slow exports
+            - name: TZ
+              value: "UTC"
+          volumeMounts:
+            - name: tusk-home
+              mountPath: /var/lib/tusk    # HOME in the image → ~/.tusk lives here
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          startupProbe:            # up to 60 s for a cold start (plugins, scheduler)
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:           # ~90 s unresponsive → kubelet restarts the pod
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+# Optional: Traefik ingress (k3s default). Replace host and TLS as needed.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tusk
+  namespace: tuskdata
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: tusk.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tusk
+                port:
+                  name: http
+  tls:
+    - hosts: [tusk.example.internal]
+      secretName: tusk-tls          # e.g. issued by cert-manager

@@ -51,9 +51,14 @@ blind spots, all grounding:
   the way: CARTO basemaps now watermark "API KEY REQUIRED" → keyless
   OpenFreeMap styles everywhere; Ollama `num_ctx` 16k.
 
-## 0.4.40 — Kubernetes for real + published roadmap tells the truth (~2-3 days)
+## 0.4.40 — Kubernetes for real + published roadmap tells the truth (shipped 2026-09-06)
 
-Waits for the homelab k3s cluster.
+Done except the live run on the homelab k3s (`k1`, unreachable at the
+time): manifest validated structurally, image built and exercised locally
+in Docker (health, /bi, multi-user via env). Two production bugs came out
+of it: the wheel did not ship `tusk/bi/templates` (0.4.39 `/bi` → 500),
+and plugin templates were copied into site-packages, which an unprivileged
+container cannot write — they now live in `~/.tusk/plugin_templates`.
 
 - Publish `ghcr.io/tuskdata/tuskdata:<tag>` from `publish.yml` on tag.
 - `TUSK_AUTH_MODE` (and `TUSK_PG_BIN_PATH`) as environment overrides.

@@ -2,6 +2,9 @@ name: Publish to PyPI
 
 # Fires on annotated/lightweight tags matching v* (e.g. v0.4.12).
 # Manual dispatch is enabled for emergency re-runs of an existing tag.
+# Besides PyPI, the `image` job builds the in-repo Dockerfile and pushes
+# ghcr.io/tuskdata/tuskdata:<version> (+ :latest) — the image the
+# Kubernetes docs reference.
 #
 # Uses PyPI trusted publishing (OIDC) — no API token in repo secrets.
 # The matching trusted publisher config on PyPI is:
@@ -104,3 +107,46 @@ jobs:
           # auth issues straight from the action logs if they recur.
           verbose: true
           print-hash: true
+
+  image:
+    name: Publish container image
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # `compat` polars runtime: runs on any x86-64 (no AVX2 needed).
+          build-args: |
+            TUSK_POLARS=compat
+            WITH_CLUSTER=0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

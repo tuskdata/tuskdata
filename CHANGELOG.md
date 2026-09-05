@@ -2,6 +2,32 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.40] - 2026-09-06 — Kubernetes for real; packaging fix
+
+- **Fix: `/bi` returned 500 on a wheel install** (production on 0.4.39).
+  The wheel's include list only covered `studio/` assets, so
+  `tusk/bi/templates` and `tusk/bi/static` never shipped; everything worked
+  from the source tree. The include now covers every package's templates
+  and statics, and `tests/test_packaging.py` builds the wheel and checks.
+- **Fix: plugin templates were copied into site-packages at startup.** An
+  unprivileged container over a root-owned venv (the published image,
+  Kubernetes `runAsUser`) died with `PermissionError`. They now go to
+  `~/.tusk/plugin_templates/` (`TUSK_PLUGIN_TEMPLATE_DIR`), registered as a
+  second template root; nothing is written next to the package any more.
+- **Fix: `/api/health` and `/api/metrics` answered 401 in multi-user mode**,
+  so the Docker HEALTHCHECK and Kubernetes probes would restart the pod
+  forever. Both are public now (they carry no data beyond status/version).
+- **Kubernetes**: `deploy/k8s/tusk.yaml` (Namespace, Service, single-replica
+  StatefulSet with PVC, probes, optional Traefik Ingress), the release
+  workflow publishes `ghcr.io/tuskdata/tuskdata:<version>` from the in-repo
+  Dockerfile, and `docs/deployment/kubernetes.md` describes what actually
+  ships (image, environment, the real `~/.tusk` layout, no HA date).
+- `TUSK_AUTH_MODE` and `TUSK_PG_BIN_PATH` environment overrides, so a pod
+  can run multi-user without a shell session.
+- Roadmap: parked items moved to `specs/roadmap/archive/` with a reason
+  each; `next.md` rewritten; the Embedded SDK promise removed from the
+  Analytics page; TODO files rewritten to reality.
+
 ## [0.4.39] - 2026-09-06 — Geo grounding for the Copilot
 
 - **The Copilot understands PostGIS databases.** The prompt now carries a

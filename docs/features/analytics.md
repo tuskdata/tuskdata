@@ -112,16 +112,8 @@ Generate a short-lived token to embed a dashboard into an external app via ifram
 
 Use case: a SaaS product giving each of its customers a "their data" dashboard. You issue a token per session, customer sees only their rows.
 
-The `Embedded Analytics SDK` (planned for 0.7.x) wraps this with first-class React/Vue components — see [the spec](https://github.com/tuskdata/tuskdata/blob/main/specs/roadmap/next.md).
-
-## Recent improvements (v0.3.0)
-
-- CSS-grid viewer (no GridStack on viewer side) — faster page loads, better mobile.
-- New widget types: `top_n` + `funnel`.
-- Map widget bubbles mode with inline labels.
-- Stat-card sparkline tinted green/rose by trend direction.
-- Dashboard-level `is_public` + `refresh_interval_seconds` (Live + Public badges).
-- General tab in editor settings for the above.
+Embedding stays at this level on purpose: an iframe and a token. There is no
+React/Vue SDK and none is planned.
 
 ## Why Analytics matters
 

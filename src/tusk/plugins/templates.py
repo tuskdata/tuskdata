@@ -48,31 +48,41 @@ PLUGIN_STATIC_DIR = Path(
 _TAB_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
 
 
-def setup_plugin_templates(base_templates_dir: Path) -> None:
-    """Copy plugin templates to main templates directory.
+# Plugin templates are copied here and this directory is registered as a
+# second template root, so ``plugins/<tab_id>/page.html`` resolves without
+# ever writing into site-packages. A container running as an unprivileged
+# user over a root-owned venv (the published image, Kubernetes) crashed at
+# startup with PermissionError when the copy targeted the venv.
+PLUGIN_TEMPLATE_DIR = Path(
+    os.environ.get("TUSK_PLUGIN_TEMPLATE_DIR")
+    or (Path.home() / ".tusk" / "plugin_templates")
+)
 
-    Called on startup to make plugin templates available.
 
-    Args:
-        base_templates_dir: Main templates directory (tusk/studio/templates)
+def setup_plugin_templates(base_templates_dir: Path | None = None) -> Path:
+    """Copy every plugin's templates to ``PLUGIN_TEMPLATE_DIR/plugins/<tab_id>/``.
+
+    Called on startup. ``base_templates_dir`` is accepted for backwards
+    compatibility and ignored: the venv is not a place to write. Returns
+    the directory that must be on the template search path.
     """
-    plugins_template_dir = base_templates_dir / "plugins"
-    plugins_template_dir.mkdir(exist_ok=True)
+    plugins_template_dir = PLUGIN_TEMPLATE_DIR / "plugins"
+    plugins_template_dir.mkdir(parents=True, exist_ok=True)
 
     for plugin in get_all_plugins():
         templates_path = plugin.get_templates_path()
         if not templates_path or not templates_path.exists():
             continue
-
-        dest = plugins_template_dir / plugin.tab_id
-
-        # Remove old templates
+        tab_id = plugin.tab_id
+        if not _TAB_ID_RE.match(tab_id):
+            log.warning("Plugin skipped — invalid tab_id", plugin=plugin.name, tab_id=tab_id)
+            continue
+        dest = plugins_template_dir / tab_id
         if dest.exists():
             shutil.rmtree(dest)
-
-        # Copy new templates
         shutil.copytree(templates_path, dest)
         log.info("Plugin templates copied", plugin=plugin.name, dest=str(dest))
+    return PLUGIN_TEMPLATE_DIR
 
 
 def setup_plugin_statics(base_static_dir: Path) -> None:
@@ -129,16 +139,11 @@ def setup_plugin_statics(base_static_dir: Path) -> None:
     del base_static_dir
 
 
-def cleanup_plugin_templates(base_templates_dir: Path) -> None:
-    """Remove plugin templates on shutdown.
-
-    Args:
-        base_templates_dir: Main templates directory
-    """
-    plugins_template_dir = base_templates_dir / "plugins"
-    if plugins_template_dir.exists():
-        shutil.rmtree(plugins_template_dir)
-        log.debug("Plugin templates cleaned up")
+def cleanup_plugin_templates(base_templates_dir: Path | None = None) -> None:
+    """No-op. Templates live under ``~/.tusk`` now and are refreshed on the
+    next start; deleting them on shutdown only raced other processes
+    (tests, a second instance) that share the directory."""
+    return None
 
 
 def cleanup_plugin_statics(base_static_dir: Path) -> None:

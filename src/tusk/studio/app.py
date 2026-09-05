@@ -4,7 +4,7 @@ import asyncio
 import secrets
 import shutil
 from pathlib import Path
-from litestar import Litestar, Request, Response
+from litestar import Litestar, Request
 from litestar.middleware import ASGIMiddleware
 from litestar.static_files import create_static_files_router
 from litestar.template import TemplateConfig
@@ -59,14 +59,15 @@ from tusk.plugins.registry import (
     get_plugin_route_handlers,
 )
 from tusk.plugins.templates import (
+    PLUGIN_TEMPLATE_DIR,
     setup_plugin_templates,
     setup_plugin_statics,
-    PLUGIN_STATIC_DIR,
 )
 
 # Paths
 STUDIO_DIR = Path(__file__).parent
 TEMPLATES_DIR = STUDIO_DIR / "templates"
+PLUGIN_TEMPLATE_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR = STUDIO_DIR / "static"
 
 CSRF_COOKIE = "tusk_csrf"
@@ -126,6 +127,11 @@ _PUBLIC_PREFIXES = (
     "/login",
     "/health",
     "/metrics",
+    # Probes carry no cookie: the Dockerfile HEALTHCHECK and the Kubernetes
+    # liveness/readiness probes hit these. In multi-user mode they used to
+    # answer 401, which restarts the pod forever.
+    "/api/health",
+    "/api/metrics",
     "/favicon.ico",
     "/api/auth/login",
     "/api/auth/logout",
@@ -757,7 +763,9 @@ app = Litestar(
         )
     ],
     template_config=TemplateConfig(
-        directory=TEMPLATES_DIR,
+        # Core templates from the package; plugin templates from the
+        # writable copy under ~/.tusk (see plugins/templates.py).
+        directory=[TEMPLATES_DIR, PLUGIN_TEMPLATE_DIR],
         engine=MiniJinjaTemplateEngine,
     ),
     compression_config=CompressionConfig(
