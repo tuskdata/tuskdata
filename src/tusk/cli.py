@@ -6,13 +6,13 @@ from pathlib import Path
 
 
 def _configure_console() -> None:
-    """Fuerza UTF-8 en stdout/stderr.
+    """Force UTF-8 on stdout/stderr.
 
-    En Windows la consola clásica (cmd/PowerShell heredados) usa cp1252 o
-    cp437 y cualquier carácter fuera de ASCII —guiones largos, marcas de
-    check, emojis en logs— revienta con UnicodeEncodeError. Windows
-    Terminal ya es UTF-8, de ahí que el fallo fuera intermitente.
-    `errors="replace"` garantiza que nunca se cae por un print.
+    On Windows the legacy console (old cmd/PowerShell hosts) uses cp1252
+    or cp437, and any non-ASCII character — em dashes, check marks,
+    emojis in logs — blows up with UnicodeEncodeError. Windows Terminal
+    is already UTF-8, which is why the failure was intermittent.
+    `errors="replace"` guarantees a print can never crash the CLI.
     """
     for stream in (sys.stdout, sys.stderr):
         try:

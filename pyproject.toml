@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.28"
+version = "0.4.29"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -62,6 +62,7 @@ studio = [
     "pyarrow>=17.0",         # Arrow format support
     "apscheduler>=3.10,<4",  # Task scheduler — 4.x reorganized imports (no apscheduler.schedulers)
     "ibis-framework[duckdb,polars]>=10.0",  # Unified DataFrame API (ETL engine)
+    "litestar-mcp>=0.13",    # MCP server: routes marked mcp_tool= served at POST /mcp
 ]
 
 # Admin features (scheduled tasks, monitoring)
@@ -93,16 +94,16 @@ otel = [
 ]
 
 # Everything
-# `cluster` queda fuera de `all` a propósito: tusk-cluster está en pausa
-# (sigue instalable con `tuskdata[cluster]`, pero no forma parte del
-# producto por defecto ni del deploy).
+# `cluster` is deliberately left out of `all`: tusk-cluster is paused
+# (still installable via `tuskdata[cluster]`, but not part of the default
+# product or the deploy).
 all = [
     "tuskdata[studio,admin]",
 ]
 
 [dependency-groups]
-# Herramientas de desarrollo — nunca van al wheel ni al deploy.
-# Instalar con: uv sync --group dev   (o uv pip install --group dev)
+# Development tools — never shipped in the wheel or the deploy.
+# Install with: uv sync --group dev   (or uv pip install --group dev)
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",

@@ -1266,7 +1266,7 @@ async function loadConnections() {
 
     // Check connection statuses in background
     checkConnectionStatuses(conns);
-    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    // Materialize the Lucide icons in the HTML we just inserted
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1323,7 +1323,7 @@ async function checkConnectionStatuses(conns) {
             </div>
         `}).join('');
     }
-    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    // Materialize the Lucide icons in the HTML we just inserted
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1456,7 +1456,7 @@ function renderSchemaTree(schema, filter = '') {
             </button>
         </div>
     ` + (schemaHtml || '<div class="text-gray-500 py-2">No tables match filter</div>');
-    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    // Materialize the Lucide icons in the HTML we just inserted
     if (window.lucide) lucide.createIcons();
 }
 
@@ -2534,7 +2534,7 @@ async function loadFiles() {
         </details>
     `;
     }).join('');
-    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    // Materialize the Lucide icons in the HTML we just inserted
     if (window.lucide) lucide.createIcons();
 }
 

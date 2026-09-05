@@ -220,9 +220,9 @@ def create_backup(
         progress_path: optional path to write progress messages into. Each
             line is one phase (e.g. `dumping`, `compressing`, `done`).
             The UI polls this file while the backup runs.
-        backup_dir: carpeta de destino. Por defecto `~/.tusk/backups`; los
-            backups programados pueden apuntar a otro sitio (un volumen
-            montado, un NFS). Se crea si no existe.
+        backup_dir: destination folder. Defaults to `~/.tusk/backups`;
+            scheduled backups may point elsewhere (a mounted volume, an
+            NFS share). Created if missing.
 
     Returns: (success, message, filepath)
     """
@@ -445,12 +445,12 @@ def prune_backups(
     keep_last: int,
     backup_dir: Path | str | None = None,
 ) -> list[str]:
-    """Borra los backups más antiguos de `database`, conservando los
-    `keep_last` más recientes (y sus sidecars `.meta.json`).
+    """Delete the oldest backups of `database`, keeping the `keep_last`
+    most recent ones (and their `.meta.json` sidecars).
 
-    Pensado para el scheduler: sin esto un backup diario llena el volumen
-    hasta que revienta. Devuelve los nombres borrados. `keep_last <= 0`
-    significa "no rotar".
+    Meant for the scheduler: without it a nightly backup fills the volume
+    until it bursts. Returns the deleted file names. `keep_last <= 0`
+    means "don't rotate".
     """
     if keep_last <= 0:
         return []

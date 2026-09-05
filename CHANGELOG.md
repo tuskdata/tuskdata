@@ -2,66 +2,90 @@
 
 All notable changes to Tusk will be documented in this file.
 
-## [0.4.28] - 2026-09-05 — Revival: deps al día, BI charts, AI grounding, backups programados
+## [0.4.29] - 2026-09-05 — MCP server, Studio sidebar, Docker on non-AVX CPUs
 
-Primera release tras tres meses parados. Sin features nuevas grandes:
-poner el entorno al día y arreglar lo que dolía en el uso diario.
+**MCP server (`POST /mcp`)** — via `litestar-mcp`
+- Four read-only tools backed by plain routes in `routes/mcp_tools.py`:
+  `list_connections`, `get_schema` (same grounding summary the Copilot
+  uses), `run_query` (single SELECT/WITH/VALUES, write verbs rejected,
+  row cap 200/1000) and `explain_query`. Same process, same connections,
+  same auth. `claude mcp add --transport http tusk http://127.0.0.1:8000/mcp`.
+- `/mcp` is CSRF-exempt (agents don't carry the cookie). Multi-user mode
+  still needs a session — API tokens are the next step.
 
-**Entorno / dependencias**
-- Python 3.13 como baseline real también en local (el venv iba en 3.12).
+**Studio**
+- The sidebar's Schema section had `min-height:0` and, with connections +
+  history taking the full height, the tree collapsed to 0px with Saved
+  queries painted on top (Chrome walkthrough). It never drops below
+  200px now and the aside scrolls; history is capped at 180px.
+
+**Docker**
+- Dockerfile: `polars-runtime-compat` by default. Since Polars 1.37 the
+  binary ships in a separate runtime package; PyPI's default is AVX2 and
+  dies with "Illegal instruction" on CPUs without it (the prod VM is a
+  QEMU CPU with SSE4.2 only) — that was the Coolify restart loop.
+  Same fix in `tuskdata-compose`, which also pins `tuskdata[all]==<wheel
+  version>` — its global `--prerelease=allow` had pulled `polars 2.0.0rc1`.
+- `WITH_CLUSTER` defaults to 0 (tusk-cluster is paused).
+
+## [0.4.28] - 2026-09-05 — Revival: deps up to date, BI charts, AI grounding, scheduled backups
+
+First release after three months idle. No big features: bring the
+environment up to date and fix what hurt in daily use.
+
+**Environment / dependencies**
+- Python 3.13 as the real baseline locally too (the venv was on 3.12).
 - Litestar 2.19 → 2.24, msgspec 0.21.1, Granian 2.8.2, DuckDB 1.5.5,
-  Polars 1.44, psycopg 3.3.5, MiniJinja 2.24. Suite completa en verde.
-- `litestar.contrib.minijinja` (deprecado en 2.22) → `litestar.plugins.minijinja`.
-- `tuskdata[all]` ya no arrastra `cluster`: tusk-cluster queda en pausa
-  (sigue instalable con `tuskdata[cluster]`).
-- Grupo `dev` en `[dependency-groups]` (pytest, playwright, ruff) para que
-  las herramientas de desarrollo no acaben en el deploy.
+  Polars 1.44, psycopg 3.3.5, MiniJinja 2.24. Full suite green.
+- `litestar.contrib.minijinja` (deprecated in 2.22) → `litestar.plugins.minijinja`.
+- `tuskdata[all]` no longer pulls `cluster`: tusk-cluster is paused
+  (still installable via `tuskdata[cluster]`).
+- `dev` group in `[dependency-groups]` (pytest, playwright, ruff) so dev
+  tooling never ends up in the deploy.
 
-**tusk-bi 0.3.2 — los charts no se dibujaban**
-- Ninguna plantilla cargaba `widgets.js`, que define `biRenderChart`,
-  `biRenderSparkline`, `biRenderMap` y `biRenderMarkdown`. Los partials
-  HTMX los invocaban sobre `undefined` y fallaban en silencio: canvas
-  vacío en todos los widgets de gráfico, sparkline, mapa y texto. Stat y
-  tabla funcionaban porque no dependen de JS. Se carga ahora en
-  `dashboard.html`, `dashboard_public.html` y `embed_dashboard.html`.
 
-**AI Copilot — "esa tabla no existe"**
-- `_schema_summary` listaba como máximo 120 tablas ordenadas por filas.
-  En bases con más (statuos_dev tiene 192) las tablas que el usuario
-  nombraba quedaban fuera de `### Available tables` y el modelo concluía
-  que no existían. Ahora las tablas que casan con el prompt van siempre
-  primero, el tope sube a 300 y, si aun así se corta, el listado dice
-  explícitamente que está truncado.
+**tusk-bi 0.3.2 / 0.3.3 — charts weren't drawn**
+- No template loaded `widgets.js`, which defines `biRenderChart`,
+  `biRenderSparkline`, `biRenderMap` and `biRenderMarkdown`. The HTMX
+  partials called them on `undefined` and failed silently: empty canvas
+  on every chart, sparkline, map and text widget. Stat and table widgets
+  worked because they don't depend on JS. Now loaded in
+  `dashboard.html`, `dashboard_public.html` and `embed_dashboard.html`.
+- 0.3.3: delete-dashboard button in the list; widget chart type honours
+  widget → saved query → auto-detect (dates ⇒ line) instead of falling to
+  bar; footer shows the real plugin version.
 
-**Backups programados**
-- `backup_dir` del payload se ignoraba: todo iba a `~/.tusk/backups`.
-  `create_backup()` acepta `backup_dir` y el scheduler lo respeta.
-- Rotación nueva: `keep_last` por schedule; tras cada backup correcto se
-  borran los más antiguos de esa base (y sus `.meta.json`). Nunca se
-  rota tras un fallo.
-- Formato configurable por schedule (`custom` -Fc recomendado, `plain`,
-  `directory`). Campos nuevos en el formulario de Scheduled → Backup.
+**AI Copilot — "that table doesn't exist"**
+- `_schema_summary` listed at most 120 tables ordered by row count. On
+  databases with more (statuos_dev has 192) the tables the user named
+  fell out of `### Available tables` and the model concluded they didn't
+  exist. Prompt-matched tables now come first, the cap is 300 and, if it
+  still truncates, the list says so explicitly.
+
+**Scheduled backups**
+- `backup_dir` in the payload was ignored: everything went to
+  `~/.tusk/backups`. `create_backup()` accepts `backup_dir` and the
+  scheduler honours it.
+- New rotation: `keep_last` per schedule; after each successful backup
+  the oldest ones for that database are deleted (with their
+  `.meta.json`). Never rotates after a failure.
+- Format per schedule (`custom` -Fc recommended, `plain`, `directory`).
+  New fields in the Scheduled → Backup form.
 - Tests: `tests/test_scheduled_backup.py` (6).
 
 **Windows**
-- `tusk` reconfigura stdout/stderr a UTF-8 con `errors="replace"` al
-  arrancar: en cmd/PowerShell heredados (cp1252/cp437) cualquier `—` o
-  emoji en un print tumbaba la CLI con `UnicodeEncodeError`. `tusk
-  features` deja de imprimir emojis; structlog sin colores ANSI en win32.
-- El árbol de esquema y la lista de conexiones de Studio usaban emojis
-  crudos (🐘 🦆 📁 📋 🔑 🔗 ⭐ ✎) que en algunos Windows salen como
-  cuadros. Sustituidos por iconos Lucide, que es la regla del proyecto.
-
-**Studio**
-- La sección Schema del sidebar tenía `min-height:0` y, con conexiones +
-  historial ocupando todo el alto, el árbol quedaba a 0px con Saved
-  queries pintado encima (walkthrough con Chrome). Ahora nunca baja de
-  200px y el aside hace scroll; el historial se acota a 180px.
+- `tusk` reconfigures stdout/stderr to UTF-8 with `errors="replace"` on
+  startup: in legacy cmd/PowerShell hosts (cp1252/cp437) any `—` or emoji
+  in a print crashed the CLI with `UnicodeEncodeError`. `tusk features`
+  no longer prints emojis; structlog without ANSI colors on win32.
+- Studio's schema tree and connection list used raw emojis (🐘 🦆 📁 📋
+  🔑 🔗 ⭐ ✎) that render as boxes on some Windows setups. Replaced with
+  Lucide icons, which is the project rule anyway.
 
 **Data**
-- El transform `add_column` (columna calculada con expresión Polars)
-  existía en ambos motores pero no estaba en la paleta. Expuesto con su
-  formulario, descripción en la lista y edición.
+- The `add_column` transform (computed column from a Polars expression)
+  existed in both engines but wasn't in the palette. Exposed with its
+  form, list description and editing.
 
 ## [0.4.27] - 2026-05-24 — Data canvas fills + double-click works
 

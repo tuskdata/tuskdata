@@ -13,6 +13,7 @@ from litestar.types import ASGIApp, Receive, Scope, Send
 from litestar.enums import ScopeType
 
 from litestar.plugins.minijinja import MiniJinjaTemplateEngine
+from litestar_mcp import LitestarMCP, MCPConfig
 from litestar.openapi import OpenAPIConfig
 
 import tusk
@@ -42,6 +43,7 @@ from tusk.studio.routes import (
     AICopilotController,
     AISettingsPageController,
     JobsController,
+    MCPToolsController,
     health_check,
     metrics,
 )
@@ -112,7 +114,7 @@ def _timeout_for(path: str) -> float:
             return override
     return _DEFAULT_REQUEST_TIMEOUT_S
 # Paths exempt from CSRF (login needs to work without a token, health, static, etc.)
-_CSRF_EXEMPT_PREFIXES = ("/static/", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/auth/config", "/health", "/api/ci/webhook", "/api/ci/sse/", "/bi/public/", "/embed/", "/api/embed/")
+_CSRF_EXEMPT_PREFIXES = ("/static/", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/auth/config", "/health", "/api/ci/webhook", "/api/ci/sse/", "/bi/public/", "/embed/", "/api/embed/", "/mcp")
 _STATE_CHANGING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 # Paths that don't require a session in multi-user mode.
@@ -404,6 +406,7 @@ def get_route_handlers() -> list:
         AICopilotController,
         AISettingsPageController,
         JobsController,
+        MCPToolsController,
         health_check,
         metrics,
     ]
@@ -723,6 +726,23 @@ _static_files_router = create_static_files_router(
 
 app = Litestar(
     route_handlers=[*get_route_handlers(), _static_files_router],
+    # MCP server: routes marked `mcp_tool=` (routes/mcp_tools.py) are served
+    # as tools at `POST /mcp` (Streamable HTTP). Inherits the session
+    # middleware; CSRF is exempt because the client is an agent, not a
+    # browser.
+    plugins=[
+        LitestarMCP(
+            MCPConfig(
+                base_path="/mcp",
+                name="TuskData",
+                instructions=(
+                    "TuskData is a PostgreSQL workbench. Start with list_connections, "
+                    "then get_schema(connection_id, focus) before writing SQL; run_query "
+                    "is read-only and row-capped."
+                ),
+            )
+        )
+    ],
     template_config=TemplateConfig(
         directory=TEMPLATES_DIR,
         engine=MiniJinjaTemplateEngine,

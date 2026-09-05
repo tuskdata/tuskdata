@@ -53,8 +53,8 @@ def setup_logging(debug: bool = False) -> None:
     if fmt == "json":
         renderer = structlog.processors.JSONRenderer()
     else:
-        # En Windows la consola heredada no soporta ANSI ni unicode de forma
-        # fiable; sin colores structlog no emite secuencias de escape.
+        # The legacy Windows console handles neither ANSI nor unicode
+        # reliably; without colors structlog emits no escape sequences.
         renderer = structlog.dev.ConsoleRenderer(colors=(sys.platform != "win32"))
 
     structlog.configure(

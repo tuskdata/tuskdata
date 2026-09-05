@@ -633,8 +633,8 @@ async def _handle_backup(payload: dict) -> None:
     )
     if not success:
         raise RuntimeError(message or "backup failed")
-    # Rotación: solo tras un backup correcto, para no borrar los viejos
-    # justo cuando el nuevo falló.
+    # Rotate only after a successful backup, so we never delete the old
+    # ones right when the new one failed.
     if keep_last > 0:
         from tusk.admin.backup import prune_backups
         await asyncio.to_thread(prune_backups, config.database, keep_last, backup_dir)

@@ -1,7 +1,7 @@
-"""Backups programados: carpeta de destino, formato y rotación.
+"""Scheduled backups: destination folder, format and rotation.
 
-Hasta 0.4.27 `_handle_backup` ignoraba `backup_dir` y no existía
-rotación, así que un backup diario acababa llenando el volumen.
+Until 0.4.27 `_handle_backup` ignored `backup_dir` and there was no
+rotation, so a nightly backup eventually filled the volume.
 """
 
 import asyncio
@@ -26,7 +26,7 @@ def test_prune_keeps_newest_and_removes_sidecars(tmp_path: Path):
         f = tmp_path / f"shop_2026-01-0{i}_000000.dump"
         _touch(f, age)
         (tmp_path / (f.name + ".meta.json")).write_text("{}")
-    # Otra base en la misma carpeta no debe tocarse
+    # Another database in the same folder must be left alone
     _touch(tmp_path / "other_2026-01-01_000000.dump", 999)
 
     removed = backup_mod.prune_backups("shop", keep_last=2, backup_dir=tmp_path)

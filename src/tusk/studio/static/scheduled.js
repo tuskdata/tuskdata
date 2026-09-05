@@ -24,7 +24,7 @@
             run_date: "",
             notify_on_success: false,
             notify_on_failure: true,
-            // Solo para kind === "backup"
+            // Only for kind === "backup"
             backup_format: "custom",
             keep_last: 7,
             backup_dir: "",

@@ -743,10 +743,10 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             key=lambda kv: row_counts.get(kv[0], -1),
             reverse=True,
         )
-        # Las tablas que casan con el prompt van SIEMPRE primero en el
-        # listado: antes se cortaba en 120 por filas y, en bases con más
-        # tablas (statuos_dev tiene 192), las que el usuario nombraba
-        # quedaban fuera y el modelo respondía "esa tabla no existe".
+        # Tables matching the prompt ALWAYS come first in the overview:
+        # it used to cut at 120 by row count and, on databases with more
+        # tables (statuos_dev has 192), the ones the user named fell off
+        # the list and the model answered "that table doesn't exist".
         overview_cap = 300
         overview = [kv for kv in all_sorted if kv[0] in priority_set]
         overview += [kv for kv in all_sorted if kv[0] not in priority_set]
@@ -756,8 +756,8 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             out_lines.append(f"- {_sanitize_for_prompt(tname)} ({len(t['cols'])} cols{rc_str})")
         hidden = len(overview) - overview_cap
         if hidden > 0:
-            # Si aun así hay que cortar, que el modelo sepa que la lista
-            # está truncada en vez de concluir que la tabla no existe.
+            # If we still have to cut, tell the model the list is truncated
+            # instead of letting it conclude the table doesn't exist.
             out_lines.append(
                 f"- ... and {hidden} more tables not listed (the list is truncated, "
                 "NOT exhaustive — if the user names a table you don't see, assume it may exist and ask)"
