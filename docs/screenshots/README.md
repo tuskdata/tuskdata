@@ -33,18 +33,12 @@ another instance's pools would put its database names in the shot.
 | `profile.png` | `features/auth.md` |
 | `notifications.png` | `features/notifications.md` |
 
-## Sanitization checklist
+## Rules
 
-Before committing a screenshot:
-
-- [ ] **Connection names** anonymized to generic placeholders (`my-postgres-prod`, `analytics-db`, `staging-db`, etc.). Do **not** ship internal/customer names.
-- [ ] **Table names** are OK to keep if they're generic (`users`, `orders`, `geo_administrative_area`) but rename if they expose schema decisions you'd rather not telegraph (`acme_internal_billing` → `customers_billing`).
-- [ ] **Row data** that's PII (names, emails, addresses, IDs) blurred or replaced with `Lorem ipsum`. macOS Preview's annotation tools work; for batch use `pip install pillow` + a one-shot script.
-- [ ] **IP addresses** in tunnel error messages redacted (`54.210.176.211` → `<bastion-ip>` or blur).
-- [ ] **Database names** in error strings redacted (`api_socio_db_pro` → `<your-db>`).
-
-When in doubt, do a screenshot of a fresh `tusk studio` install with seed data (`tusk demo seed` — planned), not your real environment.
-
-## Where the source images came from (internal note)
-
-The reference set used to write the v0.4.x docs came from a real deployment at `10.0.0.188:7000`. They were intentionally **not** committed — only the descriptive prose in the feature pages references them. When time permits, capture clean replacements on the demo dataset.
+- Never commit a screenshot of a real environment. Everything here comes
+  from the generator against the synthetic `tusk_demo` database, so there
+  are no customer names, IPs, row data or internal schema names to redact.
+- Regenerate rather than edit: fix the scene in `scripts/docs_screenshots.py`
+  and rerun. Hand-retouched images drift from the product.
+- `admin.png` shows `pg_stat_activity`: stop every other local Tusk first,
+  or its pools will list your databases in the shot.
