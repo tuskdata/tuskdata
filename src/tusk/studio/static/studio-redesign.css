@@ -186,14 +186,17 @@ body.studio-redesigned aside{background:var(--bg);color:var(--fg)}
 
 /* ---------- Sidebar plumbing (replaces inline style="..." attrs)  */
 .r-sidebar .resize-handle{position:absolute;top:0;right:0;width:4px;height:100%;cursor:col-resize;z-index:5}
-.r-sidebar .side-section.flex-grow{flex:1;min-height:0;display:flex;flex-direction:column}
+/* Schema: crece con el espacio libre pero nunca por debajo de 200px. Con
+   min-height:0 las secciones fijas (conexiones + historial) se comían todo
+   el alto del aside y el árbol quedaba a 0px con Saved queries encima. */
+.r-sidebar .side-section.flex-grow{flex:1 1 auto;min-height:200px;display:flex;flex-direction:column}
 .r-sidebar .side-search{margin:4px 8px 8px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--fg);font-family:inherit}
 .r-sidebar .side-scroll{overflow-y:auto;flex:1;padding:0 4px}
 .r-sidebar .side-empty{color:var(--fg-3);font-size:12px;padding:4px 8px}
 .r-sidebar .icon-mini{width:20px;height:20px}
 .r-sidebar .icon-mini i[data-lucide]{width:11px;height:11px}
 .r-sidebar .icon-mini i.plus{width:12px;height:12px}
-.r-sidebar .history-list{max-height:240px;overflow-y:auto}
+.r-sidebar .history-list{max-height:180px;overflow-y:auto}
 
 /* ---------- Tab strip right-side meta ----------------------------- */
 .studio-tabs .tabs-row{display:flex;gap:2px;overflow-x:auto}

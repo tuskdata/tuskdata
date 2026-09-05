@@ -52,6 +52,12 @@ poner el entorno al día y arreglar lo que dolía en el uso diario.
   crudos (🐘 🦆 📁 📋 🔑 🔗 ⭐ ✎) que en algunos Windows salen como
   cuadros. Sustituidos por iconos Lucide, que es la regla del proyecto.
 
+**Studio**
+- La sección Schema del sidebar tenía `min-height:0` y, con conexiones +
+  historial ocupando todo el alto, el árbol quedaba a 0px con Saved
+  queries pintado encima (walkthrough con Chrome). Ahora nunca baja de
+  200px y el aside hace scroll; el historial se acota a 180px.
+
 **Data**
 - El transform `add_column` (columna calculada con expresión Polars)
   existía en ambos motores pero no estaba en la paleta. Expuesto con su
