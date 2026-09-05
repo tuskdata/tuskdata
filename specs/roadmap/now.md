@@ -77,11 +77,20 @@ Data Contracts, layer 2: contracts are inferred, not written.
 Decided in May (`later/tusk-bi-to-core.md`). Own release so any breakage
 is isolatable. One wheel to deploy instead of two.
 
+## 0.4.37 — docs site + component library (done, unreleased)
+
+Shipped on main after 0.4.36: generated screenshots (`scripts/demo_db.py`,
+`scripts/docs_screenshots.py`), Scheduled/Data/Notifications pages, GitHub
+Pages workflow (needs Pages enabled once), the macro library rebuilt on the
+design tokens with a render test, and three fixes found on the way
+(orphaned granian on SIGTERM, job names, compact dtypes in Data preview).
+Tag it as 0.4.37 with the next fix batch.
+
 ## 0.5.0 — when Apple approves
 
 - Desktop packaging: PyInstaller/Briefcase, Developer ID + notarization,
   Windows signing, auto-update.
-- Docs site live on GitHub Pages (mkdocs is configured, no workflow yet).
+- Docs site live on GitHub Pages (workflow exists; enable Pages in repo settings).
 - Test coverage ≥ 45% (35% today; `routes/data.py`, `routes/auth.py`,
   `admin/backup.py`, `engines/postgres.py` are the gap).
 - Ibis moved to an optional extra (prod has run with `ibis: unavailable`
