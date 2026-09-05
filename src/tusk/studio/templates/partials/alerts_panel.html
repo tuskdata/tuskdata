@@ -1,0 +1,133 @@
+{% from "components/feedback.html" import badge, empty_state %}
+{# Alert rules panel — swapped into Notifications settings via HTMX. #}
+<div id="alerts-panel"
+     x-data="alertsPanel()"
+     hx-target="#alerts-panel" hx-swap="outerHTML">
+
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h2 class="text-lg font-semibold">Alert rules</h2>
+            <p class="text-sm text-fg-3">When a value crosses a threshold, notify the channels subscribed to <span class="mono">alert.fired</span>. Checked every minute.</p>
+        </div>
+        <button type="button" class="btn btn-brand" @click="open = true">
+            <i data-lucide="plus"></i>New alert
+        </button>
+    </div>
+
+    {% if rules %}
+    <div class="card overflow-hidden">
+        <table class="dtable w-full">
+            <thead>
+                <tr><th>Rule</th><th>Watches</th><th>Condition</th><th>Last value</th><th>State</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for r in rules %}
+                <tr>
+                    <td class="font-medium">{{ r.name }}{% if not r.enabled %} <span class="chip chip-neutral">paused</span>{% endif %}</td>
+                    <td class="text-fg-3">{{ r.source_label }}</td>
+                    <td class="mono">{{ r.condition }}{% if r.for_seconds %} for {{ r.for_seconds }}s{% endif %}</td>
+                    <td class="mono">{% if r.last_value is not none %}{{ "%g" | format(r.last_value) }}{% else %}—{% endif %}</td>
+                    <td>
+                        {% if r.state == "firing" %}{{ badge("firing", "error") }}
+                        {% elif r.state == "pending" %}{{ badge("pending", "warning") }}
+                        {% elif r.state == "error" %}<span title="{{ r.last_error }}">{{ badge("error", "warning") }}</span>
+                        {% else %}{{ badge("ok", "success") }}{% endif %}
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <button type="button" class="btn btn-sm btn-ghost" title="Evaluate now"
+                                hx-post="/api/alerts/{{ r.id }}/check"><i data-lucide="play"></i></button>
+                        <button type="button" class="btn btn-sm btn-ghost" title="{{ 'Resume' if not r.enabled else 'Pause' }}"
+                                hx-post="/api/alerts/{{ r.id }}/toggle"><i data-lucide="{{ 'play-circle' if not r.enabled else 'pause' }}"></i></button>
+                        <button type="button" class="btn btn-sm btn-ghost icon-btn-danger" title="Delete"
+                                @click="removeRule('{{ r.id }}', '{{ r.name | replace("'", "") }}')"><i data-lucide="trash-2"></i></button>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    {{ empty_state("No alert rules yet", icon="bell-ring", title="Nothing is being watched", action_text="Create the first alert", action_onclick="this.closest('[x-data]').__x ? this.closest('[x-data]').__x.$data.open = true : null") }}
+    {% endif %}
+
+    <!-- New alert modal -->
+    <div x-show="open" x-cloak class="modal-mask" @click.self="open = false" x-on:keydown.escape.window="open = false" role="dialog" aria-modal="true">
+        <div class="modal-box max-w-lg">
+            <div class="modal-head">
+                <h3><i data-lucide="bell-ring" class="w-4 h-4"></i>New alert</h3>
+                <button type="button" class="icon-btn" @click="open = false" aria-label="Close"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="field">
+                    <label>Name</label>
+                    <input type="text" x-model="form.name" placeholder="Too many connections">
+                </div>
+                <div class="field">
+                    <label>Watch</label>
+                    <select x-model="form.source_kind">
+                        <option value="metric">Admin metric</option>
+                        <option value="query">Saved query (first numeric cell)</option>
+                        <option value="widget">Dashboard widget</option>
+                    </select>
+                </div>
+                <template x-if="form.source_kind === 'metric'">
+                    <div>
+                        <div class="field">
+                            <label>Metric</label>
+                            <select x-model="form.source_ref">
+                                {% for m in metrics %}<option value="{{ m.key }}">{{ m.label }}{% if m.unit %} ({{ m.unit }}){% endif %}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>PostgreSQL connection</label>
+                            <select x-model="form.connection_id">
+                                {% for c in connections if c.type == "postgres" %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="form.source_kind === 'query'">
+                    <div class="field">
+                        <label>Saved query</label>
+                        <select x-model="form.source_ref">
+                            {% for q in saved_queries %}<option value="{{ q.id }}">{{ q.name }}</option>{% endfor %}
+                        </select>
+                        {% if not saved_queries %}<span class="hint">Save a query in Studio first.</span>{% endif %}
+                    </div>
+                </template>
+                <template x-if="form.source_kind === 'widget'">
+                    <div class="field">
+                        <label>Widget</label>
+                        <select x-model="form.source_ref">
+                            {% for w in widgets %}<option value="{{ w.id }}">{{ w.label }}</option>{% endfor %}
+                        </select>
+                        {% if not widgets %}<span class="hint">No dashboard widgets with a query yet.</span>{% endif %}
+                    </div>
+                </template>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="field">
+                        <label>Condition</label>
+                        <select x-model="form.op">
+                            {% for o in ops %}<option value="{{ o.key }}">{{ o.label }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Threshold</label>
+                        <input type="number" step="any" x-model="form.threshold">
+                    </div>
+                    <div class="field">
+                        <label>For at least (s)</label>
+                        <input type="number" min="0" step="30" x-model="form.for_seconds">
+                        <span class="hint">0 = fire on first breach</span>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-2">
+                    <button type="button" class="btn" @click="open = false">Cancel</button>
+                    <button type="button" class="btn btn-brand" @click="save()" :disabled="saving">
+                        <i data-lucide="check"></i><span x-text="saving ? 'Saving…' : 'Create alert'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.40"
+version = "0.4.41"
 description = "PostgreSQL admin and SQL studio with an AI copilot and light analytics"
 readme = "README.md"
 license = "MIT"
@@ -35,6 +35,7 @@ dependencies = [
     "msgspec>=0.21",
     "structlog>=24.0",     # Structured logging
     "tomli-w>=1.0",        # Config file writing
+    "pyyaml>=6.0",         # Dashboards as files (tusk bi export/import)
     "httpx>=0.27",         # HTTP client (for future ETL workflows)
     "argon2-cffi>=23.1",   # Secure password hashing (argon2id)
     "cryptography>=42.0",  # Fernet symmetric encryption for connection secrets

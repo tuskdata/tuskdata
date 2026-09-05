@@ -2,6 +2,21 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.41] - 2026-09-06 — Alerts on a value; dashboards as files
+
+- **Alert rules** (Settings → Notifications → Alerts): *when <value> <op>
+  <threshold> [for N seconds] → notify*. Sources: an Admin metric of a
+  PostgreSQL connection (connections used %, active queries, cache hit
+  ratio, database size, longest running query), a saved query (first
+  numeric cell), or a dashboard widget. Evaluated every minute by the
+  scheduler; fires once (`alert.fired`) and resolves (`alert.resolved`)
+  through the existing channels; per-rule rate-limit slot; errors are
+  recorded on the rule, never paged. API under `/api/alerts`.
+- **`tusk bi export <id|all>` / `tusk bi import <file>...`**: dashboards
+  with their widgets and queries as YAML (or `--json`); import replaces a
+  dashboard with the same name, so applying twice does not duplicate.
+- `NotificationService.send(rate_key=…)` scopes the per-minute rate limit.
+
 ## [0.4.40] - 2026-09-06 — Kubernetes for real; packaging fix
 
 - **Fix: `/bi` returned 500 on a wheel install** (production on 0.4.39).

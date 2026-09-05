@@ -480,15 +480,21 @@ class NotificationService:
 
     # ── Send notifications ────────────────────────────────────
 
-    def send(self, event_key: str, message: str, *, context: dict | None = None, title: str | None = None, icon: str = "bell", variant: str = "info", link: str = "") -> int:
-        """Send notification for an event. Returns count of channels notified."""
+    def send(self, event_key: str, message: str, *, context: dict | None = None, title: str | None = None, icon: str = "bell", variant: str = "info", link: str = "", rate_key: str | None = None) -> int:
+        """Send notification for an event. Returns count of channels notified.
+
+        ``rate_key`` scopes the per-minute rate limit: alert rules pass
+        ``"alert.fired:<rule id>"`` so two different alerts firing in the
+        same minute are both delivered, while one flapping rule is not.
+        """
         # Rate limiting
         now = time.time()
-        last = self._rate_limit.get(event_key, 0)
+        rk = rate_key or event_key
+        last = self._rate_limit.get(rk, 0)
         if now - last < self._rate_limit_seconds:
             log.debug("Rate limited", event_key=event_key, seconds_since_last=now - last)
             return 0
-        self._rate_limit[event_key] = now
+        self._rate_limit[rk] = now
 
         # Create in-app notification
         self._create_in_app(event_key, title or event_key, message, icon, variant, link)
@@ -729,6 +735,8 @@ class NotificationService:
             ("schema.changed", "core", "Schema Changed", "Schema Watch found tables, columns, keys or indexes that changed"),
             ("contract.violated", "core", "Contract Violated", "A frozen data contract no longer holds (table/column gone, type or key changed)"),
             ("contract.restored", "core", "Contract Restored", "A previously violated data contract holds again"),
+            ("alert.fired", "core", "Alert Fired", "An alert rule's value crossed its threshold"),
+            ("alert.resolved", "core", "Alert Resolved", "An alert rule's value is back within its threshold"),
         ]
         for event_key, plugin_id, label, desc in core_events:
             self.register_event(event_key, plugin_id, label, desc)

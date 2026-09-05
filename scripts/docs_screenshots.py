@@ -112,6 +112,9 @@ async def _seed(page) -> None:
             {event_key: 'contract.violated', channel_id: slack.id, enabled: true},
             {event_key: 'contract.violated', channel_id: hook.id, enabled: true},
         ]});
+        // Alerts: one metric rule and one query-free rule so the tab is not empty.
+        await post('/api/alerts/', {name: 'Connections above 80%', source_kind: 'metric', source_ref: 'connections_pct', connection_id: 'demo', op: 'gt', threshold: 80, for_seconds: 120});
+        await post('/api/alerts/', {name: 'Cache hit ratio drops', source_kind: 'metric', source_ref: 'cache_hit_ratio', connection_id: 'demo', op: 'lt', threshold: 95, for_seconds: 300});
         // Data: an orders dataset with a filter and a sort, as the page would save it.
         await post('/api/data/workspace/save', {name: 'default', active_dataset_id: 'ds_orders', datasets: [{
             id: 'ds_orders', name: 'orders', source_type: 'database', connection_id: 'demo', connection_name: 'Demo shop',
@@ -231,9 +234,11 @@ async def _scenes(page, only: set[str] | None, theme: str) -> list[str]:
     await page.wait_for_timeout(4000)
     await shot("analytics-dashboard")
 
-    # Notifications settings (channels, subscriptions, history)
+    # Notifications settings (channels, subscriptions, history) + the Alerts tab
     await goto("/notifications/settings", settle=1500)
     await shot("notifications")
+    await goto("/notifications/settings#alerts", settle=2500)
+    await shot("alerts")
 
     # Settings hub + Studio settings
     await goto("/settings", settle=1000)

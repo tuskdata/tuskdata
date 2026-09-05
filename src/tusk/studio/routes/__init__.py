@@ -16,6 +16,7 @@ from tusk.studio.routes.jobs import JobsController
 from tusk.studio.routes.mcp_tools import MCPToolsController
 from tusk.studio.routes.schema_watch import SchemaWatchController
 from tusk.studio.routes.contracts import ContractsController
+from tusk.studio.routes.alerts import AlertsController
 
 __all__ = [
     # Base
@@ -49,4 +50,5 @@ __all__ = [
     "MCPToolsController",
     "SchemaWatchController",
     "ContractsController",
+    "AlertsController",
 ]

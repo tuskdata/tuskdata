@@ -115,6 +115,17 @@ Use case: a SaaS product giving each of its customers a "their data" dashboard. 
 Embedding stays at this level on purpose: an iframe and a token. There is no
 React/Vue SDK and none is planned.
 
+## Dashboards as files
+
+```bash
+tusk bi export all --out dashboards/     # one YAML per dashboard: widgets + queries
+tusk bi import dashboards/*.yaml         # replaces a dashboard with the same name
+```
+
+Keep them in git, review changes, apply on a fresh instance. `--json`
+writes JSON instead; both formats are what the dashboard export endpoint
+returns.
+
 ## Why Analytics matters
 
 Most data tools treat dashboards as the **end** of the workflow: build, share, done. Tusk treats them as **just another view** alongside Studio (raw SQL) and Explore (auto-profile). The same query you write in Studio becomes a widget here; the same connection you use for admin powers the dashboard. One product, one mental model.

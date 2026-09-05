@@ -70,7 +70,7 @@ container cannot write — they now live in `~/.tusk/plugin_templates`.
   rewrite `next.md`; drop the public promises (Embedded SDK "0.7.x" in
   analytics.md, HA "0.9.x" in kubernetes.md); rewrite TODO.md / TODO.es.md.
 
-## 0.4.41 — Alerts on a value + dashboards as files (~1 week)
+## 0.4.41 — Alerts on a value + dashboards as files (shipped 2026-09-06)
 
 - **Alert rules**: *when <value> <op> <threshold> [for <duration>] → notify
   <channel>*. Sources: a saved query, a dashboard widget, or an Admin

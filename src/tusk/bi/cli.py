@@ -12,6 +12,8 @@ def handle_bi_cli(args: list[str]) -> None:
         tusk bi dashboards      - List dashboards
         tusk bi run <sql>       - Execute ad-hoc SQL
         tusk bi status          - Show BI summary
+        tusk bi export <id|all> [--out DIR] [--json]   - Dashboards as YAML files
+        tusk bi import <file>...                        - Load dashboards from files
     """
     if not args:
         _print_help()
@@ -30,6 +32,10 @@ def handle_bi_cli(args: list[str]) -> None:
         _cmd_run(rest)
     elif command == "status":
         _cmd_status()
+    elif command == "export":
+        _cmd_export(rest)
+    elif command == "import":
+        _cmd_import(rest)
     elif command in ("help", "-h", "--help"):
         _print_help()
     else:
@@ -51,6 +57,8 @@ Commands:
     dashboards      List dashboards
     run <sql>       Execute ad-hoc SQL against DuckDB
     status          Show BI summary
+    export <id|all> Write dashboards as YAML (--out DIR, --json for JSON)
+    import <file>.. Create dashboards from YAML/JSON files (idempotent by name)
 """)
 
 
@@ -139,3 +147,80 @@ def _cmd_status() -> None:
     print(f"Data sources:    {len(sources)}")
     print(f"Saved queries:   {len(queries)}")
     print(f"Dashboards:      {len(dashboards)}")
+
+
+# ── Dashboards as files ─────────────────────────────────────────────────
+
+
+def _cmd_export(args: list[str]) -> None:
+    """`tusk bi export <dashboard id|all> [--out DIR] [--json]`.
+
+    Writes one file per dashboard (`<slug>.yaml`) containing everything
+    `import` needs: the dashboard, its widgets and their queries.
+    """
+    from pathlib import Path
+
+    from tusk.bi.db import export_dashboard, get_dashboards
+
+    if not args:
+        print("Usage: tusk bi export <dashboard id|all> [--out DIR] [--json]")
+        sys.exit(2)
+    out_dir = Path(".")
+    as_json = "--json" in args
+    if "--out" in args:
+        out_dir = Path(args[args.index("--out") + 1])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    targets = [d["id"] for d in get_dashboards()] if args[0] == "all" else [int(args[0])]
+    for dashboard_id in targets:
+        data = export_dashboard(dashboard_id)
+        if not data:
+            print(f"dashboard {dashboard_id}: not found")
+            continue
+        name = (data.get("dashboard") or data).get("name") or f"dashboard-{dashboard_id}"
+        slug = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-") or f"dashboard-{dashboard_id}"
+        path = out_dir / f"{slug}.{'json' if as_json else 'yaml'}"
+        path.write_text(_dump(data, as_json))
+        print(f"wrote {path}")
+
+
+def _cmd_import(args: list[str]) -> None:
+    """`tusk bi import <file>...` — YAML or JSON produced by `export`.
+    A dashboard with the same name is replaced, so applying a file twice
+    does not duplicate it."""
+    from pathlib import Path
+
+    from tusk.bi.db import delete_dashboard, get_dashboards, import_dashboard
+
+    files = [a for a in args if not a.startswith("--")]
+    if not files:
+        print("Usage: tusk bi import <file>...")
+        sys.exit(2)
+    for f in files:
+        path = Path(f)
+        data = _load(path.read_text(), path.suffix.lower() == ".json")
+        name = (data.get("dashboard") or data).get("name")
+        existing = [d for d in get_dashboards() if name and d["name"] == name]
+        for d in existing:
+            delete_dashboard(d["id"])
+        dashboard_id = import_dashboard(data, source_id=data.get("source_id"))
+        print(f"{path}: dashboard '{name}' → id {dashboard_id}{' (replaced)' if existing else ''}")
+
+
+def _dump(data: dict, as_json: bool) -> str:
+    if as_json:
+        import json
+
+        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    import yaml
+
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
+def _load(text: str, as_json: bool) -> dict:
+    if as_json:
+        import json
+
+        return json.loads(text)
+    import yaml
+
+    return yaml.safe_load(text)

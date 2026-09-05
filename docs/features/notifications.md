@@ -39,6 +39,36 @@ Unsubscribed events still land in the in-app feed. Noisy events are
 rate-limited per event key, so a flapping check does not page you every
 minute.
 
+## Alert rules
+
+![Alerts tab — rules, condition, last value, state.](../screenshots/alerts.png){ .screenshot }
+
+**Settings → Notifications → Alerts.** A rule watches one number and
+notifies when it crosses a threshold:
+
+> when *Connections used* **>** 80 % for 120 s → `alert.fired`
+
+What a rule can watch:
+
+- an **Admin metric** of a PostgreSQL connection: connections used (%),
+  active queries, cache hit ratio (%), database size (GB), longest running
+  query (s);
+- a **saved query** — the first numeric cell of its first row, run on the
+  query's connection (read-only queries only);
+- a **dashboard widget** — its query through the Analytics engine.
+
+Rules are evaluated every minute. *For at least N seconds* means the
+condition has to hold across consecutive checks before the rule fires;
+`0` fires on the first breach. A rule fires **once** and stays `firing`
+until the value comes back, which sends `alert.resolved`. Subscribe the
+channels you want to those two events; each rule has its own rate-limit
+slot, so two rules firing in the same minute are both delivered.
+
+A rule whose source fails (connection down, query error) shows `error`
+with the reason and does not page. **Evaluate now** runs a rule on demand,
+**Pause** keeps it without checking. Creating and deleting rules is
+audited.
+
 ## History
 
 **Notification History** lists what was sent, to which channel, when, and

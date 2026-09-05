@@ -32,10 +32,22 @@
             <i data-lucide="mail" class="w-4 h-4"></i>
             Subscriptions
         </button>
+        <button @click="tab = 'alerts'" :class="tab === 'alerts' ? 'border-blue-500 text-white' : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2">
+            <i data-lucide="bell-ring" class="w-4 h-4"></i>
+            Alerts
+        </button>
         <button @click="tab = 'history'" :class="tab === 'history' ? 'border-blue-500 text-white' : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2">
             <i data-lucide="history" class="w-4 h-4"></i>
             History
         </button>
+    </div>
+
+    <!-- Alerts Tab (HTMX partial; see routes/alerts.py) -->
+    <div x-show="tab === 'alerts'" x-cloak>
+        <div hx-get="/api/alerts/panel" hx-trigger="load" hx-swap="innerHTML"
+             hx-on::after-settle="window.lucide && lucide.createIcons()">
+            <div class="text-sm text-fg-3 p-4">Loading alerts…</div>
+        </div>
     </div>
 
     <!-- Channels Tab -->
@@ -335,9 +347,50 @@
 
 {% block scripts %}
 <script>
+function alertsPanel() {
+    return {
+        open: false,
+        saving: false,
+        form: { name: '', source_kind: 'metric', source_ref: 'connections_pct', connection_id: '', op: 'gt', threshold: 80, for_seconds: 0 },
+        init() {
+            // First PostgreSQL connection as the default for metric rules.
+            const first = this.$el.querySelector('select[x-model="form.connection_id"] option');
+            if (first && !this.form.connection_id) this.form.connection_id = first.value;
+            this.$watch('form.source_kind', (k) => {
+                const sel = this.$el.querySelector(`template ~ select, select[x-model="form.source_ref"]`);
+                this.form.source_ref = k === 'metric' ? 'connections_pct' : '';
+            });
+        },
+        async save() {
+            if (!this.form.name.trim()) { tuskToast('Give the alert a name', 'warning'); return; }
+            if (!this.form.source_ref) {
+                const sel = this.$el.querySelector('select[x-model="form.source_ref"]');
+                if (sel && sel.value) this.form.source_ref = sel.value;
+            }
+            if (!this.form.source_ref) { tuskToast('Pick what to watch', 'warning'); return; }
+            this.saving = true;
+            try {
+                const res = await tuskFetchJSON('/api/alerts/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.form) });
+                if (res.error) { tuskToast(res.error, 'error'); return; }
+                this.open = false;
+                htmx.ajax('GET', '/api/alerts/panel', { target: '#alerts-panel', swap: 'outerHTML' });
+            } catch (e) {
+                tuskToast('Could not create the alert: ' + e.message, 'error');
+            } finally {
+                this.saving = false;
+            }
+        },
+        async removeRule(id, name) {
+            const ok = await tuskConfirm(`Delete alert "${name}"?`, 'Delete alert');
+            if (!ok) return;
+            htmx.ajax('DELETE', `/api/alerts/${id}`, { target: '#alerts-panel', swap: 'outerHTML' });
+        },
+    };
+}
+
 function notificationSettings() {
     return {
-        tab: 'channels',
+        tab: (location.hash === '#alerts') ? 'alerts' : 'channels',
         showAddChannel: false,
         newChannel: {
             name: '',

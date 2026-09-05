@@ -46,6 +46,7 @@ from tusk.studio.routes import (
     MCPToolsController,
     SchemaWatchController,
     ContractsController,
+    AlertsController,
     health_check,
     metrics,
 )
@@ -425,6 +426,7 @@ def get_route_handlers() -> list:
         MCPToolsController,
         SchemaWatchController,
         ContractsController,
+        AlertsController,
         health_check,
         metrics,
     ]
@@ -582,6 +584,19 @@ def on_startup() -> None:
         name="Cleanup temp export and upload files",
         minutes=30,
     )
+
+    # Alert rules — evaluate every enabled rule once a minute.
+    try:
+        from tusk.core.alerts import check_all as _alerts_check_all
+
+        scheduler.add_interval_job(
+            _alerts_check_all,
+            job_id="alert_rules",
+            name="Evaluate alert rules",
+            minutes=1,
+        )
+    except Exception as e:
+        log.warning("Failed to register alert rules job", error=str(e))
 
     # Job watchdog — kill background jobs that have exceeded their
     # declared max_duration_s. Runs every 30s so a stuck job doesn't

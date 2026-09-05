@@ -31,7 +31,7 @@ another instance's pools would put its database names in the shot.
 | `scheduled.png`, `data.png` | `features/scheduled.md`, `features/data.md` |
 | `settings.png`, `settings-studio.png` | `features/studio.md` |
 | `profile.png` | `features/auth.md` |
-| `notifications.png` | `features/notifications.md` |
+| `notifications.png`, `alerts.png` | `features/notifications.md` |
 
 ## Rules
 
