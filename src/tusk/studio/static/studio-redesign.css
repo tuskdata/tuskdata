@@ -64,7 +64,23 @@
 
 /* ---------- Studio grid (right of sidebar) ---------------------- */
 .studio-grid{display:grid;grid-template-rows:auto 1fr;height:calc(100vh - 56px);overflow:hidden}
-.studio-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg);padding:0 12px;height:38px;gap:2px;overflow-x:auto;flex-shrink:0}
+.studio-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg);padding:0 12px;height:38px;gap:2px;overflow-x:auto;flex-shrink:0;border-top:3px solid var(--conn-color,transparent)}
+/* Connection colour: a stripe on the tab strip + editor header, a dot in the meta */
+.editor-toolbar{border-left:3px solid var(--conn-color,transparent)}
+.conn-meta .dot.conn-tint{background:var(--conn-color);box-shadow:0 0 0 3px color-mix(in srgb, var(--conn-color) 22%, transparent)}
+.conn-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--fg-3);transition:transform .1s}
+.conn-swatch:hover{transform:scale(1.12)}
+.conn-swatch.active{border-color:var(--fg);box-shadow:0 0 0 2px var(--bg)}
+.conn-swatch-none{background:var(--surface-2);border-color:var(--border)}
+.conn-stripe{width:3px;align-self:stretch;border-radius:2px;background:var(--stripe,transparent);flex-shrink:0}
+/* Plan tab: AI insight */
+.plan-actions{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.plan-actions>.btn{align-self:flex-start}
+.plan-insight{font-size:13px;line-height:1.5;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.plan-insight-summary{margin:0 0 6px}
+.plan-insight-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin:8px 0 4px}
+.plan-insight ul,.plan-insight ol{margin:0;padding-left:18px}
+.plan-json{margin:0;white-space:pre-wrap;font-size:12px}
 .qtab{display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px;color:var(--fg-3);cursor:pointer;border-radius:6px;height:28px;flex-shrink:0;background:transparent;border:none;font-family:inherit}
 .qtab:hover{background:var(--surface-2)}
 .qtab.active{background:var(--surface);color:var(--fg);box-shadow:var(--shadow-sm)}

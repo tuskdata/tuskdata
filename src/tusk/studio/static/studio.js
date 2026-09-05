@@ -103,6 +103,17 @@ window.clearQueryErrorHighlight = function() {
 };
 
 let currentConnection = null;
+// id → "#rrggbb" for every connection, refreshed by loadConnections().
+const connectionColors = {};
+
+// Connection colour picker (Add/Edit connection modal)
+window.pickConnColor = function(color) {
+    const input = document.getElementById('conn-color');
+    if (input) input.value = color || '';
+    document.querySelectorAll('#conn-color-swatches .conn-swatch').forEach(b => {
+        b.classList.toggle('active', (b.dataset.color || '') === (color || ''));
+    });
+};
 let currentSchema = {};
 let editor = null;
 
@@ -538,11 +549,20 @@ function _updateConnMeta() {
     if (!currentConnection) {
         if (meta) meta.innerHTML = '<span class="dot gray"></span><span>No connection</span>';
         if (chip) chip.style.display = 'none';
+        const host = document.getElementById('query-tabs-host');
+        if (host) host.style.setProperty('--conn-color', 'transparent');
         return;
     }
     const typeLabel = {postgres: 'PostgreSQL', sqlite: 'SQLite', duckdb: 'DuckDB'}[currentConnection.type] || currentConnection.type;
+    const color = connectionColors[currentConnection.id] || '';
+    // Tint the tab strip + editor header with the connection colour so a
+    // prod tab never looks like a dev tab.
+    const host = document.getElementById('query-tabs-host');
+    if (host) host.style.setProperty('--conn-color', color || 'transparent');
+    document.querySelectorAll('.editor-toolbar').forEach(el => el.style.setProperty('--conn-color', color || 'transparent'));
     if (meta) {
-        meta.innerHTML = `<span class="dot green"></span><span>${tuskEscapeHtml(currentConnection.name)}</span><span class="conn-meta-sep">·</span><span>${tuskEscapeHtml(typeLabel)}</span>`;
+        const dot = color ? `<span class="dot conn-tint" style="--conn-color:${tuskEscapeHtml(color)}"></span>` : '<span class="dot green"></span>';
+        meta.innerHTML = `${dot}<span>${tuskEscapeHtml(currentConnection.name)}</span><span class="conn-meta-sep">·</span><span>${tuskEscapeHtml(typeLabel)}</span>`;
     }
     if (chip && chipLabel) {
         chip.style.display = '';
@@ -1218,7 +1238,9 @@ async function loadConnections() {
         return;
     }
 
+    conns.forEach(c => { connectionColors[c.id] = c.color || ''; });
     list.innerHTML = conns.map(c => {
+        const stripe = c.color ? `<span class="conn-stripe" style="--stripe:${escapeHtml(c.color)}"></span>` : '<span class="conn-stripe"></span>';
         const icon = c.type === 'duckdb' ? '<i data-lucide="package" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : c.type === 'sqlite' ? '<i data-lucide="file-archive" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : '<i data-lucide="database" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>';
         const status = connectionStatuses[c.id];
         const statusColor = status === true ? 'bg-green-500'
@@ -1234,6 +1256,7 @@ async function loadConnections() {
         <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
              data-conn-id="${idAttr}" data-conn-name="${nameAttr}" data-conn-type="${typeAttr}"
              onclick="selectConnection(this.dataset.connId, this.dataset.connName, this.dataset.connType)">
+            ${stripe}
             <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
             <span>${icon}</span>
             <span class="text-sm flex-1 truncate" title="${nameAttr}">${escapeHtml(c.name)}</span>
@@ -1285,7 +1308,9 @@ async function checkConnectionStatuses(conns) {
     const updatedConns = await res.json();
     const list = document.getElementById('connections-list');
     if (list && updatedConns.length > 0) {
+        updatedConns.forEach(c => { connectionColors[c.id] = c.color || ''; });
         list.innerHTML = updatedConns.map(c => {
+            const stripe = c.color ? `<span class="conn-stripe" style="--stripe:${escapeHtml(c.color)}"></span>` : '<span class="conn-stripe"></span>';
             const icon = c.type === 'duckdb' ? '<i data-lucide="package" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : c.type === 'sqlite' ? '<i data-lucide="file-archive" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : '<i data-lucide="database" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>';
             const status = connectionStatuses[c.id];
             const statusColor = status === true ? 'bg-green-500'
@@ -1299,7 +1324,8 @@ async function checkConnectionStatuses(conns) {
             <div class="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#21262d] ${currentConnection?.id === c.id ? 'bg-[#21262d] ring-1 ring-indigo-500/50' : ''}"
                  data-conn-id="${idAttr}" data-conn-name="${nameAttr}" data-conn-type="${typeAttr}"
                  onclick="selectConnection(this.dataset.connId, this.dataset.connName, this.dataset.connType)">
-                <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
+                ${stripe}
+            <span class="w-2 h-2 rounded-full ${statusColor}" title="${statusTitle}"></span>
                 <span>${icon}</span>
                 <span class="text-sm flex-1 truncate" title="${nameAttr}">${escapeHtml(c.name)}</span>
                 <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1">
@@ -1413,6 +1439,9 @@ function renderSchemaTree(schema, filter = '') {
                             ${rowCountStr}
                             <span class="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1">
                                 <button class="text-[10px] px-1 rounded bg-[#21262d] hover:bg-indigo-600 text-gray-300 hover:text-white"
+                                        onclick="event.stopPropagation(); previewTable(this.closest('details').dataset.schema, this.closest('details').dataset.table)"
+                                        title="Open the first rows in a new tab (row cap in Settings → Studio)">PREVIEW</button>
+                                <button class="text-[10px] px-1 rounded bg-[#21262d] hover:bg-indigo-600 text-gray-300 hover:text-white"
                                         onclick="event.stopPropagation(); insertTableTemplate(this.closest('details').dataset.schema, this.closest('details').dataset.table)"
                                         title="Open INSERT template in a new tab">INSERT</button>
                             </span>
@@ -1498,6 +1527,18 @@ window.refreshSchema = async function() {
         renderSchemaTree(schema);
     }
 }
+
+// "Preview" from the schema tree: a new tab with SELECT * … LIMIT <cap>
+// (Settings → Studio), run immediately. Opening a 50M-row table by
+// accident stops being a 30-second mistake.
+window.previewTable = function(schemaName, tableName) {
+    const cap = (window.TUSK_UI && Number(TUSK_UI.table_preview_rows)) || 200;
+    const q = (id) => '"' + String(id).replace(/"/g, '""') + '"';
+    const ref = schemaName && schemaName !== 'public' ? `${q(schemaName)}.${q(tableName)}` : q(tableName);
+    const sql = `SELECT * FROM ${ref} LIMIT ${cap}`;
+    if (typeof createTab === 'function') createTab(tableName, sql);
+    if (typeof runQuery === 'function') runQuery();
+};
 
 window.insertTable = function(table) {
     if (editor) {
@@ -1800,6 +1841,7 @@ window.showConnModal = function(editMode = false) {
     // Reset form to add mode
     document.getElementById('conn-modal-title').textContent = 'Add Connection';
     document.getElementById('conn-edit-id').value = '';
+    if (window.pickConnColor) pickConnColor('');
     document.getElementById('conn-submit-btn').textContent = 'Connect';
     document.getElementById('password-hint').classList.add('hidden');
     document.getElementById('conn-type-selector').classList.remove('hidden');
@@ -1837,6 +1879,7 @@ window.showEditConnModal = async function(connId) {
 
     // Fill form fields
     document.getElementById('conn-name').value = conn.name || '';
+    pickConnColor(conn.color || '');
 
     // Set type radio (hidden but needed for form)
     document.querySelector(`input[name="type"][value="${conn.type}"]`).checked = true;
@@ -1872,6 +1915,7 @@ window.hideConnModal = function() {
     window.dispatchEvent(new Event('close-conn-modal'));
     // Reset edit state
     document.getElementById('conn-edit-id').value = '';
+    if (window.pickConnColor) pickConnColor('');
 }
 
 // Keyboard shortcuts
@@ -3367,9 +3411,13 @@ function initMap() {
             sources: {
                 'carto-dark': {
                     type: 'raster',
-                    tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+                    // Settings → Studio can point this at any XYZ provider
+                    // (self-hosted OSM, Mapbox raster, an internal tile server).
+                    tiles: [(window.TUSK_UI && TUSK_UI.map_tiles_url) || 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
                     tileSize: 256,
-                    attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+                    attribution: (window.TUSK_UI && TUSK_UI.map_tiles_url)
+                        ? (TUSK_UI.map_tiles_attribution || '')
+                        : '&copy; <a href="https://carto.com/">CARTO</a>'
                 }
             },
             layers: [{

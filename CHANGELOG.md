@@ -2,6 +2,39 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.34] - 2026-09-05 — Studio ergonomics
+
+- **Connection colour.** Pick a colour when adding/editing a connection
+  (red for production, amber for staging, green for dev…). It tints the
+  tab strip and the editor header, marks the active-connection badge and
+  stripes the connection list — a prod tab never looks like a dev tab
+  again. Stored on the connection (`color`, `#rrggbb`), validated server
+  side.
+- **PREVIEW** on every table in the schema tree: opens a new tab with
+  `SELECT * FROM … LIMIT <cap>` and runs it. The cap (default 200) is a
+  Studio setting, so opening a 50M-row table by accident stays cheap.
+- **Explain with AI** in the Plan tab: the Copilot reads the EXPLAIN
+  plan together with the SQL and the schema it already grounds on, and
+  answers with a summary, the dominating nodes and ordered suggestions
+  (index with columns, rewrite, ANALYZE, config). New endpoint
+  `POST /api/ai/plan-insight`, structured output.
+- **Settings → Studio** (new page): preview row cap, editor font size,
+  and a custom **XYZ basemap** (URL + attribution) for the map views —
+  self-hosted OSM, Mapbox raster, an internal tile server. Saved to
+  `config.toml`; pages read it through `window.TUSK_UI`.
+- **Fixed: `connections.toml` could be wiped.** The writer opened the
+  file for writing *before* serializing; when `tomli_w` refused a value
+  (a null colour, found while building this release) it left an empty
+  file behind and every connection was gone. Serialization now happens
+  first and the file is replaced atomically — a failure leaves the
+  previous file untouched. Regression test included.
+- `/api/ai/*` gets a 240 s request budget: local models on CPU take
+  30-120 s for SQL generation or a plan insight, and the 60 s default
+  turned them into 504s.
+- Tests: `tests/test_studio_prefs.py` (colour validation and
+  persistence, config roundtrip, settings validation, plan-insight
+  guards, UI prefs injection, atomic connections write).
+
 ## [0.4.33] - 2026-09-05 — Data Contracts (frozen schemas)
 
 **Data Contracts** (`core/contracts.py`) — layer 2 on top of Schema Watch.

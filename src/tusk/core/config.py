@@ -23,6 +23,11 @@ class TuskConfig(msgspec.Struct):
     # UI settings
     theme: str = "dark"
     editor_font_size: int = 14
+    # Rows fetched when a table is opened from the schema tree ("Preview").
+    table_preview_rows: int = 200
+    # Custom XYZ basemap for the map views (blank = CARTO Dark Matter).
+    map_tiles_url: str = ""
+    map_tiles_attribution: str = ""
 
     # Auth settings
     auth_mode: str = "single"  # "single" or "multi"
@@ -42,6 +47,9 @@ class TuskConfig(msgspec.Struct):
             "ui": {
                 "theme": self.theme,
                 "editor_font_size": self.editor_font_size,
+                "table_preview_rows": self.table_preview_rows,
+                "map_tiles_url": self.map_tiles_url,
+                "map_tiles_attribution": self.map_tiles_attribution,
             },
             "auth": {
                 "mode": self.auth_mode,
@@ -81,6 +89,9 @@ def load_config() -> TuskConfig:
             port=data.get("server", {}).get("port", 8000),
             theme=data.get("ui", {}).get("theme", "dark"),
             editor_font_size=data.get("ui", {}).get("editor_font_size", 14),
+            table_preview_rows=int(data.get("ui", {}).get("table_preview_rows", 200)),
+            map_tiles_url=str(data.get("ui", {}).get("map_tiles_url", "")),
+            map_tiles_attribution=str(data.get("ui", {}).get("map_tiles_attribution", "")),
             auth_mode=data.get("auth", {}).get("mode", "single"),
             session_lifetime=data.get("auth", {}).get("session_lifetime", 86400),
             allow_registration=data.get("auth", {}).get("allow_registration", False),
@@ -118,6 +129,9 @@ def save_config(config: TuskConfig | None = None) -> None:
     data["ui"] = {
         "theme": _config.theme,
         "editor_font_size": _config.editor_font_size,
+        "table_preview_rows": _config.table_preview_rows,
+        "map_tiles_url": _config.map_tiles_url,
+        "map_tiles_attribution": _config.map_tiles_attribution,
     }
 
     data["auth"] = {
@@ -147,6 +161,9 @@ def update_config(**kwargs) -> TuskConfig:
                 "port": _config.port,
                 "theme": _config.theme,
                 "editor_font_size": _config.editor_font_size,
+                "table_preview_rows": _config.table_preview_rows,
+                "map_tiles_url": _config.map_tiles_url,
+                "map_tiles_attribution": _config.map_tiles_attribution,
                 "auth_mode": _config.auth_mode,
                 "session_lifetime": _config.session_lifetime,
                 "allow_registration": _config.allow_registration,

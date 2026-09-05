@@ -243,6 +243,20 @@
                 <label class="block text-sm text-gray-400 mb-1">Connection Name</label>
                 <input name="name" id="conn-name" placeholder="My Database" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" required>
             </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Colour <span class="text-gray-500">— tints the tab strip so prod and dev can't be confused</span></label>
+                <input type="hidden" name="color" id="conn-color" value="">
+                <div id="conn-color-swatches" class="flex items-center gap-2">
+                    <button type="button" class="conn-swatch conn-swatch-none" data-color="" title="None" onclick="pickConnColor('')"><i data-lucide="ban" style="width:12px;height:12px"></i></button>
+                    <button type="button" class="conn-swatch" data-color="#e5484d" style="background:#e5484d" title="Red — production" onclick="pickConnColor('#e5484d')"></button>
+                    <button type="button" class="conn-swatch" data-color="#f5a524" style="background:#f5a524" title="Amber — staging" onclick="pickConnColor('#f5a524')"></button>
+                    <button type="button" class="conn-swatch" data-color="#30a46c" style="background:#30a46c" title="Green — development" onclick="pickConnColor('#30a46c')"></button>
+                    <button type="button" class="conn-swatch" data-color="#3b82f6" style="background:#3b82f6" title="Blue" onclick="pickConnColor('#3b82f6')"></button>
+                    <button type="button" class="conn-swatch" data-color="#8b5cf6" style="background:#8b5cf6" title="Violet" onclick="pickConnColor('#8b5cf6')"></button>
+                    <button type="button" class="conn-swatch" data-color="#ec4899" style="background:#ec4899" title="Pink" onclick="pickConnColor('#ec4899')"></button>
+                    <button type="button" class="conn-swatch" data-color="#14b8a6" style="background:#14b8a6" title="Teal" onclick="pickConnColor('#14b8a6')"></button>
+                </div>
+            </div>
             <div id="conn-type-selector" class="flex gap-4 flex-wrap">
                 <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="postgres" checked onchange="toggleConnFields()" class="accent-indigo-500"><span>&#128024; PostgreSQL</span></label>
                 <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="type" value="sqlite" onchange="toggleConnFields()" class="accent-indigo-500"><span>&#128451;&#65039; SQLite</span></label>

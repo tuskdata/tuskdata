@@ -51,6 +51,16 @@ def _maybe_invalidate_schema(conn_id: str | None, sql: str) -> None:
             pass
 
 
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _clean_color(value) -> str | None:
+    """Connection colour: a `#rrggbb` hex or nothing. Anything else is
+    dropped rather than stored (it ends up in CSS)."""
+    s = str(value or "").strip()
+    return s.lower() if _COLOR_RE.match(s) else None
+
+
 class APIController(Controller):
     """REST API for connections and queries"""
 
@@ -82,18 +92,21 @@ class APIController(Controller):
                 ssh_password=data.get("ssh_password") or None,
                 ssh_private_key=data.get("ssh_private_key") or None,
                 ssh_known_hosts=data.get("ssh_known_hosts") or None,
+                color=_clean_color(data.get("color")),
             )
         elif conn_type == "duckdb":
             config = ConnectionConfig(
                 name=data["name"],
                 type="duckdb",
                 path=data.get("path", ""),
+                color=_clean_color(data.get("color")),
             )
         else:  # sqlite
             config = ConnectionConfig(
                 name=data["name"],
                 type="sqlite",
                 path=data.get("path", ""),
+                color=_clean_color(data.get("color")),
             )
 
         conn_id = add_connection(config)
@@ -110,6 +123,8 @@ class APIController(Controller):
 
         # Build update kwargs, only including provided fields
         update_kwargs = {}
+        if "color" in data:
+            update_kwargs["color"] = _clean_color(data["color"])
         if "name" in data:
             update_kwargs["name"] = data["name"]
         if "host" in data:

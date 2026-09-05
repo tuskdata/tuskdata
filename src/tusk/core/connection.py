@@ -35,6 +35,10 @@ class ConnectionConfig(msgspec.Struct):
     # SQLite fields
     path: str | None = None
 
+    # Optional colour (#rrggbb) shown on the tab strip, editor header and
+    # connection list so prod and dev are never mistaken for each other.
+    color: str | None = None
+
     # Optional SSH tunnel (PostgreSQL only). When ssh_host is set, the
     # postgres engine opens a forwarded port via asyncssh and points
     # psycopg at the local end. ssh_password and ssh_private_key are
@@ -84,6 +88,10 @@ class ConnectionConfig(msgspec.Struct):
             "name": self.name,
             "type": self.type,
         }
+        # Only when set: this dict also feeds the TOML writer, and TOML has
+        # no null.
+        if self.color:
+            data["color"] = self.color
         if self.type == "postgres":
             if self.host is not None:
                 data["host"] = self.host
@@ -182,6 +190,7 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
         ssh_password=kwargs.get("ssh_password", old_config.ssh_password),
         ssh_private_key=kwargs.get("ssh_private_key", old_config.ssh_private_key),
         ssh_known_hosts=kwargs.get("ssh_known_hosts", old_config.ssh_known_hosts),
+        color=kwargs.get("color", old_config.color),
     )
 
     _connections[conn_id] = new_config
@@ -212,8 +221,14 @@ def save_connections_to_file() -> None:
 
     data = {"connections": connections_data}
 
-    with open(CONN_FILE, "wb") as f:
-        tomli_w.dump(data, f)
+    # Serialize first, then replace atomically. Opening the target with
+    # "wb" before dumping truncated the file to nothing when tomli_w hit a
+    # value it can't encode (2026-09-05: a None colour wiped every
+    # connection). Now a failure leaves the previous file untouched.
+    payload = tomli_w.dumps(data).encode("utf-8")
+    tmp = CONN_FILE.with_suffix(".toml.tmp")
+    tmp.write_bytes(payload)
+    tmp.replace(CONN_FILE)
 
     try:
         os.chmod(CONN_FILE, stat.S_IRUSR | stat.S_IWUSR)
@@ -258,6 +273,7 @@ def load_connections_from_file() -> None:
             ssh_password=decoded["ssh_password"],
             ssh_private_key=decoded["ssh_private_key"],
             ssh_known_hosts=conn_data.get("ssh_known_hosts"),
+            color=conn_data.get("color") or None,
         )
         add_connection(config, persist=False)
 

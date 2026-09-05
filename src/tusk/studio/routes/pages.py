@@ -249,6 +249,11 @@ class PageController(TuskController):
         Reachable from the top-nav gear icon."""
         return self.render("settings_hub.html", active_page="settings")
 
+    @get("/settings/studio")
+    async def settings_studio(self) -> Template:
+        """Studio preferences: preview row cap, editor font, map basemap."""
+        return self.render("settings_studio.html", active_page="settings")
+
     @get("/login")
     async def login(self) -> Template:
         """Login page"""

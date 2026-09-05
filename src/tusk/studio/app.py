@@ -88,6 +88,7 @@ _DEFAULT_REQUEST_TIMEOUT_S = float(os.environ.get("TUSK_REQUEST_TIMEOUT", "60") 
 # entry is a deviation from the contract that the UI never hangs.
 _SLOW_PATH_PREFIXES = {
     "/api/admin/": 300.0,            # admin reads can be slow on big DBs (pg_stat_activity etc.)
+    "/api/ai/": 240.0,               # local LLMs on CPU: SQL generation / plan insight take 30-120s
     "/api/data/export": 600.0,       # CSV/Parquet exports
     "/api/data/": 300.0,             # Ibis/Polars pipeline execute — cold-start can be 5-15s
                                      # and chained transforms can stack. CI runners are slow.

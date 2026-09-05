@@ -112,3 +112,36 @@ Most tools force you to commit to a connection or a saved query. Studio's bet is
 - [home.md](home.md) — the "New query" button lands here.
 - [schema.md](schema.md) — for understanding the schema this editor autocompletes from.
 - [analytics.md](analytics.md) — save a query as a dashboard widget.
+
+## Connection colour
+
+Give a connection a colour when you add or edit it (red for production,
+amber for staging, green for development — or any of the presets). The
+colour tints the tab strip and the editor header, marks the
+active-connection badge and stripes the connection list, so a production
+tab never looks like a development tab. Colours are stored with the
+connection.
+
+## Preview a table
+
+Every table in the schema tree has a **PREVIEW** action: it opens a new tab
+with `SELECT * FROM … LIMIT <cap>` and runs it. The cap (200 rows by
+default) lives in **Settings → Studio**, which keeps an accidental click on
+a 50M-row table cheap. Double-click still inserts the table name at the
+cursor; **INSERT** still opens an insert template.
+
+## Explain a plan with AI
+
+In the **Plan** tab, **Explain with AI** sends the EXPLAIN output together
+with the SQL and the schema the Copilot already grounds on. You get a
+short summary of what the planner does, the nodes that dominate the cost
+and ordered suggestions — an index with its columns, a rewrite, `ANALYZE`,
+a configuration knob — or a plain "this plan is fine". It uses the same
+provider as the rest of the Copilot (Settings → AI Copilot).
+
+## Studio settings
+
+**Settings → Studio** holds the preview row cap, the editor font size and
+a custom XYZ basemap for the map views (URL with `{z}/{x}/{y}` placeholders
+plus attribution) — a self-hosted OSM, Mapbox raster tiles or an internal
+tile server instead of the default CARTO Dark Matter.

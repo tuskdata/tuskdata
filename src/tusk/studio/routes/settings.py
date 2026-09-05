@@ -31,8 +31,50 @@ class SettingsController(Controller):
             "ui": {
                 "theme": config.theme,
                 "editor_font_size": config.editor_font_size,
+                "table_preview_rows": config.table_preview_rows,
+                "map_tiles_url": config.map_tiles_url,
+                "map_tiles_attribution": config.map_tiles_attribution,
             },
         }
+
+    @post("/ui")
+    async def set_ui(self, data: dict = Body()) -> dict:
+        """Studio preferences (Settings → Studio)."""
+        updates: dict = {}
+        if "table_preview_rows" in data:
+            try:
+                n = int(data["table_preview_rows"])
+            except (TypeError, ValueError):
+                return {"error": "table_preview_rows must be an integer"}
+            if not 1 <= n <= 100_000:
+                return {"error": "table_preview_rows must be between 1 and 100000"}
+            updates["table_preview_rows"] = n
+        if "editor_font_size" in data:
+            try:
+                fs = int(data["editor_font_size"])
+            except (TypeError, ValueError):
+                return {"error": "editor_font_size must be an integer"}
+            if not 10 <= fs <= 24:
+                return {"error": "editor_font_size must be between 10 and 24"}
+            updates["editor_font_size"] = fs
+        if "map_tiles_url" in data:
+            url = str(data["map_tiles_url"] or "").strip()
+            if url and not (url.startswith("http://") or url.startswith("https://")):
+                return {"error": "map_tiles_url must start with http:// or https://"}
+            if url and "{z}" not in url:
+                return {"error": "map_tiles_url must contain {z}/{x}/{y} placeholders"}
+            updates["map_tiles_url"] = url
+        if "map_tiles_attribution" in data:
+            updates["map_tiles_attribution"] = str(data["map_tiles_attribution"] or "").strip()[:500]
+        if not updates:
+            return {"error": "nothing to update"}
+        cfg = update_config(**updates)
+        return {"success": True, "ui": {
+            "table_preview_rows": cfg.table_preview_rows,
+            "editor_font_size": cfg.editor_font_size,
+            "map_tiles_url": cfg.map_tiles_url,
+            "map_tiles_attribution": cfg.map_tiles_attribution,
+        }}
 
     @post("/pg-bin-path")
     async def set_pg_bin_path(self, data: dict = Body()) -> dict:

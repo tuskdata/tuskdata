@@ -146,12 +146,24 @@ def get_base_context(active_page: str = "", **extra) -> dict:
     Returns:
         Context dict with features, plugin_tabs, version, and extras
     """
+    from tusk.core.config import get_config
+
+    cfg = get_config()
     return {
         "active_page": active_page,
         "features": get_available_features(),
         "plugin_tabs": get_plugin_tabs(),
         "version": tusk.__version__,
         "use_cdn": _use_cdn(),
+        # Read by base.html into `window.TUSK_UI` so page scripts (preview
+        # row cap, map basemap) don't need their own endpoint.
+        "ui": {
+            "theme": cfg.theme,
+            "editor_font_size": cfg.editor_font_size,
+            "table_preview_rows": cfg.table_preview_rows,
+            "map_tiles_url": cfg.map_tiles_url,
+            "map_tiles_attribution": cfg.map_tiles_attribution,
+        },
         **extra,
     }
 

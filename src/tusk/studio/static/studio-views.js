@@ -63,9 +63,54 @@ window.loadExplainPlan = async function() {
             if (window.lucide) lucide.createIcons();
             return;
         }
-        el.textContent = JSON.stringify(data.plan, null, 2);
+        window.currentPlan = data.plan;
+        el.innerHTML = '';
+        const bar = document.createElement('div');
+        bar.className = 'plan-actions';
+        bar.innerHTML = `<button class="btn btn-sm" onclick="explainPlanWithAI()" title="Ask the AI Copilot where the time goes and what to do about it">
+                            <i data-lucide="sparkles"></i>Explain with AI</button>
+                         <div id="plan-insight" class="plan-insight" hidden></div>`;
+        const pre = document.createElement('pre');
+        pre.className = 'plan-json';
+        pre.textContent = JSON.stringify(data.plan, null, 2);
+        el.appendChild(bar);
+        el.appendChild(pre);
+        if (window.lucide) lucide.createIcons();
     } catch (e) {
         el.innerHTML = `<div class="inline-error plan-error"><pre>${tuskEscapeHtml(e.message)}</pre></div>`;
+    }
+};
+
+// AI Insight on the EXPLAIN plan: the Copilot reads the plan + SQL (+ the
+// schema it already grounds on) and answers with summary / bottlenecks /
+// suggestions. Same provider as the rest of the Copilot.
+window.explainPlanWithAI = async function() {
+    const box = document.getElementById('plan-insight');
+    if (!box || !window.currentPlan || !window.currentSql) return;
+    box.hidden = false;
+    box.innerHTML = '<div class="plan-empty">Reading the plan…</div>';
+    try {
+        const data = await tuskFetchJSON('/api/ai/plan-insight', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                connection_id: window.currentConnection?.id,
+                sql: window.currentSql,
+                plan: window.currentPlan,
+            }),
+        });
+        if (data.error) {
+            const hint = data.code === 412 ? ' — configure a provider in Settings → AI Copilot' : '';
+            box.innerHTML = `<div class="inline-error plan-error"><pre>${tuskEscapeHtml(data.error + hint)}</pre></div>`;
+            return;
+        }
+        const li = (items) => items.map(x => `<li>${tuskEscapeHtml(x)}</li>`).join('');
+        box.innerHTML = `
+            <p class="plan-insight-summary">${tuskEscapeHtml(data.summary || '')}</p>
+            ${data.bottlenecks?.length ? `<div class="plan-insight-title">Bottlenecks</div><ul>${li(data.bottlenecks)}</ul>` : ''}
+            ${data.suggestions?.length ? `<div class="plan-insight-title">Suggestions</div><ol>${li(data.suggestions)}</ol>` : ''}`;
+    } catch (e) {
+        box.innerHTML = `<div class="inline-error plan-error"><pre>${tuskEscapeHtml(e.message)}</pre></div>`;
     }
 };
 

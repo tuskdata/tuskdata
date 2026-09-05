@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Studio · Settings — Tusk{% endblock %}
+
+{% block content %}
+<div class="settings-page" x-data="studioSettings()">
+  <div class="settings-head">
+    <div>
+      <h1 class="settings-title">Studio</h1>
+      <p class="settings-sub">Editor and map preferences. Saved to <code>~/.tusk/config.toml</code>; take effect on the next page load.</p>
+    </div>
+    <a href="/settings" class="btn btn-ghost"><i data-lucide="arrow-left"></i>Back to settings</a>
+  </div>
+
+  <div class="settings-card">
+    <div class="settings-row">
+      <span class="settings-label">Preview row cap</span>
+      <div>
+        <input type="number" min="1" max="100000" step="1" x-model.number="form.table_preview_rows" class="settings-input" style="max-width:140px">
+        <div class="settings-hint">Rows fetched when you open a table from the schema tree (<b>PREVIEW</b>). Keeps a click on a 50M-row table cheap.</div>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-label">Editor font size</span>
+      <div>
+        <input type="number" min="10" max="24" step="1" x-model.number="form.editor_font_size" class="settings-input" style="max-width:140px">
+      </div>
+    </div>
+  </div>
+
+  <h2 class="settings-section-title">Map basemap</h2>
+  <div class="settings-card">
+    <div class="settings-row">
+      <span class="settings-label">XYZ tile URL</span>
+      <div>
+        <input type="text" x-model="form.map_tiles_url" class="settings-input mono"
+               placeholder="https://tiles.example.com/{z}/{x}/{y}.png">
+        <div class="settings-hint">Leave empty for the default (CARTO Dark Matter). Any raster XYZ provider works: a self-hosted OSM, Mapbox raster tiles, an internal server. Use <code>{z}/{x}/{y}</code> placeholders.</div>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Attribution</span>
+      <div>
+        <input type="text" x-model="form.map_tiles_attribution" class="settings-input"
+               placeholder="&copy; OpenStreetMap contributors">
+        <div class="settings-hint">Shown in the map corner. HTML links allowed.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-actions">
+    <button class="btn btn-brand" @click="save()" :disabled="saving">
+      <i data-lucide="save"></i><span x-text="saving ? 'Saving…' : 'Save'"></span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function studioSettings() {
+    return {
+        form: {
+            table_preview_rows: {{ ui.table_preview_rows }},
+            editor_font_size: {{ ui.editor_font_size }},
+            map_tiles_url: {{ ui.map_tiles_url | tojson }},
+            map_tiles_attribution: {{ ui.map_tiles_attribution | tojson }},
+        },
+        saving: false,
+        async save() {
+            this.saving = true;
+            try {
+                const data = await tuskFetchJSON('/api/settings/ui', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form),
+                });
+                if (data.error) { tuskToast(data.error, 'error'); return; }
+                tuskToast('Studio settings saved', 'success');
+            } finally {
+                this.saving = false;
+            }
+        },
+    };
+}
+</script>
+{% endblock %}

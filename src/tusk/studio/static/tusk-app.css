@@ -524,6 +524,8 @@ body[data-theme="dark"] .btn-primary{background:var(--fg);color:var(--ink)}
 .settings-model-row{display:flex;gap:8px;align-items:center}
 .settings-model-row .settings-input{flex:1}
 .settings-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border)}
+.settings-hint{font-size:12px;color:var(--fg-3);margin-top:4px;max-width:520px}
+.settings-section-title{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);margin:18px 0 8px}
 .settings-test-result{padding:10px 12px;border-radius:6px;font-size:12.5px;display:flex;align-items:center;gap:8px}
 .settings-test-result.ok{background:rgba(31,138,76,.10);color:var(--green)}
 .settings-test-result.err{background:rgba(204,46,61,.08);color:var(--red)}

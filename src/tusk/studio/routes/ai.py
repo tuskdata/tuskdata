@@ -59,6 +59,13 @@ class ExplainResponse(msgspec.Struct):
     tables: list[str] = []  # tables the SQL reads/writes
     warnings: list[str] = []  # performance gotchas, locks, full table scans, etc.
 
+
+class PlanInsightResponse(msgspec.Struct):
+    """Schema-validated reply to /api/ai/plan-insight (EXPLAIN plans)."""
+    summary: str  # 2-3 sentences: what the planner does and where the time goes
+    bottlenecks: list[str] = []  # the nodes that dominate cost/rows, with why
+    suggestions: list[str] = []  # concrete, ordered: indexes, rewrites, stats, config
+
 log = get_logger("ai_routes")
 
 
@@ -464,6 +471,69 @@ class AICopilotController(Controller):
             "explanation": explanation_text,
             "tables": response.tables,
             "warnings": response.warnings,
+        }
+
+    @post("/plan-insight")
+    async def plan_insight(self, request: Request, data: dict = Body()) -> dict:
+        """Read an EXPLAIN plan for the user: where the time goes and what
+        to do about it. Wires the Copilot to the Plan tab in Studio."""
+        sql = str(data.get("sql", "")).strip()
+        plan = data.get("plan")
+        if not sql or plan in (None, "", [], {}):
+            return {"error": "sql and plan required", "code": 400}
+        plan_text = plan if isinstance(plan, str) else msgspec.json.encode(plan).decode()
+        if len(plan_text) > 24_000:
+            plan_text = plan_text[:24_000] + "\n… (plan truncated)"
+        if len(sql) > 16_000:
+            return {"error": "sql too long (max 16000 chars)", "code": 400}
+
+        provider = get_provider()
+        if not provider:
+            return {"error": "AI provider not configured", "code": 412}
+
+        connection_id = data.get("connection_id")
+        schema_text = await _schema_summary(connection_id, sql) if connection_id else ""
+
+        system = (
+            "You are a PostgreSQL performance engineer reading an EXPLAIN plan "
+            "(JSON or text). Explain in 2-3 sentences what the planner does and "
+            "where the cost/rows concentrate (`summary`). List the dominating "
+            "nodes with the reason (`bottlenecks`: sequential scans on big tables, "
+            "nested loops with high row estimates, sorts spilling, hash joins on "
+            "unindexed keys, misestimates between estimated and actual rows when "
+            "ANALYZE data is present). Then give concrete, ordered "
+            "`suggestions`: an index with its columns, a query rewrite, "
+            "ANALYZE/statistics, or a config knob. Say when the plan is already "
+            "fine. Never invent columns that aren't in the schema. Answer in the "
+            "language of the SQL comments/prompt if any, else English. Keep it "
+            "short: the whole JSON under 1200 characters, no reasoning outside it.\n"
+            "Example: {\"summary\": \"Index scan on orders_pkey then a hash join "
+            "with customers; cost is dominated by the join (12k rows).\", "
+            "\"bottlenecks\": [\"Hash Join on customers.id: 12k rows, no filter "
+            "pushed down\"], \"suggestions\": [\"CREATE INDEX ON orders "
+            "(customer_id, created_at)\", \"Filter by created_at before the join\"]}"
+        )
+        parts: list[str] = []
+        if schema_text:
+            parts.append(schema_text)
+        parts.append(f"### SQL\n```sql\n{sql}\n```")
+        parts.append(f"### EXPLAIN plan\n```\n{plan_text}\n```")
+        prompt = "\n\n".join(parts)
+
+        try:
+            response = await complete_struct(
+                provider, prompt, PlanInsightResponse,
+                # Local "thinking" models spend tokens reasoning before the
+                # JSON; 600 cut them off mid-thought on real plans.
+                system=system, max_tokens=1500, temperature=0.2,
+            )
+        except Exception as e:
+            log.warning("structured AI plan insight failed", error=str(e))
+            return {"error": str(e), "code": 502}
+        return {
+            "summary": response.summary.strip(),
+            "bottlenecks": response.bottlenecks,
+            "suggestions": response.suggestions,
         }
 
     @post("/clear-memory")
