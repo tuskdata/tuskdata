@@ -12,6 +12,10 @@ import msgspec
 
 from tusk.core.crypto import encrypt, decrypt, is_encrypted
 
+from tusk.core.logging import get_logger
+
+log = get_logger("connection")
+
 ConnectionType = Literal["postgres", "sqlite", "duckdb"]
 
 TUSK_DIR = Path.home() / ".tusk"
@@ -202,12 +206,32 @@ def update_connection(conn_id: str, **kwargs) -> ConnectionConfig | None:
 _SECRET_FIELDS = ("password", "ssh_password", "ssh_private_key")
 
 
-def save_connections_to_file() -> None:
-    """Save all connections to TOML file.
+_loaded_from_file = False
+
+
+def save_connections_to_file() -> bool:
+    """Save all connections to TOML file. Returns False when it refused.
 
     Every secret field (db password, ssh password, ssh private key) is
     encrypted with Fernet before writing. File mode is 0600.
+
+    Refuses to write when the registry was never loaded from disk in this
+    process (a test, a script, a CLI helper) and the file on disk is not
+    empty: writing an empty in-memory registry over the user's file wiped
+    every connection twice on 2026-09-05. Deleting the last connection
+    from a loaded registry still empties the file, as it should.
     """
+    if not _loaded_from_file and CONN_FILE.exists():
+        try:
+            existing = tomllib.loads(CONN_FILE.read_text()).get("connections") or []
+        except Exception:  # noqa: BLE001 — unreadable file: do not make it worse
+            existing = []
+        if existing and not _connections:
+            log.error(
+                "Refusing to overwrite connections.toml: registry not loaded in this process",
+                on_disk=len(existing),
+            )
+            return False
     TUSK_DIR.mkdir(parents=True, exist_ok=True)
 
     connections_data = []
@@ -234,6 +258,7 @@ def save_connections_to_file() -> None:
         os.chmod(CONN_FILE, stat.S_IRUSR | stat.S_IWUSR)
     except OSError:
         pass
+    return True
 
 
 def load_connections_from_file() -> None:
@@ -242,6 +267,8 @@ def load_connections_from_file() -> None:
     Decrypts secret fields that are prefixed as encrypted. Plain-text
     legacy values are accepted and re-saved encrypted on next write.
     """
+    global _loaded_from_file
+    _loaded_from_file = True
     if not CONN_FILE.exists():
         return
 

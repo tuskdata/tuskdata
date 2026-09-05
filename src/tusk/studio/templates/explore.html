@@ -113,6 +113,29 @@
             </div>
         </div>
 
+        <!-- Spatial columns (PostGIS): SRID, index, invalid, extent -->
+        <template x-if="profile?.spatial?.length">
+            <div class="card" style="margin-bottom:16px">
+                <div class="section-head"><h2><i data-lucide="map" class="w-4 h-4 text-fg-3"></i>Spatial columns</h2>
+                    <span class="text-xs text-fg-3">checked on the first 20,000 rows</span></div>
+                <table class="dtable w-full">
+                    <thead><tr><th>Column</th><th>Type</th><th>SRID</th><th>Index</th><th>Invalid</th><th>Extent</th></tr></thead>
+                    <tbody>
+                        <template x-for="c in profile.spatial" :key="c.column">
+                            <tr>
+                                <td class="mono" x-text="c.column"></td>
+                                <td x-text="c.type"></td>
+                                <td><span :class="c.srid ? 'chip chip-neutral' : 'chip chip-amber'" x-text="c.srid || 'SRID 0'"></span></td>
+                                <td><span :class="c.has_index ? 'chip chip-green' : 'chip chip-amber'" x-text="c.has_index ? 'GIST' : 'no index'"></span></td>
+                                <td class="mono" :style="c.invalid ? 'color:var(--red)' : ''" x-text="c.invalid === null ? '—' : c.invalid"></td>
+                                <td class="mono text-fg-3" style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="c.extent || ''" x-text="c.extent || '—'"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+
         <div class="col-cards">
             <template x-for="col in (profile?.columns || [])" :key="col.name">
                 <div class="col-card explore-clickable" @click="openDrill(col)">

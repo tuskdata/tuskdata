@@ -1371,10 +1371,18 @@ class ExploreController(Controller):
             log.error("explore_profile_compute_failed", error=str(e))
             return {"error": f"Profile computation failed: {e}"}
 
+        spatial_cols: list[dict] = []
+        try:
+            from tusk.core.spatial import table_spatial
+
+            spatial_cols = await table_spatial(config, schema_name, table_name)
+        except Exception as e:  # noqa: BLE001 — never fail a profile over the spatial extra
+            log.debug("explore_spatial_skipped", error=str(e))
         return {
             "schema": schema_name,
             "table": table_name,
             "sampled_rows": len(rows),
             "sample_size": sample_size,
             "columns": stats,
+            "spatial": spatial_cols,
         }

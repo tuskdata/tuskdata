@@ -125,3 +125,49 @@ def test_grounding_end_to_end(postgis_db):
     assert "kind" not in profiles.get("pois", {})  # single-valued columns are noise, not a filter
     assert places[0][0] == "areas"
     assert found and found[0]["value"] == "PIANTINI" and found[0]["extra"] == {"level": 8}
+
+
+def test_spatial_health_and_geo_import(postgis_db, tmp_path):
+    """Health report lists the geometry columns; a GeoJSON import ends up as a
+    real geometry column with a GIST index."""
+    import json
+
+    from tusk.core.connection import add_connection, delete_connection
+    from tusk.engines.polars_engine import DataSource, Pipeline, import_to_postgres
+
+    conn = ConnectionConfig(id="t-spatial-h", name="spatial health", type="postgres", host="localhost", port=5432,
+                            database=postgis_db, user="postgres", password="")
+    health = asyncio.run(spatial.spatial_health(conn))
+    assert health["postgis"]
+    areas = next(c for c in health["columns"] if c["table"] == "areas")
+    assert areas["srid"] == 4326 and areas["invalid"] == 0 and areas["extent"]
+    assert not areas["has_index"]                      # small table → no finding either
+    assert not [f for f in health["findings"] if f["kind"] == "missing_index"]
+
+    geojson = tmp_path / "shops.geojson"
+    geojson.write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"name": "Verde"}, "geometry": {"type": "Point", "coordinates": [-69.94, 18.47]}},
+        {"type": "Feature", "properties": {"name": "Cafe"}, "geometry": {"type": "Point", "coordinates": [-69.92, 18.47]}},
+    ]}))
+    import tusk.core.connection as conn_mod
+
+    monkeypatch_file = tmp_path / "connections.toml"  # never the user's file
+    original = conn_mod.CONN_FILE
+    conn_mod.CONN_FILE = monkeypatch_file
+    add_connection(conn, persist=False)
+    try:
+        pipeline = Pipeline(id="p", name="geo", sources=[DataSource(id="s", name="shops", source_type="geo", path=str(geojson))],
+                            transforms=[], output_source_id="s")
+        out = asyncio.run(import_to_postgres(pipeline, "shops", conn.id))
+    finally:
+        delete_connection(conn.id)
+        conn_mod.CONN_FILE = original
+    assert out.get("success"), out
+    assert out["geometry"] and out["geometry"]["column"] == "geom" and out["geometry"]["srid"] == 4326
+    with psycopg.connect(ADMIN_DSN.rsplit("/", 1)[0] + f"/{postgis_db}") as c:
+        assert c.execute("SELECT count(*) FROM shops WHERE geom IS NOT NULL").fetchone()[0] == 2
+        assert c.execute("SELECT ST_SRID(geom) FROM shops LIMIT 1").fetchone()[0] == 4326
+        assert c.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'shops' AND indexdef ILIKE '%gist%'").fetchone()
+        # Explore-style per-table view sees it too
+    cols = asyncio.run(spatial.table_spatial(conn, "public", "shops"))
+    assert cols and cols[0]["has_index"] and cols[0]["column"] == "geom"

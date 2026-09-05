@@ -393,3 +393,104 @@ def render_spatial_section(
             lines.append(f"- \"{sanitize(p['token'])}\" → {where}{' [' + extra + ']' if extra else ''}{geom}")
         lines.append("Filter with these exact values; join spatially against the matching geometry.")
     return "\n".join(lines)
+
+
+# ── Spatial health (Admin / Explore) ───────────────────────────────────
+
+_HEALTH_SQL = """
+    WITH geo AS (
+        SELECT f_table_schema AS schema, f_table_name AS tbl, f_geometry_column AS col, type, srid
+        FROM geometry_columns
+    ),
+    idx AS (
+        SELECT n.nspname AS schema, c.relname AS tbl, a.attname AS col
+        FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_class ic ON ic.oid = i.indexrelid
+        JOIN pg_am am ON am.oid = ic.relam
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (i.indkey)
+        WHERE am.amname IN ('gist', 'spgist', 'brin')
+    )
+    SELECT geo.schema, geo.tbl, geo.col, geo.type, geo.srid,
+           EXISTS (SELECT 1 FROM idx WHERE idx.schema = geo.schema AND idx.tbl = geo.tbl AND idx.col = geo.col) AS has_index,
+           COALESCE((SELECT c.reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                     WHERE n.nspname = geo.schema AND c.relname = geo.tbl), 0) AS approx_rows
+    FROM geo
+    ORDER BY 1, 2, 3
+"""
+
+INVALID_SAMPLE_ROWS = 20000
+
+
+async def spatial_health(conn: ConnectionConfig, *, check_validity: bool = True) -> dict:
+    """What an admin wants to know about PostGIS on this database.
+
+    Returns ``{"postgis": version|None, "columns": [...], "findings": [...]}``
+    where each column has type, SRID, index presence, approximate rows,
+    invalid-geometry count on a sample, and findings are the actionable
+    ones: missing spatial index (with the CREATE INDEX to run), SRID 0,
+    invalid geometries.
+    """
+    from tusk.engines.postgres import execute_query
+
+    out: dict = {"postgis": None, "columns": [], "findings": []}
+    if conn.type != "postgres":
+        return out
+    ext = await execute_query(conn, "SELECT extversion FROM pg_extension WHERE extname = 'postgis'")
+    if ext.error or not ext.rows:
+        return out
+    out["postgis"] = ext.rows[0][0]
+    res = await execute_query(conn, _HEALTH_SQL)
+    if res.error:
+        out["error"] = res.error
+        return out
+    for schema, tbl, col, gtype, srid, has_index, approx_rows in res.rows:
+        tname = _qualified(schema, tbl)
+        entry = {
+            "table": tname, "column": col, "type": gtype, "srid": srid,
+            "has_index": bool(has_index), "approx_rows": int(approx_rows or 0),
+            "invalid": None, "extent": None,
+        }
+        tq, cq = _quote_table(tname), _quote(col)
+        if check_validity:
+            try:
+                v = await execute_query(
+                    conn,
+                    f"SELECT count(*) FILTER (WHERE NOT ST_IsValid({cq})), "
+                    f"ST_AsText(ST_Extent({cq})) FROM (SELECT {cq} FROM {tq} WHERE {cq} IS NOT NULL LIMIT {INVALID_SAMPLE_ROWS}) s",
+                )
+                if not v.error and v.rows:
+                    entry["invalid"] = int(v.rows[0][0] or 0)
+                    entry["extent"] = v.rows[0][1]
+            except Exception as exc:  # noqa: BLE001
+                log.debug("spatial_validity_failed", table=tname, error=str(exc))
+        out["columns"].append(entry)
+        if not has_index and entry["approx_rows"] >= 1000:
+            idx_name = f"{tbl}_{col}_gist"
+            out["findings"].append({
+                "kind": "missing_index", "severity": "warning", "table": tname, "column": col,
+                "message": f"{tname}.{col} has no spatial index (~{entry['approx_rows']:,} rows): every ST_Contains / ST_DWithin scans the table.",
+                "fix": f'CREATE INDEX CONCURRENTLY {_quote(idx_name)} ON {tq} USING GIST ({cq});',
+            })
+        if not srid:
+            out["findings"].append({
+                "kind": "srid_zero", "severity": "warning", "table": tname, "column": col,
+                "message": f"{tname}.{col} has SRID 0: distances and joins with 4326 data will be wrong or fail.",
+                "fix": f"SELECT UpdateGeometrySRID('{schema}', '{tbl}', '{col}', 4326);  -- if the data is lon/lat",
+            })
+        if entry["invalid"]:
+            out["findings"].append({
+                "kind": "invalid", "severity": "error", "table": tname, "column": col,
+                "message": f"{tname}.{col}: {entry['invalid']:,} invalid geometries in the first {INVALID_SAMPLE_ROWS:,} rows (ST_IsValid).",
+                "fix": f"UPDATE {tq} SET {cq} = ST_MakeValid({cq}) WHERE NOT ST_IsValid({cq});",
+            })
+    return out
+
+
+async def table_spatial(conn: ConnectionConfig, schema: str, table: str) -> list[dict]:
+    """Spatial columns of one table with SRID, type, extent, invalid count and
+    index presence — the Explore card."""
+    health = await spatial_health(conn, check_validity=True)
+    tname = _qualified(schema, table)
+    return [c for c in health.get("columns", []) if c["table"] == tname]

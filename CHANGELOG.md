@@ -2,6 +2,26 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.42] - 2026-09-06 — Spatial health; geodata into PostGIS
+
+- **Admin → Spatial card** (PostGIS databases): every geometry/geography
+  column with type, SRID, approximate rows, spatial index, invalid
+  geometries (sampled) and extent, plus actionable findings with the SQL
+  to run: missing GIST index on a big table, SRID 0, invalid geometries.
+- **Explore**: a table with geometry shows its spatial columns (SRID,
+  index, invalid count, extent) above the column cards.
+- **Data**: GeoJSON, GeoPackage, Shapefile, FlatGeobuf, KML and GML open
+  like any file (DuckDB spatial; geometry arrives as WKT text and works
+  with every transform and the map preview). **Import to PostgreSQL** now
+  promotes WKT / GeoJSON / hex-WKB text or a lat/lon pair into a real
+  `geometry(Geometry, 4326)` column with a GIST index — OSM nodes included.
+  No PostGIS on the target → a plain table, as before.
+- **Fix: `connections.toml` can no longer be wiped by a process that never
+  loaded it.** A test that deleted its own temporary connection saved an
+  empty in-memory registry over the real file (second time this year).
+  `save_connections_to_file()` now refuses when the registry was not
+  loaded from disk and the file has content, and logs why.
+
 ## [0.4.41] - 2026-09-06 — Alerts on a value; dashboards as files
 
 - **Alert rules** (Settings → Notifications → Alerts): *when <value> <op>

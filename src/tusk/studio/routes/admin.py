@@ -336,6 +336,22 @@ class AdminController(Controller):
     path = "/api/admin"
     guards = [_check_admin_auth]
 
+    @get("/{conn_id:str}/spatial")
+    async def get_spatial(self, request: Request, conn_id: str) -> dict | Template | Response:
+        """PostGIS health: geometry columns, SRIDs, spatial indexes, invalid
+        geometries. Empty response (no card) when PostGIS is not installed."""
+        config = get_connection(conn_id)
+        if not config or config.type != "postgres":
+            return Response(content=b"") if is_htmx(request) else {"postgis": None}
+        from tusk.core.spatial import spatial_health
+
+        health = await spatial_health(config)
+        if not health.get("postgis"):
+            return Response(content=b"") if is_htmx(request) else health
+        if is_htmx(request):
+            return Template("partials/admin/spatial.html", context=health)
+        return health
+
     @get("/{conn_id:str}/stats")
     async def get_stats(self, request: Request, conn_id: str) -> dict | Template:
         """Get server statistics"""

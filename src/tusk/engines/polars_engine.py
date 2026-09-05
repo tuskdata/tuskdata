@@ -21,7 +21,7 @@ class DataSource(msgspec.Struct):
     """A data source for the pipeline"""
     id: str
     name: str
-    source_type: Literal["csv", "parquet", "json", "sql", "database", "osm"]
+    source_type: Literal["csv", "parquet", "json", "sql", "database", "osm", "geo"]
     path: str | None = None  # For file sources
     connection_id: str | None = None  # For SQL sources
     query: str | None = None  # For SQL sources
@@ -153,6 +153,10 @@ def generate_code(pipeline: Pipeline) -> str:
             lines.append(f'    FROM st_readosm(\'{source.path}\')')
             lines.append(f'    WHERE kind = \'{layer.rstrip("s") if layer != "all" else "node"}\' AND lat IS NOT NULL')
             lines.append(f'""").pl()  # Remove LIMIT clause for full data')
+        elif source.source_type == "geo":
+            lines.append('import duckdb')
+            lines.append('_conn = duckdb.connect(); _conn.execute("INSTALL spatial; LOAD spatial;")')
+            lines.append(f'{var_name} = _conn.execute("SELECT * EXCLUDE (geom), ST_AsText(geom) AS geometry FROM ST_Read(\'{source.path}\')").pl()')
         elif source.source_type == "sql":
             lines.append(f'# {var_name} = load from SQL connection {source.connection_id}')
 
@@ -315,6 +319,11 @@ def load_source(source: DataSource) -> pl.DataFrame:
         return pl.read_json(path)
     elif source.source_type == "osm":
         return load_osm(source.path, source.osm_layer)
+    elif source.source_type == "geo":
+        df = load_geo(source.path)
+        if "error" in df.columns:
+            raise ValueError(df["error"][0])
+        return df
     elif source.source_type in ("sql", "database"):
         return load_sql_source(source.connection_id, source.query)
     else:
@@ -826,6 +835,44 @@ def execute_pipeline(pipeline: Pipeline, limit: int | None = 100) -> dict:
         return {"error": str(e)}
 
 
+GEO_SUFFIXES = (".geojson", ".gpkg", ".shp", ".fgb", ".kml", ".gml")
+
+
+def is_geo_file(path: str) -> bool:
+    return Path(path).suffix.lower() in GEO_SUFFIXES
+
+
+def load_geo(path: str, limit: int | None = None, layer: str | None = None) -> pl.DataFrame:
+    """Read GeoJSON / GeoPackage / Shapefile / FlatGeobuf / KML / GML through
+    DuckDB's spatial extension (GDAL under the hood). The geometry comes
+    back as a WKT text column named ``geometry`` so the rest of the
+    pipeline (Polars transforms, the map preview, the PostGIS import)
+    treats it like any other column."""
+    import duckdb
+
+    p = Path(path).expanduser()
+    if not p.exists():
+        return pl.DataFrame({"error": [f"File not found: {p}"]})
+    conn = duckdb.connect()
+    try:
+        conn.execute("INSTALL spatial; LOAD spatial;")
+        layer_arg = f", layer='{layer}'" if layer else ""
+        cols = [r[0] for r in conn.execute(f"DESCRIBE SELECT * FROM ST_Read('{p}'{layer_arg})").fetchall()]
+        geom_col = next((c for c in cols if c.lower() in ("geom", "geometry", "wkb_geometry", "shape")), None)
+        select = ", ".join(f'"{c}"' for c in cols if c != geom_col)
+        if geom_col:
+            select = (select + ", " if select else "") + f'ST_AsText("{geom_col}") AS geometry'
+        sql = f"SELECT {select} FROM ST_Read('{p}'{layer_arg})"
+        if limit:
+            sql += f" LIMIT {int(limit)}"
+        return conn.execute(sql).pl()
+    except Exception as e:  # noqa: BLE001
+        log.error("Failed to read geo file", path=str(p), error=str(e))
+        return pl.DataFrame({"error": [str(e)]})
+    finally:
+        conn.close()
+
+
 def get_schema(path: str, osm_layer: str | None = None) -> dict:
     """Get schema of a file"""
     p = Path(path).expanduser()
@@ -843,6 +890,10 @@ def get_schema(path: str, osm_layer: str | None = None) -> dict:
             # For OSM, load a small sample to get schema
             df = load_osm(path, osm_layer or "nodes", limit=10)
             # Check if we got an error
+            if "error" in df.columns:
+                return {"error": df["error"][0]}
+        elif is_geo_file(path):
+            df = load_geo(path, limit=10)
             if "error" in df.columns:
                 return {"error": df["error"][0]}
         else:
@@ -882,6 +933,10 @@ def preview_file(path: str, limit: int = 100, osm_layer: str | None = None) -> d
             # Check if we got an error
             if "error" in df.columns:
                 return {"error": df["error"][0], "hint": df["hint"][0] if "hint" in df.columns else None}
+        elif is_geo_file(path):
+            df = load_geo(path, limit=limit)
+            if "error" in df.columns:
+                return {"error": df["error"][0]}
         else:
             log.warning("Unsupported file type", path=str(p), suffix=p.suffix)
             return {"error": f"Unsupported file type: {p.suffix}"}
@@ -1093,6 +1148,7 @@ async def import_to_postgres(
         }
 
         # Identify columns that need JSON conversion
+        geometry_info = None
         json_columns = set()
         for i, dtype in enumerate(result.dtypes):
             dtype_str = str(dtype)
@@ -1159,6 +1215,9 @@ async def import_to_postgres(
                     )
 
                 await conn.commit()
+                geometry_info = await _promote_geometry(cur, table_name, pg_columns, result)
+                if geometry_info:
+                    await conn.commit()
                 await report_progress(100, 100, "Import complete!")
 
         elapsed = time.perf_counter() - start_time
@@ -1174,9 +1233,67 @@ async def import_to_postgres(
             "connection": connection_id,
             "rows": total_rows,
             "columns": list(result.columns),
-            "elapsed_sec": round(elapsed, 2)
+            "elapsed_sec": round(elapsed, 2),
+            "geometry": geometry_info,
         }
 
     except Exception as e:
         log.error("Failed to import to PostgreSQL", error=str(e))
         return {"error": str(e)}
+
+
+
+async def _promote_geometry(cur, table_name: str, pg_columns: list[str], df: pl.DataFrame) -> dict | None:
+    """After a COPY, turn geometry-looking text (WKT / GeoJSON / hex WKB) or a
+    lat/lon pair into a real PostGIS column with SRID 4326 and a GIST index.
+
+    Returns what was created, or None when the database has no PostGIS or
+    the frame carries nothing spatial. Never raises: a failed promotion
+    leaves the plain table in place and is reported in the log.
+    """
+    from tusk.core.geo import detect_geometry_columns
+
+    try:
+        await cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'postgis'")
+        if not await cur.fetchone():
+            return None
+        lower = {c.lower(): c for c in df.columns}
+        sample = df.head(50)
+        col_dicts = [{"name": c, "type": str(t)} for c, t in zip(df.columns, df.dtypes)]
+        geo_idx = detect_geometry_columns(col_dicts, [tuple(r) for r in sample.rows()])
+        text_geo = [df.columns[i] for i in geo_idx if str(df.dtypes[i]) in ("String", "Utf8")]
+        lat = next((lower[n] for n in ("lat", "latitude", "latitud") if n in lower), None)
+        lon = next((lower[n] for n in ("lon", "lng", "long", "longitude", "longitud") if n in lower), None)
+        if not text_geo and not (lat and lon):
+            return None
+        geom_col = "geom" if "geom" not in lower else "geom_pg"
+        qt, qg = f'"{table_name}"', f'"{geom_col}"'
+        await cur.execute(f"ALTER TABLE {qt} ADD COLUMN {qg} geometry(Geometry, 4326)")
+        if text_geo:
+            src = f'"{text_geo[0].lower()}"'
+            await cur.execute(
+                f"UPDATE {qt} SET {qg} = CASE "
+                f"WHEN left(btrim({src}), 1) = '{{' THEN ST_SetSRID(ST_GeomFromGeoJSON({src}), 4326) "
+                f"WHEN {src} ~ '^[0-9A-Fa-f]+$' THEN ST_SetSRID(ST_GeomFromWKB(decode({src}, 'hex')), 4326) "
+                f"ELSE ST_GeomFromText({src}, 4326) END "
+                f"WHERE {src} IS NOT NULL AND btrim({src}) <> ''"
+            )
+            source = text_geo[0]
+        else:
+            ql, qo = f'"{lat.lower()}"', f'"{lon.lower()}"'
+            await cur.execute(
+                f"UPDATE {qt} SET {qg} = ST_SetSRID(ST_MakePoint({qo}::double precision, {ql}::double precision), 4326) "
+                f"WHERE {ql} IS NOT NULL AND {qo} IS NOT NULL"
+            )
+            source = f"{lat}, {lon}"
+        idx = f'"{table_name}_{geom_col}_gist"'
+        await cur.execute(f"CREATE INDEX IF NOT EXISTS {idx} ON {qt} USING GIST ({qg})")
+        log.info("Geometry column created", table=table_name, column=geom_col, source=source)
+        return {"column": geom_col, "srid": 4326, "index": idx.strip('"'), "from": source}
+    except Exception as e:  # noqa: BLE001 — the plain import already succeeded
+        log.warning("Geometry promotion skipped", table=table_name, error=str(e))
+        try:
+            await cur.execute("ROLLBACK")
+        except Exception:  # noqa: BLE001
+            pass
+        return None

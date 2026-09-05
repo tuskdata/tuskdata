@@ -80,7 +80,7 @@ container cannot write — they now live in `~/.tusk/plugin_templates`.
 - `tusk bi export` / `tusk bi import` in YAML (the JSON endpoint exists).
   No `tusk apply`, no published JSON Schema.
 
-## 0.4.42 — Spatial health + geodata import (~1.5 weeks)
+## 0.4.42 — Spatial health + geodata import (shipped 2026-09-06)
 
 - **Spatial health** in Admin, Schema and Explore: geometry columns without
   a GIST index, SRID 0 or mixed, `ST_IsValid` counts, extent and a sample

@@ -821,7 +821,9 @@ function getSourceType(path) {
     const lower = path.toLowerCase();
     if (lower.endsWith('.osm.pbf') || lower.endsWith('.pbf')) return 'osm';
     if (lower.endsWith('.parquet')) return 'parquet';
+    if (lower.endsWith('.geojson')) return 'geo';
     if (lower.endsWith('.json')) return 'json';
+    if (/\.(gpkg|shp|fgb|kml|gml)$/.test(lower)) return 'geo';
     return 'csv';
 }
 

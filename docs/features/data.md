@@ -10,8 +10,9 @@ in a database unless you ask for it.
 
 ## Sources
 
-- **Files** — CSV, Parquet, JSON, XML, ZIP (drag and drop, or a path on the
-  server). Geo files are detected and projected coordinates reprojected.
+- **Files** — CSV, Parquet, JSON, XML, ZIP, and geodata: GeoJSON, GeoPackage,
+  Shapefile, FlatGeobuf, KML, GML (read through DuckDB spatial; the geometry
+  arrives as WKT text, so every transform and the map preview work on it).
 - **PostgreSQL** — a table, or a custom query, from any connection.
 - **DuckDB / SQLite** — a database file.
 - **Open Data** — public sources (OpenStreetMap layers by bounding box,
@@ -33,7 +34,10 @@ copy it into a notebook when the visual editor is not enough.
 
 - **Export** to CSV, Parquet (optionally partitioned) or GeoJSON.
 - **Import to database** — create or append to a PostgreSQL table
-  (streamed, so large files do not need to fit in memory twice).
+  (streamed, so large files do not need to fit in memory twice). On a
+  PostGIS database, geometry text (WKT, GeoJSON, hex WKB) or a lat/lon
+  pair becomes a real `geometry(Geometry, 4326)` column with a GIST index,
+  so an OSM extract or a GeoJSON lands ready for spatial joins.
 - **Materialize** into DuckDB for analytics.
 - **Save pipeline** — the source + transforms, replayable from the page or
   from a scheduled job. Pipelines are stored per user.

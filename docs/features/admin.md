@@ -119,3 +119,14 @@ See [`bugs/2026-05-18-ssh-tunnel-hangs-admin.md`](https://github.com/tuskdata/tu
 
 - [studio.md](studio.md) — the "Query in Studio" buttons across Admin panels target this.
 - [analytics.md](analytics.md) — for dashboard-style monitoring views rather than the live process list.
+
+## Spatial (PostGIS)
+
+When the database has PostGIS, a **Spatial** card lists every geometry
+column with its type, SRID, approximate row count, whether it has a
+spatial index, how many geometries are invalid (checked on a sample) and
+its extent. Findings come with the statement to run:
+
+- a big table without a GIST index (`CREATE INDEX CONCURRENTLY … USING GIST`);
+- SRID 0 (`UpdateGeometrySRID`);
+- invalid geometries (`ST_MakeValid`).

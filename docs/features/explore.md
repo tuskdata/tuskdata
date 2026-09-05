@@ -75,3 +75,9 @@ The strip below the header has two stats: **% complete** (1 − null ratio) and 
 
 - [schema.md](schema.md) — for the model view; Explore is the data view.
 - [studio.md](studio.md) — the "Query in Studio" button on each card opens an editor with a `SELECT <col>, COUNT(*)` template.
+
+## Spatial columns
+
+On a PostGIS table the profile starts with its geometry columns: type,
+SRID, spatial index, invalid geometries in the sample and the extent —
+the same checks as the Admin Spatial card, for the table in front of you.

@@ -80,6 +80,13 @@
                 <div class="dash-card span-3"><div class="dash-card-h"><div class="l">Database size</div></div><div class="dash-card-v" style="color:var(--fg-3)">—</div></div>
             </div>
 
+            <!-- Spatial (PostGIS) — renders nothing when the extension is absent -->
+            <div id="admin-spatial"
+                 :hx-get="'/api/admin/' + connId + '/spatial'"
+                 hx-trigger="adminRefresh from:body, load"
+                 hx-swap="innerHTML"
+                 hx-on::after-settle="window.lucide && lucide.createIcons()"></div>
+
             <!-- Active Processes -->
             <div class="card" style="margin-bottom:18px" x-data="{ filterUser: '', filterDb: '' }">
                 <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
