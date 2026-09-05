@@ -53,10 +53,11 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tusk.core import meta
 
 HOME = Path.home() / ".tusk"
-AI_DB = HOME / "ai_memory.db"
-HISTORY_DB = HOME / "history.db"
+AI_DB = meta.TUSK_DB  # both lived in their own files before 0.4.38
+HISTORY_DB = meta.TUSK_DB
 
 # session_key shape (from src/tusk/studio/routes/ai.py): "<user|anon>:<conn_id>"
 SESSION_RE = re.compile(r"^(?P<user>[^:]*):(?P<conn>.+)$")

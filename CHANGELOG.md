@@ -2,6 +2,22 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.38] - 2026-09-06 — Schema navigation + one metadata store
+
+- **One metadata store.** Everything Tusk keeps about itself — users,
+  sessions, API tokens, audit, query history, saved queries, AI memory,
+  notifications, scheduled jobs and runs, schema snapshots, contracts,
+  admin stats — now lives in `~/.tusk/tusk.db`, opened through
+  `tusk.core.meta.connect()` (WAL, foreign keys, busy timeout). On first
+  start the eight pre-0.4.38 files (`users.db`, `history.db`, `scheduler.db`,
+  …) are folded in and renamed `*.db.migrated`; delete them once you are
+  happy. Plugins keep their own file under `plugins/`.
+- **Schema navigation**: find a table (type `/`), jump to it centred and
+  selected; filter the diagram by group prefix; **Only related** hides
+  everything but the selected table's neighbourhood and lays it out as a
+  star (referencing tables left, referenced right), restoring the real
+  layout when switched off.
+
 ## [0.4.37] - 2026-09-05 — Schema diagrams that scale
 
 - **Schema: big schemas are readable.** Above 25 tables the diagram opens in

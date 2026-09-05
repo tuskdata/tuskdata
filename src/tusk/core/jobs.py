@@ -32,11 +32,11 @@ from typing import Any, Awaitable, Callable
 import msgspec
 import structlog
 
-from tusk.core.connection import TUSK_DIR
+from tusk.core import meta
 
 log = structlog.get_logger("jobs")
 
-JOBS_DB = TUSK_DIR / "jobs.db"
+JOBS_DB = meta.TUSK_DB  # was ~/.tusk/jobs.db before 0.4.38
 
 # Status enum (string for sqlite friendliness):
 # - running        : actively executing
@@ -142,7 +142,7 @@ class JobRegistry:
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=10.0)
+        conn = meta.connect(self._db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row
         return conn
 

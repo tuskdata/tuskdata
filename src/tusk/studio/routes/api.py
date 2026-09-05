@@ -30,6 +30,7 @@ from tusk.studio.routes.base import (
     _can_modify,
     _filter_user_id,
 )
+from tusk.core import meta
 
 
 # Keywords that change schema/structure — used to drop the schema cache after
@@ -855,8 +856,7 @@ class APIController(Controller):
             return Response(content={"error": "forbidden"}, status_code=403)
         # Only clear rows owned by this user. We do this in raw SQL since
         # `clear()` doesn't support an owner filter.
-        import sqlite3 as _sqlite3
-        with _sqlite3.connect(history.db_path) as conn:
+        with meta.connect(history.db_path) as conn:
             if connection_id:
                 conn.execute(
                     "DELETE FROM query_history WHERE connection_id = ? AND owner_id = ?",

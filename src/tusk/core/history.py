@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Literal
 import msgspec
+from tusk.core import meta
 
 
 class QueryHistoryEntry(msgspec.Struct):
@@ -38,7 +39,7 @@ class QueryHistory:
 
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
-            db_path = Path.home() / ".tusk" / "history.db"
+            db_path = meta.TUSK_DB
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
@@ -46,7 +47,7 @@ class QueryHistory:
 
     def _init_db(self):
         """Initialize the database schema"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS query_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +116,7 @@ class QueryHistory:
         executed_at = datetime.now(timezone.utc).isoformat()
         owner = owner_id or ""
 
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO query_history
                 (connection_id, connection_name, sql, executed_at, execution_time_ms, row_count, error, status, owner_id)
@@ -136,7 +137,7 @@ class QueryHistory:
         that user OR legacy unowned rows (owner_id='') are returned. Pass
         None to see everything (admin / single-user mode).
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
             where: list[str] = []
@@ -159,7 +160,7 @@ class QueryHistory:
 
     def get_entry(self, entry_id: int) -> QueryHistoryEntry | None:
         """Get a single history entry by id (used for permission checks)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT * FROM query_history WHERE id = ?", (entry_id,)
@@ -168,7 +169,7 @@ class QueryHistory:
 
     def search(self, query: str, limit: int = 50) -> list[QueryHistoryEntry]:
         """Search queries by SQL text"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("""
                 SELECT * FROM query_history
@@ -181,7 +182,7 @@ class QueryHistory:
 
     def clear(self, connection_id: str | None = None):
         """Clear history, optionally for a specific connection"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             if connection_id:
                 conn.execute("DELETE FROM query_history WHERE connection_id = ?", (connection_id,))
             else:
@@ -190,7 +191,7 @@ class QueryHistory:
 
     def delete(self, entry_id: int):
         """Delete a specific history entry"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.execute("DELETE FROM query_history WHERE id = ?", (entry_id,))
             conn.commit()
 
@@ -212,7 +213,7 @@ class QueryHistory:
         now = datetime.now(timezone.utc).isoformat()
         owner = owner_id or ""
 
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO saved_queries (name, sql, connection_id, folder, created_at, updated_at, owner_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -230,7 +231,7 @@ class QueryHistory:
         When ``for_user_id`` is non-None and non-empty, only rows owned by
         that user OR legacy unowned rows (owner_id='') are returned.
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
             where: list[str] = []
@@ -252,7 +253,7 @@ class QueryHistory:
 
     def get_saved_query(self, query_id: int) -> SavedQuery | None:
         """Get a specific saved query by ID"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("""
                 SELECT * FROM saved_queries WHERE id = ?
@@ -268,7 +269,7 @@ class QueryHistory:
         folder: str | None = None
     ) -> bool:
         """Update a saved query"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             # Build update query dynamically
             updates = []
             params = []
@@ -300,7 +301,7 @@ class QueryHistory:
 
     def delete_saved_query(self, query_id: int):
         """Delete a saved query"""
-        with sqlite3.connect(self.db_path) as conn:
+        with meta.connect(self.db_path) as conn:
             conn.execute("DELETE FROM saved_queries WHERE id = ?", (query_id,))
             conn.commit()
 

@@ -28,6 +28,17 @@
         <button id="schema-autolayout" class="btn btn-sm" title="Arrange tables by their foreign keys">
             <i data-lucide="layout-grid"></i>Auto-layout
         </button>
+        <div class="card flex aic gap-2 schema-search-wrap" style="padding:4px 8px">
+            <i data-lucide="search" style="width:14px;height:14px;color:var(--fg-3)"></i>
+            <input id="schema-search" class="schema-search" type="text" placeholder="Find table…  /" autocomplete="off" aria-label="Find table">
+            <div id="schema-search-results" class="card schema-search-results" hidden></div>
+        </div>
+        <select id="schema-prefix" class="schema-conn-select schema-prefix" aria-label="Filter by group" title="Show one group of tables" hidden>
+            <option value="">All groups</option>
+        </select>
+        <button id="schema-related" class="btn btn-sm" title="Show only the selected table and the tables it is linked to" aria-pressed="false">
+            <i data-lucide="git-branch"></i>Only related
+        </button>
         <button id="schema-compact" class="btn btn-sm" title="Compact: show only keys per table; double-click a table to expand it"
                 aria-pressed="false">
             <i data-lucide="rows-3"></i><span id="schema-compact-label">Compact</span>

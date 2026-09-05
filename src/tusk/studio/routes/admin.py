@@ -1,9 +1,7 @@
 """Admin API routes for PostgreSQL administration"""
 
-import asyncio
 import os
 import ipaddress
-import msgspec
 from litestar import Controller, get, post, delete, Request
 from litestar.params import Body
 from litestar.response import File, Template, Response
@@ -13,6 +11,7 @@ from tusk.studio.htmx import is_htmx, htmx_toast, htmx_error
 
 from tusk.core.connection import get_connection
 from tusk.core.config import get_config
+from tusk.core import meta
 
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -229,11 +228,9 @@ async def _gather_health_snapshot() -> dict:
     # exists. The pipeline-runs work writes such a table; if absent we
     # silently report None.
     try:
-        import sqlite3 as _sqlite3
-        from tusk.core.connection import TUSK_DIR
-        runs_db = TUSK_DIR / "scheduler.db"
+        runs_db = meta.TUSK_DB
         if runs_db.exists():
-            conn = _sqlite3.connect(runs_db)
+            conn = meta.connect(runs_db)
             try:
                 cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='job_runs'")
                 if cur.fetchone():
@@ -278,10 +275,9 @@ class HealthController(Controller):
         return Template("admin/health.html", context=ctx)
 
 
-from tusk.admin.stats import get_server_stats, ServerStats
+from tusk.admin.stats import get_server_stats
 from tusk.admin.processes import (
-    get_active_queries, kill_query, ActiveQuery,
-    kill_queries_by_user, kill_queries_by_database,
+    get_active_queries, kill_query, kill_queries_by_user, kill_queries_by_database,
     explain_query, set_setting,
 )
 from tusk.admin.backup import (
@@ -323,7 +319,6 @@ from tusk.admin.monitoring import (
     get_logs,
 )
 from tusk.admin.pitr import (
-    get_pitr_config,
     get_pitr_status,
     create_base_backup,
     list_base_backups,

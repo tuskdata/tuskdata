@@ -30,14 +30,14 @@ from __future__ import annotations
 import sqlite3
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Iterable
 
 from tusk.core.logging import get_logger
+from tusk.core import meta
 
 log = get_logger("ai_memory")
 
-DB_PATH = Path.home() / ".tusk" / "ai_memory.db"
+DB_PATH = meta.TUSK_DB  # was ~/.tusk/ai_memory.db before 0.4.38
 
 # Hard cap on rows per session so a runaway loop doesn't fill the disk.
 _MAX_ROWS_PER_SESSION = 200
@@ -50,7 +50,7 @@ def _connect() -> sqlite3.Connection:
     writers (e.g. /api/ai/sql and /api/ai/explain firing at the same
     time from the same browser) don't trip on `database is locked`."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn = meta.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
     # WAL is set once per database and persists; setting it on every
     # connect is cheap because SQLite skips the no-op.

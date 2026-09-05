@@ -31,6 +31,10 @@
         expanded: new Set(), // tables shown in full while compact
         layoutSource: 'grid',
         hubs: new Set(),     // tables referenced by a large share of the schema
+        prefix: '',          // group filter ('' = all)
+        onlyRelated: false,  // hide everything but the selection's neighbourhood
+        searchIndex: -1,
+        savedLayout: null,   // positions to restore when leaving only-related
         groups: [],          // [{label, tables}] for the block labels
     };
 
@@ -58,6 +62,10 @@
         els.statusText = document.getElementById('schema-status-text');
         els.btnAuto = document.getElementById('schema-autolayout');
         els.btnCompact = document.getElementById('schema-compact');
+        els.search = document.getElementById('schema-search');
+        els.searchResults = document.getElementById('schema-search-results');
+        els.prefix = document.getElementById('schema-prefix');
+        els.btnRelated = document.getElementById('schema-related');
         els.compactLabel = document.getElementById('schema-compact-label');
         els.btnFit = document.getElementById('schema-fit');
         els.btnZoomIn = document.getElementById('schema-zoom-in');
@@ -121,6 +129,22 @@
 
         if (els.btnAuto) els.btnAuto.addEventListener('click', () => { autoLayout(); fitToViewport(); });
         if (els.btnCompact) els.btnCompact.addEventListener('click', toggleCompact);
+        if (els.btnRelated) els.btnRelated.addEventListener('click', toggleOnlyRelated);
+        if (els.prefix) els.prefix.addEventListener('change', () => { state.prefix = els.prefix.value; applyVisibility(); fitToViewport(); });
+        if (els.search) {
+            els.search.addEventListener('input', renderSearch);
+            els.search.addEventListener('focus', renderSearch);
+            els.search.addEventListener('keydown', onSearchKey);
+            els.search.addEventListener('blur', () => setTimeout(hideSearch, 150));
+            document.addEventListener('keydown', (e) => {
+                const tag = (e.target && e.target.tagName) || '';
+                if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+                    e.preventDefault();
+                    els.search.focus();
+                    els.search.select();
+                }
+            });
+        }
         if (els.btnFit) els.btnFit.addEventListener('click', fitToViewport);
         if (els.btnZoomIn) els.btnZoomIn.addEventListener('click', () => zoomBy(1.2));
         if (els.btnZoomOut) els.btnZoomOut.addEventListener('click', () => zoomBy(1 / 1.2));
@@ -178,7 +202,12 @@
         state.selected = null;
         state.expanded = new Set();
         state.layoutSource = data.layout_source || 'saved';
+        state.prefix = '';
+        state.onlyRelated = false;
+        state.savedLayout = null;
         computeHubs();
+        populatePrefixFilter();
+        updateRelatedButton();
         state.compact = readCompactPref(connId, state.tables.length > COMPACT_THRESHOLD);
         updateCompactButton();
         render(() => {
@@ -210,6 +239,7 @@
     }
 
     function saveLayoutDebounced() {
+        if (state.savedLayout) return;  // temporary neighbourhood layout, never persisted
         if (state.saveTimer) clearTimeout(state.saveTimer);
         state.saveTimer = setTimeout(saveLayout, 500);
     }
@@ -404,15 +434,18 @@
         const svg = els.svg;
         // Size SVG to bounding box of entities so paths route inside it.
         const bbox = computeContentBBox();
-        svg.setAttribute('width', String(bbox.w));
-        svg.setAttribute('height', String(bbox.h));
-        svg.style.width = bbox.w + 'px';
-        svg.style.height = bbox.h + 'px';
+        const extentW = bbox.x + bbox.w + 200;
+        const extentH = bbox.y + bbox.h + 200;
+        svg.setAttribute('width', String(extentW));
+        svg.setAttribute('height', String(extentH));
+        svg.style.width = extentW + 'px';
+        svg.style.height = extentH + 'px';
 
         const related = state.selected ? relatedTables(state.selected) : null;
         const parts = [];
         for (let i = 0; i < state.fks.length; i++) {
             const fk = state.fks[i];
+            if (!isVisible(fk.from_table) || !isVisible(fk.to_table)) continue;
             const touchesHub = state.hubs.has(fk.to_table) || state.hubs.has(fk.from_table);
             if (touchesHub && !(related && (fk.from_table === state.selected || fk.to_table === state.selected))) continue;
             const from = anchorPoint(fk.from_table, 'right');
@@ -448,20 +481,29 @@
     }
 
     function computeContentBBox() {
-        let maxX = 0, maxY = 0;
+        let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
         for (const t of state.tables) {
+            if (!isVisible(t.name)) continue;
             const pos = state.layout[t.name];
             const size = state.sizes[t.name] || { w: 240, h: 120 };
             if (!pos) continue;
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
             if (pos.x + size.w > maxX) maxX = pos.x + size.w;
             if (pos.y + size.h > maxY) maxY = pos.y + size.h;
         }
-        return { w: maxX + 200, h: maxY + 200 };
+        if (!isFinite(minX)) return { x: 0, y: 0, w: 0, h: 0 };
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
     }
 
     // ─── Selection / highlight ───────────────────────────
     function selectTable(name) {
+        const changed = state.selected !== name;
         state.selected = name;
+        if (state.onlyRelated) {
+            applyVisibility();
+            if (changed) layoutNeighbourhood();
+        }
         const related = relatedTables(name);
         els.entitiesLayer.querySelectorAll('.entity').forEach((node) => {
             const t = node.dataset.table;
@@ -479,6 +521,7 @@
 
     function clearSelection() {
         state.selected = null;
+        if (state.onlyRelated) applyVisibility();
         els.entitiesLayer.querySelectorAll('.entity').forEach((node) => {
             node.classList.remove('focus', 'related', 'dim');
         });
@@ -612,8 +655,8 @@
         const z = clamp(Math.min(availW / bbox.w, availH / bbox.h), MIN_ZOOM, 3);
         state.zoom = z;
         // Centre the diagram in whichever axis has room left over.
-        state.pan.x = Math.max(padding, (rect.width - bbox.w * z) / 2);
-        state.pan.y = Math.max(topPad, topPad + (availH - bbox.h * z) / 2);
+        state.pan.x = Math.max(padding, (rect.width - bbox.w * z) / 2) - bbox.x * z;
+        state.pan.y = Math.max(topPad, topPad + (availH - bbox.h * z) / 2) - bbox.y * z;
         applyTransform();
     }
 
@@ -863,6 +906,183 @@
             x += b.w + gap;
             rowH = Math.max(rowH, b.h);
         }
+    }
+
+    // ─── Navigation: search, group filter, only-related ──
+    function tablePrefix(name) {
+        const bare = name.includes('.') ? name.split('.').pop() : name;
+        const i = bare.indexOf('_');
+        return i > 0 ? bare.slice(0, i) : '';
+    }
+
+    function populatePrefixFilter() {
+        if (!els.prefix) return;
+        const counts = {};
+        for (const t of state.tables) {
+            const k = tablePrefix(t.name);
+            if (k) counts[k] = (counts[k] || 0) + 1;
+        }
+        const groups = Object.keys(counts).filter((k) => counts[k] >= 3).sort();
+        els.prefix.innerHTML = '<option value="">All groups</option>' +
+            groups.map((g) => `<option value="${escapeAttr(g)}">${escapeAttr(g)} · ${counts[g]}</option>`).join('');
+        els.prefix.value = '';
+        els.prefix.hidden = groups.length < 2;
+    }
+
+    function isVisible(name) {
+        if (state.prefix && tablePrefix(name) !== state.prefix) return false;
+        if (state.onlyRelated && state.selected) return relatedTables(state.selected).has(name);
+        return true;
+    }
+
+    function applyVisibility() {
+        els.entitiesLayer.querySelectorAll('.entity').forEach((node) => {
+            node.classList.toggle('hidden-table', !isVisible(node.dataset.table));
+        });
+        els.entitiesLayer.querySelectorAll('.entity-group-label').forEach((el) => {
+            const key = el.textContent.split(' · ')[0];
+            el.hidden = !!state.prefix && key !== state.prefix;
+        });
+        redrawEdges();
+    }
+
+    function toggleOnlyRelated() {
+        state.onlyRelated = !state.onlyRelated;
+        updateRelatedButton();
+        if (state.onlyRelated) {
+            applyVisibility();
+            if (state.selected) layoutNeighbourhood();
+            else setStatus('Only related: click a table to see its neighbourhood');
+        } else {
+            restoreLayout();
+            applyVisibility();
+            fitToViewport();
+        }
+    }
+
+    // Arrange just the visible neighbourhood around the selection so it reads
+    // like a small diagram instead of a few boxes scattered over the whole
+    // canvas. Positions are temporary: leaving the mode restores the real
+    // layout and nothing is saved meanwhile.
+    function layoutNeighbourhood() {
+        if (!state.selected) return;
+        if (!state.savedLayout) state.savedLayout = { ...state.layout };
+        const names = state.tables.map((t) => t.name).filter(isVisible);
+        // Star layout: tables pointing at the selection on the left, the
+        // selection in the middle, tables it points at on the right. Each
+        // side is a grid, so a table referenced by 40 others stays one
+        // screen wide instead of a 40-box column.
+        const sel = state.selected;
+        const left = new Set(), right = new Set();
+        for (const fk of state.fks) {
+            if (fk.to_table === sel && fk.from_table !== sel) left.add(fk.from_table);
+            if (fk.from_table === sel && fk.to_table !== sel) right.add(fk.to_table);
+        }
+        for (const n of left) if (right.has(n)) right.delete(n);
+        const leftNames = names.filter((n) => left.has(n)).sort();
+        const rightNames = names.filter((n) => right.has(n)).sort();
+        const lb = leftNames.length ? masonryBlock(leftNames) : { pos: {}, w: 0, h: 0 };
+        const rb = rightNames.length ? masonryBlock(rightNames) : { pos: {}, w: 0, h: 0 };
+        const selSize = nodeSize(sel);
+        const totalH = Math.max(lb.h, rb.h, selSize.h);
+        let x = MARGIN;
+        for (const [n, pos] of Object.entries(lb.pos)) state.layout[n] = { x: x + pos.x, y: MARGIN + (totalH - lb.h) / 2 + pos.y };
+        x += lb.w + (lb.w ? GAP_X * 2 : 0);
+        state.layout[sel] = { x, y: MARGIN + (totalH - selSize.h) / 2 };
+        x += selSize.w + GAP_X * 2;
+        for (const [n, pos] of Object.entries(rb.pos)) state.layout[n] = { x: x + pos.x, y: MARGIN + (totalH - rb.h) / 2 + pos.y };
+        placeNodes(names);
+        redrawEdges();
+        fitToViewport();
+    }
+
+    function restoreLayout() {
+        if (!state.savedLayout) return;
+        state.layout = state.savedLayout;
+        state.savedLayout = null;
+        placeNodes(state.tables.map((t) => t.name));
+        redrawEdges();
+        renderGroupLabels();
+    }
+
+    function placeNodes(names) {
+        for (const name of names) {
+            const pos = state.layout[name];
+            const node = els.entitiesLayer.querySelector(`.entity[data-table="${cssEscape(name)}"]`);
+            if (node && pos) {
+                node.style.left = pos.x + 'px';
+                node.style.top = pos.y + 'px';
+            }
+        }
+    }
+
+    function updateRelatedButton() {
+        if (els.btnRelated) els.btnRelated.setAttribute('aria-pressed', state.onlyRelated ? 'true' : 'false');
+    }
+
+    // Select a table and bring it to the middle of the screen, readable.
+    function focusTable(name) {
+        const pos = state.layout[name];
+        const size = state.sizes[name] || { w: 240, h: 120 };
+        if (!pos) return;
+        if (state.prefix && tablePrefix(name) !== state.prefix) {
+            state.prefix = '';
+            if (els.prefix) els.prefix.value = '';
+        }
+        selectTable(name);
+        if (state.onlyRelated) return;  // layoutNeighbourhood() already framed it
+        const rect = els.page.getBoundingClientRect();
+        const z = state.zoom < 0.6 ? 0.9 : state.zoom;
+        state.zoom = z;
+        state.pan.x = rect.width / 2 - (pos.x + size.w / 2) * z;
+        state.pan.y = rect.height / 2 - (pos.y + size.h / 2) * z;
+        applyTransform();
+    }
+
+    function searchMatches() {
+        const q = (els.search.value || '').trim().toLowerCase();
+        if (!q) return [];
+        const starts = [], contains = [];
+        for (const t of state.tables) {
+            const n = t.name.toLowerCase();
+            if (n.startsWith(q) || n.split('.').pop().startsWith(q)) starts.push(t);
+            else if (n.includes(q)) contains.push(t);
+        }
+        return starts.concat(contains).slice(0, 10);
+    }
+
+    function renderSearch() {
+        if (!els.searchResults) return;
+        const matches = searchMatches();
+        if (!matches.length) { hideSearch(); return; }
+        state.searchIndex = Math.min(Math.max(state.searchIndex, 0), matches.length - 1);
+        els.searchResults.innerHTML = matches.map((t, i) =>
+            `<div class="schema-search-item ${i === state.searchIndex ? 'active' : ''}" data-table="${escapeAttr(t.name)}">` +
+            `<span>${escapeAttr(t.name)}</span><span class="muted">${t.columns.length} cols${t.row_count ? ' · ' + formatCount(t.row_count) : ''}</span></div>`
+        ).join('');
+        els.searchResults.hidden = false;
+        els.searchResults.querySelectorAll('.schema-search-item').forEach((el) => {
+            el.addEventListener('mousedown', (e) => { e.preventDefault(); pickSearch(el.dataset.table); });
+        });
+    }
+
+    function onSearchKey(e) {
+        const matches = searchMatches();
+        if (e.key === 'ArrowDown') { e.preventDefault(); state.searchIndex = Math.min(state.searchIndex + 1, matches.length - 1); renderSearch(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); state.searchIndex = Math.max(state.searchIndex - 1, 0); renderSearch(); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (matches.length) pickSearch(matches[Math.max(0, state.searchIndex)].name); }
+        else if (e.key === 'Escape') { hideSearch(); els.search.blur(); }
+    }
+
+    function pickSearch(name) {
+        hideSearch();
+        els.search.value = name;
+        focusTable(name);
+    }
+
+    function hideSearch() {
+        if (els.searchResults) els.searchResults.hidden = true;
+        state.searchIndex = -1;
     }
 
     // ─── Helpers ─────────────────────────────────────────

@@ -22,6 +22,7 @@ from typing import Any
 import msgspec
 
 from tusk.core.logging import get_logger
+from tusk.core import meta
 
 log = get_logger("notifications")
 
@@ -206,7 +207,7 @@ class NotificationService:
 
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
-            db_path = Path.home() / ".tusk" / "notifications.db"
+            db_path = meta.TUSK_DB
         self._db_path = db_path
         self._rate_limit: dict[str, float] = {}  # event_key -> last_sent_ts
         self._rate_limit_seconds = 60  # min seconds between same event
@@ -225,7 +226,7 @@ class NotificationService:
         cls._instance = None
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._db_path))
+        conn = meta.connect(self._db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")

@@ -60,7 +60,8 @@ what makes a check cheap enough to run every hour on a large database.
 
 ## Storage and retention
 
-Snapshots and changes live in `~/.tusk/schema_watch.db`. The last 30
+Snapshots and changes live in `~/.tusk/tusk.db` (with the rest of Tusk's own
+state). The last 30
 snapshots per connection are kept; change records keep their own copy of
 the diff, so history survives pruning.
 

@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 import msgspec
 
 from tusk.core import auth as _auth
+from tusk.core import meta
 
 TOKEN_PREFIX = "tusk_"
 # How often `last_used_at` is refreshed. Every MCP call would otherwise be
@@ -60,7 +61,7 @@ def _hash(plaintext: str) -> str:
 
 def _connect() -> sqlite3.Connection:
     _auth.init_auth_db()
-    conn = sqlite3.connect(_auth.AUTH_DB)
+    conn = meta.connect(_auth.AUTH_DB)
     conn.row_factory = sqlite3.Row
     return conn
 

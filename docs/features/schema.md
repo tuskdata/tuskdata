@@ -34,6 +34,17 @@ labels, Rails engines), each prefix becomes a labelled block laid out on its
 own; otherwise blocks are connected components. Blocks are packed into rows
 so the canvas stays roughly screen-shaped.
 
+## Finding your way
+
+- **Find table** (or press `/`): type part of a name, pick a match, and the
+  diagram jumps to it, selected and centred.
+- **Group filter**: when tables share prefixes, the dropdown shows one
+  entry per group; pick one to see only that group.
+- **Only related**: with a table selected, hides everything else and
+  arranges its neighbourhood as a small diagram of its own. Click another
+  table to move the focus; switch it off to get the full layout back
+  (positions are never saved while it is on).
+
 ## Toolbar
 
 - **Connection picker**: switching re-introspects `pg_catalog`.

@@ -101,12 +101,13 @@ tusk version
 ~/.tusk/
 ├── config.toml          # settings (also editable in Settings → Studio)
 ├── connections.toml     # saved connections
-├── auth.db              # users, groups, sessions, API tokens (multi-user)
-├── scheduler.db         # scheduled jobs and runs
-├── schema_watch.db      # schema snapshots, changes, contracts
-├── stats_history.db     # admin dashboard history
+├── tusk.db              # everything Tusk keeps about itself: users, sessions, API
+│                        # tokens, audit, query history, saved queries, AI memory,
+│                        # notifications, scheduled jobs and runs, schema snapshots,
+│                        # contracts, admin stats history
 ├── backups/             # pg_dump output
 ├── scheduled_results/   # saved query results from jobs
+├── schema_layouts/      # Schema diagram positions, per connection and user
 ├── workspaces/          # Data page state
 └── plugins/             # per-plugin SQLite + TOML (tusk_bi.db, …)
 ```

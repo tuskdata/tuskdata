@@ -24,11 +24,12 @@ import structlog
 
 from tusk.core.connection import get_connection
 from tusk.core.scheduler import get_scheduler
+from tusk.core import meta
 
 log = structlog.get_logger()
 
 TUSK_DIR = Path.home() / ".tusk"
-SCHEDULER_DB = TUSK_DIR / "scheduler.db"
+SCHEDULER_DB = meta.TUSK_DB  # was ~/.tusk/scheduler.db before 0.4.38
 
 
 # ─────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ class JobSpec(msgspec.Struct):
 
 def _connect() -> sqlite3.Connection:
     TUSK_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(SCHEDULER_DB))
+    conn = meta.connect(SCHEDULER_DB)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

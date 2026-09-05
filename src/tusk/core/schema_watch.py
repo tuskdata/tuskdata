@@ -18,12 +18,12 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tusk.core.config import TUSK_DIR
 from tusk.core.logging import get_logger
+from tusk.core import meta
 
 log = get_logger(__name__)
 
-DB_PATH: Path = TUSK_DIR / "schema_watch.db"
+DB_PATH: Path = meta.TUSK_DB  # was ~/.tusk/schema_watch.db before 0.4.38
 EVENT_KEY = "schema.changed"
 
 
@@ -32,7 +32,7 @@ EVENT_KEY = "schema.changed"
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = meta.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(
         """

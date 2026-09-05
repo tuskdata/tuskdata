@@ -5,16 +5,16 @@ import secrets
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Literal
 import sqlite3
 
 import msgspec
 
 from tusk.core.config import get_config
+from tusk.core import meta
 
 # Auth database path
-AUTH_DB = Path.home() / ".tusk" / "users.db"
+AUTH_DB = meta.TUSK_DB  # was ~/.tusk/users.db before 0.4.38
 
 
 # ============================================================================
@@ -168,7 +168,7 @@ def init_auth_db() -> None:
     """Initialize the auth database"""
     AUTH_DB.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     # Users table
@@ -346,7 +346,7 @@ def create_user(
     now = datetime.now(timezone.utc).isoformat()
     password_hash = hash_password(password)
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -372,7 +372,7 @@ def get_user_by_id(user_id: str) -> User | None:
     """Get a user by ID"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -402,7 +402,7 @@ def get_user_by_username(username: str) -> User | None:
     """Get a user by username"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -432,7 +432,7 @@ def list_users() -> list[User]:
     """List all users"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -471,7 +471,7 @@ def update_user(user_id: str, **kwargs) -> bool:
     if "settings" in updates:
         updates["settings"] = msgspec.json.encode(updates["settings"]).decode()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -490,7 +490,7 @@ def update_password(user_id: str, new_password: str) -> bool:
 
     password_hash = hash_password(new_password)
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -505,7 +505,7 @@ def delete_user(user_id: str) -> bool:
     """Delete a user"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -525,7 +525,7 @@ def create_session(user_id: str, ip_address: str | None = None, user_agent: str 
     now = datetime.now(timezone.utc)
     expires = now + timedelta(hours=24)  # 24 hour session
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -555,7 +555,7 @@ def get_session(session_id: str) -> Session | None:
     """Get a session by ID"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -591,7 +591,7 @@ def delete_session(session_id: str) -> bool:
     """Delete a session"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -606,7 +606,7 @@ def delete_user_sessions(user_id: str) -> int:
     """Delete all sessions for a user"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -621,7 +621,7 @@ def cleanup_expired_sessions() -> int:
     """Delete all expired sessions"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -700,7 +700,7 @@ def create_group(name: str, description: str | None = None, permissions: list[st
     now = datetime.now(timezone.utc).isoformat()
     permissions = permissions or []
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -732,7 +732,7 @@ def get_group(group_id: str) -> Group | None:
     """Get a group by ID"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -761,7 +761,7 @@ def list_groups() -> list[Group]:
     """List all groups"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -790,7 +790,7 @@ def add_user_to_group(user_id: str, group_id: str, added_by: str | None = None) 
     """Add a user to a group"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -808,7 +808,7 @@ def remove_user_from_group(user_id: str, group_id: str) -> bool:
     """Remove a user from a group"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -823,7 +823,7 @@ def get_user_groups(user_id: str) -> list[Group]:
     """Get all groups a user belongs to"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -906,7 +906,7 @@ def log_audit(
     """Write an entry to the audit log"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:
@@ -928,7 +928,7 @@ def get_audit_logs(
     """Get audit log entries"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -962,7 +962,7 @@ def get_audit_log_count(user_id: str | None = None, action: str | None = None) -
     """Get total count of audit log entries"""
     init_auth_db()
 
-    conn = sqlite3.connect(AUTH_DB)
+    conn = meta.connect(AUTH_DB)
     cursor = conn.cursor()
 
     try:

@@ -9,20 +9,19 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 
-from tusk.core.connection import TUSK_DIR
 from tusk.core.logging import get_logger
+from tusk.core import meta
 
 log = get_logger("stats_history")
 
-STATS_DB = TUSK_DIR / "stats_history.db"
+STATS_DB = meta.TUSK_DB  # was ~/.tusk/stats_history.db before 0.4.38
 MAX_POINTS = 288  # 24h @ 5min granularity
 
 
 def _init_db() -> None:
     STATS_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(STATS_DB)
+    conn = meta.connect(STATS_DB)
     try:
         conn.execute(
             """
@@ -51,7 +50,7 @@ def record_stats(connection_id: str, stats: object) -> None:
     try:
         _init_db()
         ts = datetime.now(timezone.utc).isoformat()
-        conn = sqlite3.connect(STATS_DB)
+        conn = meta.connect(STATS_DB)
         try:
             conn.execute(
                 """
@@ -95,7 +94,7 @@ def get_history(connection_id: str, limit: int = 288) -> list[dict]:
     """Return recent points oldest → newest for rendering a sparkline."""
     try:
         _init_db()
-        conn = sqlite3.connect(STATS_DB)
+        conn = meta.connect(STATS_DB)
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
