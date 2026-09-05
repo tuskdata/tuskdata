@@ -1367,6 +1367,11 @@ window.addTransform = function() {
         if (['lag', 'lead'].includes(fn)) {
             t.offset = parseInt(document.getElementById('window-offset').value) || 1;
         }
+    } else if (t.type === 'add_column') {
+        t.name = document.getElementById('addcol-name').value.trim();
+        t.expression = document.getElementById('addcol-expression').value.trim();
+        if (!t.name) { showToast('Give the new column a name', 'warning'); return; }
+        if (!t.expression) { showToast('Write an expression for the column', 'warning'); return; }
     }
 
     // Either update existing transform or add new one
@@ -1406,7 +1411,8 @@ function renderTransforms() {
         join: { icon: 'git-merge', color: '#3fb950' },
         concat: { icon: 'layers', color: '#f0883e' },
         distinct: { icon: 'fingerprint', color: '#a371f7' },
-        window: { icon: 'bar-chart-3', color: '#79c0ff' }
+        window: { icon: 'bar-chart-3', color: '#79c0ff' },
+        add_column: { icon: 'plus-square', color: '#d2a8ff' }
     };
 
     list.innerHTML = transforms.map((t, i) => {
@@ -1434,6 +1440,7 @@ function renderTransforms() {
         }
         else if (t.type === 'distinct') desc = t.subset ? t.subset.join(', ') : 'all columns';
         else if (t.type === 'window') desc = `${t.function}(${t.column || ''}) → ${t.alias}`;
+        else if (t.type === 'add_column') desc = `${t.name} = ${t.expression}`;
 
         const { icon, color } = iconMap[t.type] || { icon: 'circle', color: '#8b949e' };
 
@@ -1594,6 +1601,11 @@ function populateTransformFields(t) {
                 if (t.column) document.getElementById('window-column').value = t.column;
                 if (t.offset) document.getElementById('window-offset').value = t.offset;
                 toggleWindowColumnField();
+                break;
+
+            case 'add_column':
+                document.getElementById('addcol-name').value = t.name || '';
+                document.getElementById('addcol-expression').value = t.expression || '';
                 break;
         }
     }, 50);

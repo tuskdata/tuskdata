@@ -2,6 +2,61 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.28] - 2026-09-05 — Revival: deps al día, BI charts, AI grounding, backups programados
+
+Primera release tras tres meses parados. Sin features nuevas grandes:
+poner el entorno al día y arreglar lo que dolía en el uso diario.
+
+**Entorno / dependencias**
+- Python 3.13 como baseline real también en local (el venv iba en 3.12).
+- Litestar 2.19 → 2.24, msgspec 0.21.1, Granian 2.8.2, DuckDB 1.5.5,
+  Polars 1.44, psycopg 3.3.5, MiniJinja 2.24. Suite completa en verde.
+- `litestar.contrib.minijinja` (deprecado en 2.22) → `litestar.plugins.minijinja`.
+- `tuskdata[all]` ya no arrastra `cluster`: tusk-cluster queda en pausa
+  (sigue instalable con `tuskdata[cluster]`).
+- Grupo `dev` en `[dependency-groups]` (pytest, playwright, ruff) para que
+  las herramientas de desarrollo no acaben en el deploy.
+
+**tusk-bi 0.3.2 — los charts no se dibujaban**
+- Ninguna plantilla cargaba `widgets.js`, que define `biRenderChart`,
+  `biRenderSparkline`, `biRenderMap` y `biRenderMarkdown`. Los partials
+  HTMX los invocaban sobre `undefined` y fallaban en silencio: canvas
+  vacío en todos los widgets de gráfico, sparkline, mapa y texto. Stat y
+  tabla funcionaban porque no dependen de JS. Se carga ahora en
+  `dashboard.html`, `dashboard_public.html` y `embed_dashboard.html`.
+
+**AI Copilot — "esa tabla no existe"**
+- `_schema_summary` listaba como máximo 120 tablas ordenadas por filas.
+  En bases con más (statuos_dev tiene 192) las tablas que el usuario
+  nombraba quedaban fuera de `### Available tables` y el modelo concluía
+  que no existían. Ahora las tablas que casan con el prompt van siempre
+  primero, el tope sube a 300 y, si aun así se corta, el listado dice
+  explícitamente que está truncado.
+
+**Backups programados**
+- `backup_dir` del payload se ignoraba: todo iba a `~/.tusk/backups`.
+  `create_backup()` acepta `backup_dir` y el scheduler lo respeta.
+- Rotación nueva: `keep_last` por schedule; tras cada backup correcto se
+  borran los más antiguos de esa base (y sus `.meta.json`). Nunca se
+  rota tras un fallo.
+- Formato configurable por schedule (`custom` -Fc recomendado, `plain`,
+  `directory`). Campos nuevos en el formulario de Scheduled → Backup.
+- Tests: `tests/test_scheduled_backup.py` (6).
+
+**Windows**
+- `tusk` reconfigura stdout/stderr a UTF-8 con `errors="replace"` al
+  arrancar: en cmd/PowerShell heredados (cp1252/cp437) cualquier `—` o
+  emoji en un print tumbaba la CLI con `UnicodeEncodeError`. `tusk
+  features` deja de imprimir emojis; structlog sin colores ANSI en win32.
+- El árbol de esquema y la lista de conexiones de Studio usaban emojis
+  crudos (🐘 🦆 📁 📋 🔑 🔗 ⭐ ✎) que en algunos Windows salen como
+  cuadros. Sustituidos por iconos Lucide, que es la regla del proyecto.
+
+**Data**
+- El transform `add_column` (columna calculada con expresión Polars)
+  existía en ambos motores pero no estaba en la paleta. Expuesto con su
+  formulario, descripción en la lista y edición.
+
 ## [0.4.27] - 2026-05-24 — Data canvas fills + double-click works
 
 **B12 v3** — even with the results pane hidden, the canvas was still

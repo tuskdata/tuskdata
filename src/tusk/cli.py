@@ -5,8 +5,25 @@ import sys
 from pathlib import Path
 
 
+def _configure_console() -> None:
+    """Fuerza UTF-8 en stdout/stderr.
+
+    En Windows la consola clásica (cmd/PowerShell heredados) usa cp1252 o
+    cp437 y cualquier carácter fuera de ASCII —guiones largos, marcas de
+    check, emojis en logs— revienta con UnicodeEncodeError. Windows
+    Terminal ya es UTF-8, de ahí que el fallo fuera intermitente.
+    `errors="replace"` garantiza que nunca se cae por un print.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
     """Entry point for tusk command"""
+    _configure_console()
     # Discover plugins early for CLI commands
     plugin_commands = _get_plugin_commands()
 

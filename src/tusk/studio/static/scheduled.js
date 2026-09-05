@@ -24,6 +24,10 @@
             run_date: "",
             notify_on_success: false,
             notify_on_failure: true,
+            // Solo para kind === "backup"
+            backup_format: "custom",
+            keep_last: 7,
+            backup_dir: "",
         };
     }
 
@@ -323,6 +327,11 @@
                         url = `/api/scheduler/jobs/${kind}`;
                         // Legacy endpoints expect flat cron fields; translate from JobSpec trigger.
                         body = { connection_id: this.form.connection_id };
+                        if (kind === "backup") {
+                            body.format = this.form.backup_format || "custom";
+                            body.keep_last = Number(this.form.keep_last) || 0;
+                            if (this.form.backup_dir) body.backup_dir = this.form.backup_dir;
+                        }
                         if (trigger.type === "date") {
                             body.run_date = trigger.run_date;
                         } else if (trigger.type === "cron" && trigger.cron) {

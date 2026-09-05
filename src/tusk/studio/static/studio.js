@@ -1219,7 +1219,7 @@ async function loadConnections() {
     }
 
     list.innerHTML = conns.map(c => {
-        const icon = c.type === 'duckdb' ? '🦆' : c.type === 'sqlite' ? '🗃️' : '🐘';
+        const icon = c.type === 'duckdb' ? '<i data-lucide="package" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : c.type === 'sqlite' ? '<i data-lucide="file-archive" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : '<i data-lucide="database" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>';
         const status = connectionStatuses[c.id];
         const statusColor = status === true ? 'bg-green-500'
             : status === false ? 'bg-red-500'
@@ -1266,6 +1266,8 @@ async function loadConnections() {
 
     // Check connection statuses in background
     checkConnectionStatuses(conns);
+    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    if (window.lucide) lucide.createIcons();
 }
 
 async function checkConnectionStatuses(conns) {
@@ -1284,7 +1286,7 @@ async function checkConnectionStatuses(conns) {
     const list = document.getElementById('connections-list');
     if (list && updatedConns.length > 0) {
         list.innerHTML = updatedConns.map(c => {
-            const icon = c.type === 'duckdb' ? '🦆' : c.type === 'sqlite' ? '🗃️' : '🐘';
+            const icon = c.type === 'duckdb' ? '<i data-lucide="package" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : c.type === 'sqlite' ? '<i data-lucide="file-archive" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>' : '<i data-lucide="database" class="w-3.5 h-3.5 inline-block align-[-2px]"></i>';
             const status = connectionStatuses[c.id];
             const statusColor = status === true ? 'bg-green-500'
                 : status === false ? 'bg-red-500'
@@ -1321,6 +1323,8 @@ async function checkConnectionStatuses(conns) {
             </div>
         `}).join('');
     }
+    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    if (window.lucide) lucide.createIcons();
 }
 
 // Resolve a connection by id from the cached list (used when switching
@@ -1392,7 +1396,7 @@ function renderSchemaTree(schema, filter = '') {
         const schemaNameEsc = escapeHtml(schemaName);
         return `
         <details open class="mt-1">
-            <summary class="cursor-pointer text-gray-400 hover:text-white py-1">📁 ${schemaNameEsc}</summary>
+            <summary class="cursor-pointer text-gray-400 hover:text-white py-1 flex items-center gap-1"><i data-lucide="folder" class="w-3.5 h-3.5 inline-block align-[-2px]"></i> ${schemaNameEsc}</summary>
             <div class="ml-3">
                 ${filteredTables.map(([tableName, cols]) => {
                     const rowCount = tableRowCounts[`${schemaName}.${tableName}`];
@@ -1404,7 +1408,7 @@ function renderSchemaTree(schema, filter = '') {
                         <summary class="cursor-pointer hover:text-white py-0.5 flex items-center gap-1 group"
                                  ondblclick="event.stopPropagation(); insertTable(this.closest('details').dataset.table)"
                                  title="Double-click to insert table name">
-                            <span>📋</span> ${tableNameEsc}
+                            <i data-lucide="table" class="w-3.5 h-3.5 inline-block align-[-2px]"></i> ${tableNameEsc}
                             <span class="text-xs text-gray-600">(${cols.length})</span>
                             ${rowCountStr}
                             <span class="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1">
@@ -1419,11 +1423,11 @@ function renderSchemaTree(schema, filter = '') {
                                 let icon = '<span class="text-gray-600">⋮</span>';
                                 let tooltip = '';
                                 if (c.is_primary_key && c.is_foreign_key) {
-                                    icon = '<span class="text-yellow-500" title="Primary Key">🔑</span><span class="text-blue-400" title="FK: ' + refsEsc + '">🔗</span>';
+                                    icon = '<span class="text-yellow-500" title="Primary Key"><i data-lucide="key-round" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span><span class="text-blue-400" title="FK: ' + refsEsc + '"><i data-lucide="link" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span>';
                                 } else if (c.is_primary_key) {
-                                    icon = '<span class="text-yellow-500" title="Primary Key">🔑</span>';
+                                    icon = '<span class="text-yellow-500" title="Primary Key"><i data-lucide="key-round" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span>';
                                 } else if (c.is_foreign_key) {
-                                    icon = '<span class="text-blue-400" title="FK: ' + refsEsc + '">🔗</span>';
+                                    icon = '<span class="text-blue-400" title="FK: ' + refsEsc + '"><i data-lucide="link" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span>';
                                     tooltip = ' → ' + escapeHtml((c.references || '').split('.').pop());
                                 }
                                 return `
@@ -1452,6 +1456,8 @@ function renderSchemaTree(schema, filter = '') {
             </button>
         </div>
     ` + (schemaHtml || '<div class="text-gray-500 py-2">No tables match filter</div>');
+    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    if (window.lucide) lucide.createIcons();
 }
 
 function formatRowCount(count) {
@@ -2243,7 +2249,7 @@ async function loadSavedQueries() {
     for (const [folder, queries] of Object.entries(folders)) {
         html += `
             <details class="mt-1">
-                <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs">📁 ${escapeHtml(folder)}</summary>
+                <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs flex items-center gap-1"><i data-lucide="folder" class="w-3.5 h-3.5 inline-block align-[-2px]"></i> ${escapeHtml(folder)}</summary>
                 <div class="ml-2">
                     ${queries.map(q => renderSavedQueryItem(q)).join('')}
                 </div>
@@ -2252,6 +2258,7 @@ async function loadSavedQueries() {
     }
 
     list.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
 }
 
 function renderSavedQueryItem(q) {
@@ -2261,10 +2268,10 @@ function renderSavedQueryItem(q) {
         <div class="group flex items-center gap-2 px-2 py-1 rounded hover:bg-[#21262d] cursor-pointer"
              onclick="loadSavedQuery(${id})"
              title="${escapeHtml(q.sql)}">
-            <span class="text-indigo-400 text-xs">⭐</span>
+            <span class="text-indigo-400 text-xs"><i data-lucide="star" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span>
             <span class="flex-1 truncate text-gray-300 text-xs">${escapeHtml(q.name)}</span>
             <button onclick="event.stopPropagation(); editSavedQuery(${id})"
-                    class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 text-xs">✎</button>
+                    class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 text-xs"><i data-lucide="pencil" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></button>
             <button onclick="event.stopPropagation(); deleteSavedQuery(${id})"
                     class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 text-xs">×</button>
         </div>
@@ -2503,7 +2510,7 @@ async function loadFiles() {
         return `
         <details open class="mt-1" data-folder-path="${folderPathEsc}">
             <summary class="cursor-pointer text-gray-400 hover:text-white py-1 text-xs flex items-center gap-1">
-                <span>📁</span> ${escapeHtml(folder.name)}
+                <i data-lucide="folder" class="w-3.5 h-3.5 inline-block align-[-2px]"></i> ${escapeHtml(folder.name)}
                 <button onclick="event.stopPropagation(); removeFolder(this.closest('details').dataset.folderPath)"
                         class="ml-auto text-gray-600 hover:text-red-400 text-xs">×</button>
             </summary>
@@ -2527,6 +2534,8 @@ async function loadFiles() {
         </details>
     `;
     }).join('');
+    // Los iconos Lucide del HTML recién insertado hay que materializarlos
+    if (window.lucide) lucide.createIcons();
 }
 
 window.showAddFolderModal = function() {

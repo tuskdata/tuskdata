@@ -743,10 +743,25 @@ async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:
             key=lambda kv: row_counts.get(kv[0], -1),
             reverse=True,
         )
-        for tname, t in all_sorted[:120]:
+        # Las tablas que casan con el prompt van SIEMPRE primero en el
+        # listado: antes se cortaba en 120 por filas y, en bases con más
+        # tablas (statuos_dev tiene 192), las que el usuario nombraba
+        # quedaban fuera y el modelo respondía "esa tabla no existe".
+        overview_cap = 300
+        overview = [kv for kv in all_sorted if kv[0] in priority_set]
+        overview += [kv for kv in all_sorted if kv[0] not in priority_set]
+        for tname, t in overview[:overview_cap]:
             rc = row_counts.get(tname)
             rc_str = f" ~{rc:,} rows" if isinstance(rc, int) else ""
             out_lines.append(f"- {_sanitize_for_prompt(tname)} ({len(t['cols'])} cols{rc_str})")
+        hidden = len(overview) - overview_cap
+        if hidden > 0:
+            # Si aun así hay que cortar, que el modelo sepa que la lista
+            # está truncada en vez de concluir que la tabla no existe.
+            out_lines.append(
+                f"- ... and {hidden} more tables not listed (the list is truncated, "
+                "NOT exhaustive — if the user names a table you don't see, assume it may exist and ask)"
+            )
 
         # Detail section for matched + FK-related tables, plus top by rows
         # to fill any remaining budget.

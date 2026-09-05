@@ -403,6 +403,10 @@
                 <div class="p-2 bg-[#79c0ff]/20 rounded-lg"><i data-lucide="bar-chart-3" class="w-4 h-4 text-[#79c0ff]"></i></div>
                 <div><div class="font-medium text-sm">Window</div><div class="text-xs text-[#8b949e]">row_number, rank, lag, lead</div></div>
             </button>
+            <button @click="selectTransformType('add_column')" class="p-3 rounded-lg border border-[#30363d] hover:border-[#6366f1] hover:bg-[#6366f1]/10 text-left flex items-start gap-3 transition-colors">
+                <div class="p-2 bg-[#d2a8ff]/20 rounded-lg"><i data-lucide="plus-square" class="w-4 h-4 text-[#d2a8ff]"></i></div>
+                <div><div class="font-medium text-sm">Add column</div><div class="text-xs text-[#8b949e]">Computed column from an expression</div></div>
+            </button>
         </div>
         <div id="transform-config" class="hidden flex-1 overflow-auto">
             <div id="config-filter" class="hidden space-y-3">
@@ -633,6 +637,17 @@
                 <div>
                     <label class="block text-sm text-gray-400 mb-1">Result Column Name</label>
                     <input id="window-alias" value="window_col" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm">
+                </div>
+            </div>
+            <div id="config-add_column" class="hidden space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">New column name</label>
+                    <input type="text" id="addcol-name" placeholder="total_with_tax" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Expression (Polars)</label>
+                    <textarea id="addcol-expression" rows="3" spellcheck="false" placeholder="pl.col('price') * 1.18" class="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+                    <p class="text-xs text-[#8b949e] mt-1">Allowed: <code>pl.col</code>, <code>pl.lit</code>, <code>pl.when</code>, <code>pl.concat_str</code>, arithmetic, and <code>.str.*</code>, <code>.cast()</code>, <code>.round()</code>, <code>.fill_null()</code> chains. No arbitrary Python.</p>
                 </div>
             </div>
         </div>

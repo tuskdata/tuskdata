@@ -12,7 +12,7 @@ from litestar.config.compression import CompressionConfig
 from litestar.types import ASGIApp, Receive, Scope, Send
 from litestar.enums import ScopeType
 
-from litestar.contrib.minijinja import MiniJinjaTemplateEngine
+from litestar.plugins.minijinja import MiniJinjaTemplateEngine
 from litestar.openapi import OpenAPIConfig
 
 import tusk

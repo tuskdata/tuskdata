@@ -69,16 +69,16 @@ def print_feature_status():
     """Print status of all optional features"""
     status = get_available_features()
 
-    print("\n📦 Tusk Feature Status:\n")
+    print("\nTusk Feature Status:\n")
     for feature, available in status.items():
-        icon = "✅" if available else "❌"
+        icon = "[ok]     " if available else "[missing]"
         print(f"  {icon} {feature}")
 
     missing = [f for f, a in status.items() if not a]
     if missing:
-        print(f"\nInstall missing features with:")
-        print(f'  uv pip install "tuskdata[all]"')
-        print(f"\nOr install individually:")
+        print("\nInstall missing features with:")
+        print('  uv pip install "tuskdata[all]"')
+        print("\nOr install individually:")
         for f in missing:
             print(f'  uv pip install "tuskdata[{f}]"')
     print()

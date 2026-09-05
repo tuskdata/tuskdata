@@ -8,6 +8,7 @@ Env vars (read at setup_logging time):
 
 import contextvars
 import logging
+import sys
 import os
 import structlog
 
@@ -52,7 +53,9 @@ def setup_logging(debug: bool = False) -> None:
     if fmt == "json":
         renderer = structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=True)
+        # En Windows la consola heredada no soporta ANSI ni unicode de forma
+        # fiable; sin colores structlog no emite secuencias de escape.
+        renderer = structlog.dev.ConsoleRenderer(colors=(sys.platform != "win32"))
 
     structlog.configure(
         processors=[

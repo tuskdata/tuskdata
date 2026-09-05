@@ -624,13 +624,20 @@ async def _handle_backup(payload: dict) -> None:
         raise ValueError(f"connection {connection_id} not found or not postgres")
     fmt = str(payload.get("format", "plain"))
     tables = payload.get("tables") or None
+    backup_dir = payload.get("backup_dir") or None
+    keep_last = int(payload.get("keep_last") or 0)
     # create_backup is sync (subprocess-driven pg_dump); run in a thread
     # so we don't block the scheduler event loop on a multi-GB dump.
     success, message, _path = await asyncio.to_thread(
-        create_backup, config, format=fmt, tables=tables,
+        create_backup, config, format=fmt, tables=tables, backup_dir=backup_dir,
     )
     if not success:
         raise RuntimeError(message or "backup failed")
+    # Rotación: solo tras un backup correcto, para no borrar los viejos
+    # justo cuando el nuevo falló.
+    if keep_last > 0:
+        from tusk.admin.backup import prune_backups
+        await asyncio.to_thread(prune_backups, config.database, keep_last, backup_dir)
 
 
 async def _handle_vacuum(payload: dict) -> None:
@@ -947,12 +954,19 @@ def add_backup_schedule(
     day_of_week: str = "*",
     backup_dir: str | None = None,
     owner_id: str | None = None,
+    format: str = "plain",
+    keep_last: int | None = None,
 ) -> str:
     spec = JobSpec(
         id=f"backup_{connection_id}",
         kind=JobKind.BACKUP,
         name=f"Backup {connection_id}",
-        payload={"connection_id": connection_id, "backup_dir": backup_dir},
+        payload={
+            "connection_id": connection_id,
+            "backup_dir": backup_dir,
+            "format": format,
+            "keep_last": keep_last,
+        },
         trigger={
             "type": "cron",
             "hour": hour,
@@ -1077,12 +1091,17 @@ def remove_schedule(job_id: str) -> bool:
 # ─────────────────────────────────────────────────────────────
 
 
-def add_backup_once(connection_id: str, run_date: datetime, backup_dir: str | None = None) -> str:
+def add_backup_once(
+    connection_id: str,
+    run_date: datetime,
+    backup_dir: str | None = None,
+    format: str = "plain",
+) -> str:
     spec = JobSpec(
         id=f"backup_once_{connection_id}_{run_date.strftime('%Y%m%d%H%M')}",
         kind=JobKind.BACKUP,
         name=f"Backup {connection_id} (once)",
-        payload={"connection_id": connection_id, "backup_dir": backup_dir},
+        payload={"connection_id": connection_id, "backup_dir": backup_dir, "format": format},
         trigger={"type": "date", "run_date": run_date.isoformat()},
     )
     return add_job(spec)

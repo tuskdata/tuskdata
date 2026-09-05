@@ -205,6 +205,7 @@ def create_backup(
     progress_path: Path | None = None,
     effective_host: str | None = None,
     effective_port: int | None = None,
+    backup_dir: Path | str | None = None,
 ) -> tuple[bool, str, Path | None]:
     """Create a pg_dump backup of the database.
 
@@ -219,12 +220,19 @@ def create_backup(
         progress_path: optional path to write progress messages into. Each
             line is one phase (e.g. `dumping`, `compressing`, `done`).
             The UI polls this file while the backup runs.
+        backup_dir: carpeta de destino. Por defecto `~/.tusk/backups`; los
+            backups programados pueden apuntar a otro sitio (un volumen
+            montado, un NFS). Se crea si no existe.
 
     Returns: (success, message, filepath)
     """
     if format not in _VALID_FORMATS:
         return False, f"Invalid format: {format}", None
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(backup_dir).expanduser() if backup_dir else BACKUP_DIR
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return False, f"Cannot create backup directory {out_dir}: {e}", None
 
     # Validate table names — pg_dump accepts patterns but we only allow
     # safe identifiers to avoid argv injection of `--option` flags.
@@ -244,7 +252,7 @@ def create_backup(
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
     ext = _format_to_extension(format)
     filename = f"{config.database}_{timestamp}.{ext}"
-    filepath = BACKUP_DIR / filename
+    filepath = out_dir / filename
 
     pg_dump = get_pg_dump_path()
 
@@ -320,7 +328,7 @@ def create_backup(
                 filepath.unlink(missing_ok=True)
                 return False, f"pg_dump failed: {result.stderr.decode()}", None
         else:  # directory
-            tmp_dir = BACKUP_DIR / f".{filename}.staging"
+            tmp_dir = out_dir / f".{filename}.staging"
             cmd.extend(["-f", str(tmp_dir)])
             result = subprocess.run(cmd, capture_output=True, env=env)
             if result.returncode != 0:
@@ -430,6 +438,42 @@ def _read_backup_metadata(filepath: Path) -> dict | None:
 
 def _is_backup_file(name: str) -> bool:
     return name.endswith(".sql.gz") or name.endswith(".dump") or name.endswith(".tar.gz")
+
+
+def prune_backups(
+    database: str,
+    keep_last: int,
+    backup_dir: Path | str | None = None,
+) -> list[str]:
+    """Borra los backups más antiguos de `database`, conservando los
+    `keep_last` más recientes (y sus sidecars `.meta.json`).
+
+    Pensado para el scheduler: sin esto un backup diario llena el volumen
+    hasta que revienta. Devuelve los nombres borrados. `keep_last <= 0`
+    significa "no rotar".
+    """
+    if keep_last <= 0:
+        return []
+    out_dir = Path(backup_dir).expanduser() if backup_dir else BACKUP_DIR
+    if not out_dir.exists():
+        return []
+    prefix = f"{database}_"
+    candidates = [
+        f for f in out_dir.iterdir()
+        if f.is_file() and f.name.startswith(prefix) and _is_backup_file(f.name)
+    ]
+    candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    removed: list[str] = []
+    for f in candidates[keep_last:]:
+        try:
+            f.unlink()
+            f.with_suffix(f.suffix + ".meta.json").unlink(missing_ok=True)
+            removed.append(f.name)
+        except OSError as e:
+            log.warning("backup_prune_failed", file=f.name, error=str(e))
+    if removed:
+        log.info("backup_pruned", database=database, kept=keep_last, removed=len(removed))
+    return removed
 
 
 def list_backups() -> list[dict]:

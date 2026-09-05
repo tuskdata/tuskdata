@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.27"
+version = "0.4.28"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -93,8 +93,22 @@ otel = [
 ]
 
 # Everything
+# `cluster` queda fuera de `all` a propósito: tusk-cluster está en pausa
+# (sigue instalable con `tuskdata[cluster]`, pero no forma parte del
+# producto por defecto ni del deploy).
 all = [
-    "tuskdata[studio,admin,cluster]",
+    "tuskdata[studio,admin]",
+]
+
+[dependency-groups]
+# Herramientas de desarrollo — nunca van al wheel ni al deploy.
+# Instalar con: uv sync --group dev   (o uv pip install --group dev)
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-playwright>=0.6",
+    "playwright>=1.50",
+    "ruff>=0.14",
 ]
 
 [project.urls]

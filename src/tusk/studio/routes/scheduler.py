@@ -141,14 +141,23 @@ class SchedulerController(Controller):
         connection_id = data.get("connection_id")
         if not connection_id:
             return {"error": "connection_id is required"}
-        backup_dir = data.get("backup_dir")
+        backup_dir = (data.get("backup_dir") or "").strip() or None
+        fmt = str(data.get("format") or "plain")
+        if fmt not in ("plain", "custom", "directory"):
+            return {"error": f"Invalid backup format: {fmt}"}
+        try:
+            keep_last = int(data.get("keep_last") or 0)
+        except (TypeError, ValueError):
+            return {"error": "keep_last must be an integer"}
         run_date = data.get("run_date")
         owner_id = _current_user_id(request)
 
         if run_date:
             try:
                 dt = datetime.fromisoformat(run_date)
-                job_id = add_backup_once(connection_id=connection_id, run_date=dt, backup_dir=backup_dir)
+                job_id = add_backup_once(
+                    connection_id=connection_id, run_date=dt, backup_dir=backup_dir, format=fmt,
+                )
             except ValueError:
                 return {"error": "Invalid date format. Use ISO format: YYYY-MM-DDTHH:MM:SS"}
         else:
@@ -159,6 +168,8 @@ class SchedulerController(Controller):
                 day_of_week=data.get("day_of_week", "*"),
                 backup_dir=backup_dir,
                 owner_id=owner_id,
+                format=fmt,
+                keep_last=keep_last or None,
             )
 
         return {"success": True, "job_id": job_id}

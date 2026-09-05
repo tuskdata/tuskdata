@@ -143,6 +143,22 @@
                         </div>
                     </template>
 
+                    <template x-if="form.kind === 'backup'">
+                        <div>
+                            <label class="sched-label">Format</label>
+                            <select class="sched-input" x-model="form.backup_format">
+                                <option value="custom">Custom (-Fc, pg_restore — recommended)</option>
+                                <option value="plain">Plain SQL (.sql.gz)</option>
+                                <option value="directory">Directory (-Fd, .tar.gz)</option>
+                            </select>
+                            <label class="sched-label" style="margin-top:10px">Keep last</label>
+                            <input class="sched-input" type="number" min="0" step="1" x-model.number="form.keep_last"
+                                   placeholder="0 = keep everything">
+                            <p style="font-size:11px;color:var(--fg-3);margin-top:4px">Older backups of this database are deleted after each successful run. 0 keeps everything.</p>
+                            <label class="sched-label" style="margin-top:10px">Destination folder (optional)</label>
+                            <input class="sched-input mono" type="text" x-model="form.backup_dir" placeholder="~/.tusk/backups">
+                        </div>
+                    </template>
                     <template x-if="form.kind === 'query'">
                         <div>
                             <label class="sched-label">SQL</label>
