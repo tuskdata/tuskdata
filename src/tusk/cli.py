@@ -35,6 +35,8 @@ def main():
 
     if command == "studio":
         start_studio()
+    elif command == "app":
+        handle_app()
     elif command == "config":
         handle_config()
     elif command == "users":
@@ -175,6 +177,7 @@ Tusk - Modern Data Platform
 
 Usage:
     tusk studio [options]     Start the web studio        [requires: studio]
+    tusk app [--url URL]      Studio in a native window (preview) [requires: app]
     tusk config [options]     Manage configuration
     tusk users [command]      Manage users                [requires: studio]
     tusk auth [command]       Manage authentication       [requires: studio]
@@ -306,6 +309,32 @@ def start_studio():
         "--workers-kill-timeout", "30s",
         "tusk.studio.app:app",
     ])
+
+
+def handle_app():
+    """`tusk app [--url URL] [--port N]` — Studio in a native window (preview)."""
+    from tusk.app_window import run_app
+
+    args = sys.argv[2:]
+    url = None
+    port = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--url" and i + 1 < len(args):
+            url = args[i + 1]
+            i += 2
+        elif args[i] in ("--port", "-p") and i + 1 < len(args):
+            port = int(args[i + 1])
+            i += 2
+        elif args[i] in ("-h", "--help"):
+            print("Usage: tusk app [--url http://host:port] [--port N]\n\n"
+                  "Without --url, starts a local Studio and opens it in a window.\n"
+                  "With --url, opens an existing Tusk (e.g. your deployment) in a window.")
+            return
+        else:
+            print(f"Unknown option: {args[i]}")
+            sys.exit(1)
+    sys.exit(run_app(url=url, port=port))
 
 
 def handle_config():

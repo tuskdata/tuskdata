@@ -1,6 +1,6 @@
 [project]
 name = "tuskdata"
-version = "0.4.34"
+version = "0.4.35"
 description = "Modern data platform - PostgreSQL admin + Analytics engine"
 readme = "README.md"
 license = "MIT"
@@ -79,6 +79,9 @@ cluster = [
 # OpenTelemetry tracing (opt-in). Pulled in only when admins want to
 # ship spans to a collector — TUSK_OTEL_ENDPOINT must also be set for
 # the SDK to actually wire up.
+app = [
+    "pywebview>=5.0",        # `tusk app`: Studio in a native window (preview)
+]
 otel = [
     "opentelemetry-api>=1.21",
     "opentelemetry-sdk>=1.21",

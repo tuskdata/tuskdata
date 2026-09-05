@@ -2,6 +2,19 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.35] - 2026-09-05 — `tusk app` (preview)
+
+- **`tusk app`**: Tusk Studio in a native window via pywebview (OS
+  WebView, ~1 MB, no bundled browser). Local mode starts `tusk studio` on
+  a free loopback port in a child process, waits for `/api/health`,
+  opens the window and stops the server when it closes; `--url` opens a
+  window on an existing Tusk (your deployment). New optional extra
+  `tuskdata[app]`.
+- Preview: no installer, signing or auto-update yet — those come with
+  the desktop release once the signing accounts exist.
+- Tests: `tests/test_app_window.py` (both modes, unhealthy server,
+  missing dependency hint). Docs: `docs/features/desktop.md`.
+
 ## [0.4.34] - 2026-09-05 — Studio ergonomics
 
 - **Connection colour.** Pick a colour when adding/editing a connection

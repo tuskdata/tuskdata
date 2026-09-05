@@ -61,5 +61,6 @@ nav:
       - Data Contracts: features/data-contracts.md
       - MCP server: features/mcp.md
       - Users & API tokens: features/auth.md
+  - Desktop window (preview): features/desktop.md
   - Deployment:
       - Kubernetes: deployment/kubernetes.md
