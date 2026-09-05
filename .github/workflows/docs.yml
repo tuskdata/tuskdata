@@ -1,8 +1,8 @@
 name: Docs
 
 # Builds the mkdocs-material site and publishes it to GitHub Pages on
-# every push to main that touches the docs. Enable Pages once in the
-# repository settings (Settings → Pages → Source: GitHub Actions).
+# every push to main that touches the docs. configure-pages creates the
+# Pages site on first run (enablement: true), so no manual setup.
 
 on:
   push:
@@ -27,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.13
       - run: |
