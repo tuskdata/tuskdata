@@ -59,7 +59,13 @@ jobs:
         run: |
           uv venv
           uv pip install -e ".[all]"
-          uv pip install pytest pytest-asyncio coverage ruff
+          uv pip install pytest pytest-asyncio coverage ruff playwright pytest-playwright
+
+      - name: Install Chromium for the browser smoke tests
+        # tests/test_frontend_smoke.py boots `tusk studio` and drives it
+        # with Playwright. Without a browser those modules skip themselves
+        # (tests/_browser.py), so this step is what makes them count.
+        run: uv run playwright install --with-deps chromium
 
       - name: Run ruff
         # Lint is a fail-fast gate; if the codebase doesn't even parse

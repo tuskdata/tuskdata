@@ -2,6 +2,29 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.30] - 2026-09-05 — Plugin assets survive worker recycles; CI browser tests
+
+**Plugin static assets wiped by any shutdown** (found during the CI fix)
+- `on_shutdown` removed `~/.tusk/plugin_static`, a directory shared by
+  every Tusk process on the same HOME. An overlapping restart, a test
+  server, or Granian recycling the worker every hour in production wiped
+  the assets of the instance still serving: every plugin .js/.css
+  answered 404 — empty BI charts — until the next startup. Startup already
+  re-copies per plugin, so the shutdown cleanup is now a no-op.
+  Regression test in `tests/test_plugin_statics.py`.
+
+**CI**
+- `tests/test_frontend_smoke.py` built the server binary as
+  `sys.executable.replace("/python", "/tusk")`, which on Linux turns
+  `python3` into `tusk3`. It only surfaced now because `playwright`
+  arrives as a transitive dependency after the dependency bump, so the
+  module stopped skipping itself. Shared `tests/_browser.py`: correct
+  binary path, skip cleanly when Chromium isn't installed, wait for
+  `/api/health` instead of the bare socket.
+- CI installs Chromium (`playwright install --with-deps chromium`) so the
+  browser smoke tests actually run there. The plugin-assets test checks
+  only the plugins that are installed.
+
 ## [0.4.29] - 2026-09-05 — MCP server, Studio sidebar, Docker on non-AVX CPUs
 
 **MCP server (`POST /mcp`)** — via `litestar-mcp`

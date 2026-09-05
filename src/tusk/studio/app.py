@@ -59,7 +59,6 @@ from tusk.plugins.registry import (
 from tusk.plugins.templates import (
     setup_plugin_templates,
     setup_plugin_statics,
-    cleanup_plugin_statics,
     PLUGIN_STATIC_DIR,
 )
 
@@ -668,8 +667,9 @@ def on_shutdown() -> None:
     except Exception as e:
         log.warning("Failed to close connection pools / ssh tunnels", error=str(e))
 
-    # Cleanup plugin files
-    cleanup_plugin_statics(STATIC_DIR)
+    # Plugin static assets are NOT removed here: PLUGIN_STATIC_DIR is
+    # shared by every process on this HOME and a worker recycle would
+    # wipe the live instance's assets. See tusk.plugins.templates.
 
     log.info("Tusk Studio stopped")
 

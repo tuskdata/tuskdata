@@ -34,6 +34,10 @@ import pytest
 playwright = pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright, ConsoleMessage, Error  # noqa: E402
 
+from _browser import require_chromium, tusk_binary  # noqa: E402
+
+require_chromium()
+
 
 def _free_port() -> int:
     s = socket.socket()
@@ -59,24 +63,32 @@ def tusk_server():
     # Use the venv's tusk binary — the test runs against installed code,
     # not src/, so we catch packaging bugs (missing static files, etc.).
     proc = subprocess.Popen(
-        [sys.executable.replace("/python", "/tusk"), "studio", "--port", str(port)],
+        [tusk_binary(), "studio", "--port", str(port)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
 
-    # Wait for the server to start accepting connections.
-    deadline = time.time() + 20
+    # Wait until the app itself answers, not just until the socket
+    # accepts: Granian opens the port before Litestar finishes startup
+    # (plugin asset copy, scheduler), and the first request in that
+    # window used to hang past the per-request timeout.
+    import urllib.request
+
+    deadline = time.time() + 40
+    ready = False
     while time.time() < deadline:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                break
-        except OSError:
-            time.sleep(0.2)
-    else:
+            with urllib.request.urlopen(f"{base_url}/api/health", timeout=2) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except Exception:  # noqa: BLE001 — connection refused / reset while booting
+            time.sleep(0.25)
+    if not ready:
         proc.terminate()
-        out = proc.stdout.read().decode() if proc.stdout else ""
-        pytest.fail(f"Tusk did not start within 20s. Output:\n{out}")
+        out = proc.stdout.read().decode(errors="replace")[-2000:] if proc.stdout else ""
+        pytest.fail(f"tusk studio did not become healthy within 40s\n{out}")
 
     # Give Litestar+Granian one more moment to register routes.
     time.sleep(0.5)
@@ -241,15 +253,21 @@ def test_plugin_static_assets_resolve(tusk_server):
     """
     import urllib.request
 
-    # Hit a known plugin static file from each of the 4 plugins. The
-    # filenames are stable v0.4.5+ contracts.
-    plugin_assets = [
-        "/static/plugins/bi/bi.css",
-        "/static/plugins/bi/bi.js",
-        "/static/plugins/ci/ci.js",
-        "/static/plugins/security/security.js",
-        "/static/plugins/cluster/cluster.js",
-    ]
+    import importlib.util
+
+    # One known static file per plugin — but only for the plugins that
+    # are actually installed in this environment (tusk-ci and
+    # tusk-security are gone, tusk-cluster is paused, tusk-bi is an
+    # external package that CI doesn't install).
+    known = {
+        "tusk_bi": "/static/plugins/bi/bi.js",
+        "tusk_cluster": "/static/plugins/cluster/cluster.js",
+        "tusk_ci": "/static/plugins/ci/ci.js",
+        "tusk_security": "/static/plugins/security/security.js",
+    }
+    plugin_assets = [asset for mod, asset in known.items() if importlib.util.find_spec(mod)]
+    if not plugin_assets:
+        pytest.skip("no plugin with static assets installed")
     for asset in plugin_assets:
         req = urllib.request.Request(f"{tusk_server}{asset}")
         try:

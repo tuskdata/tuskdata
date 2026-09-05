@@ -35,6 +35,10 @@ playwright = pytest.importorskip("playwright.sync_api")
 pytest.importorskip("tusk_bi", reason="tusk-bi plugin not installed in this environment")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+from _browser import require_chromium, tusk_binary  # noqa: E402
+
+require_chromium()
+
 
 def _free_port() -> int:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,25 +60,31 @@ def tusk_server():
     env["HOME"] = str(home)
 
     proc = subprocess.Popen(
-        [sys.executable.replace("/python", "/tusk"), "studio", "--port", str(port)],
+        [tusk_binary(), "studio", "--port", str(port)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
 
-    deadline = time.time() + 20
+    # Wait until the app answers, not just until the socket accepts:
+    # Granian opens the port before Litestar finishes startup.
+    import urllib.request
+
+    deadline = time.time() + 40
+    ready = False
     while time.time() < deadline:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                break
-        except OSError:
-            time.sleep(0.2)
-    else:
+            with urllib.request.urlopen(f"{base_url}/api/health", timeout=2) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except Exception:  # noqa: BLE001 — refused / reset while booting
+            time.sleep(0.25)
+    if not ready:
         proc.terminate()
-        out = proc.stdout.read().decode() if proc.stdout else ""
-        pytest.fail(f"Tusk did not start within 20s. Output:\n{out}")
+        out = proc.stdout.read().decode(errors="replace")[-2000:] if proc.stdout else ""
+        pytest.fail(f"Tusk did not become healthy within 40s. Output:\n{out}")
 
-    time.sleep(0.6)
     yield base_url
 
     proc.terminate()

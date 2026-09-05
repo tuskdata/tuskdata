@@ -142,16 +142,19 @@ def cleanup_plugin_templates(base_templates_dir: Path) -> None:
 
 
 def cleanup_plugin_statics(base_static_dir: Path) -> None:
-    """Remove plugin static files on shutdown.
+    """Deliberately a no-op (kept for import compatibility).
 
-    Cleans :data:`PLUGIN_STATIC_DIR`. The ``base_static_dir`` argument
-    is retained for backwards compatibility but ignored.
+    This used to ``rmtree`` :data:`PLUGIN_STATIC_DIR` on shutdown. That
+    directory lives under the user's HOME and is shared by every Tusk
+    process using it, so any instance shutting down — an overlapping
+    restart, a test server, or Granian recycling a worker every hour in
+    production — wiped the assets of the instance that was still
+    serving: every plugin .js/.css answered 404 (empty BI charts) until
+    the next startup. Startup already does a fresh copy per plugin
+    (:func:`setup_plugin_statics`), so there is nothing to clean here.
 
     Args:
-        base_static_dir: Legacy parameter, retained for back-compat.
+        base_static_dir: Legacy parameter, ignored.
     """
-    del base_static_dir  # legacy: now cleans PLUGIN_STATIC_DIR
-
-    if PLUGIN_STATIC_DIR.exists():
-        shutil.rmtree(PLUGIN_STATIC_DIR, ignore_errors=True)
-        log.debug("Plugin statics cleaned up")
+    del base_static_dir
+    log.debug("Plugin statics left in place on shutdown (shared directory)")
