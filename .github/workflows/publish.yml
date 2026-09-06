@@ -17,6 +17,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish the container image for, e.g. v0.4.46. PyPI is never re-published."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +33,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Manual runs name a tag; build that, not the default branch.
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -112,13 +120,33 @@ jobs:
     name: Publish container image
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Tag pushes, or a manual run naming an existing tag (re-run the
+    # image without touching PyPI).
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Version from tag
+        id: ver
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          v="${tag#v}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag version=$v"
+
+      # `cache-to: type=gha` needs a BuildKit (docker-container) builder;
+      # the default docker driver rejects it in under a second with
+      # "Cache export is not supported for the docker driver".
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -132,9 +160,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # Explicit values instead of type=semver: on a manual run the
+          # ref is a branch and semver would produce no tags at all.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.ver.outputs.version }}
+            type=raw,value=${{ steps.ver.outputs.minor }}
             type=raw,value=latest
 
       - name: Build and push
