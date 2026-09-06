@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)publish the container image for, e.g. v0.4.46. PyPI is never re-published."
+        description: "Existing tag to (re)publish the container image for, e.g. v0.4.47. PyPI is never re-published."
         required: true
         type: string
 

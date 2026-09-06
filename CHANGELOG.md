@@ -2,6 +2,14 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.47] - 2026-09-06 — Container image actually published
+
+- **`ghcr.io/tuskdata/tuskdata` exists now.** The image job added in 0.4.40
+  failed on every tag: the build ran on Docker's default driver, which
+  rejects cache export. It runs on a Buildx builder now, and the workflow
+  can be run by hand for an existing tag to publish its image without
+  touching PyPI. No application changes.
+
 ## [0.4.46] - 2026-09-06 — Graphical EXPLAIN
 
 - **Plan tab draws the plan.** Each node is a card (type, relation/index,
