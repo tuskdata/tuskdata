@@ -32,7 +32,7 @@ window.setResultView = async function(view) {
     }
 };
 
-window.loadExplainPlan = async function() {
+window.loadExplainPlan = async function(analyze = false) {
     const el = document.getElementById('results-plan-content');
     if (!el) return;
     if (!window.currentConnection || !window.currentSql) {
@@ -51,7 +51,7 @@ window.loadExplainPlan = async function() {
             body: JSON.stringify({
                 connection_id: window.currentConnection.id,
                 sql: window.currentSql,
-                analyze: false,
+                analyze: analyze,
             }),
         });
         const data = await res.json();
@@ -67,13 +67,22 @@ window.loadExplainPlan = async function() {
         el.innerHTML = '';
         const bar = document.createElement('div');
         bar.className = 'plan-actions';
-        bar.innerHTML = `<button class="btn btn-sm" onclick="explainPlanWithAI()" title="Ask the AI Copilot where the time goes and what to do about it">
-                            <i data-lucide="sparkles"></i>Explain with AI</button>
+        bar.innerHTML = `<div class="flex aic gap-2 flex-wrap">
+                            <button class="btn btn-sm" onclick="explainPlanWithAI()" title="Ask the AI Copilot where the time goes and what to do about it">
+                                <i data-lucide="sparkles"></i>Explain with AI</button>
+                            <button class="btn btn-sm btn-ghost" onclick="loadExplainPlan(true)" title="EXPLAIN ANALYZE: runs the query and shows real rows and times">
+                                <i data-lucide="timer"></i>Analyze (runs the query)</button>
+                            <button class="btn btn-sm btn-ghost" onclick="const p = document.getElementById('plan-json'); p.hidden = !p.hidden;">
+                                <i data-lucide="braces"></i>JSON</button>
+                         </div>
                          <div id="plan-insight" class="plan-insight" hidden></div>`;
+        el.appendChild(bar);
+        el.appendChild(renderPlanTree(data.plan));
         const pre = document.createElement('pre');
         pre.className = 'plan-json';
+        pre.id = 'plan-json';
+        pre.hidden = true;
         pre.textContent = JSON.stringify(data.plan, null, 2);
-        el.appendChild(bar);
         el.appendChild(pre);
         if (window.lucide) lucide.createIcons();
     } catch (e) {
@@ -156,4 +165,70 @@ window.formatCurrentQuery = function() {
     });
     out = out.replace(/^\n/, '').replace(/\n+/g, '\n').replace(/,\s*/g, ', ');
     editor.dispatch({changes: {from: 0, to: editor.state.doc.length, insert: out}});
+};
+
+// ─── Graphical plan tree ─────────────────────────────────────────────
+// The EXPLAIN JSON as a tree of cards: node type, what it touches, rows
+// (estimated vs actual), cost or time, and a bar with the node's own share
+// of the total (exclusive of its children). The costliest node is marked.
+window.renderPlanTree = function(plan) {
+    const root = Array.isArray(plan) ? plan[0]?.Plan : (plan?.Plan || plan);
+    const wrap = document.createElement('div');
+    wrap.className = 'plan-tree';
+    if (!root) { wrap.textContent = 'No plan.'; return wrap; }
+    const analyzed = root['Actual Total Time'] !== undefined;
+    // Exclusive metric per node: time (ANALYZE) or cost (estimate).
+    const nodes = [];
+    const metric = (n) => analyzed ? (n['Actual Total Time'] || 0) * (n['Actual Loops'] || 1) : (n['Total Cost'] || 0);
+    const walk = (n, depth, parent) => {
+        const kids = n.Plans || [];
+        const own = Math.max(0, metric(n) - kids.reduce((a, k) => a + metric(k), 0));
+        const rec = { n, depth, own, kids: [] };
+        nodes.push(rec);
+        for (const k of kids) rec.kids.push(walk(k, depth + 1, rec));
+        return rec;
+    };
+    const tree = walk(root, 0, null);
+    const total = Math.max(1e-9, metric(root));
+    const hottest = nodes.reduce((a, b) => (b.own > a.own ? b : a), nodes[0]);
+    const fmt = (v) => v >= 1000 ? Math.round(v).toLocaleString() : (Math.round(v * 10) / 10).toString();
+    const label = (n) => {
+        const parts = [];
+        if (n['Relation Name']) parts.push(n['Relation Name'] + (n.Alias && n.Alias !== n['Relation Name'] ? ` as ${n.Alias}` : ''));
+        if (n['Index Name']) parts.push('using ' + n['Index Name']);
+        if (n['Join Type']) parts.push(n['Join Type'] + ' join');
+        if (n['Hash Cond']) parts.push(n['Hash Cond']);
+        if (n['Index Cond']) parts.push(n['Index Cond']);
+        if (n['Filter']) parts.push('filter ' + n['Filter']);
+        if (n['Sort Key']) parts.push('by ' + [].concat(n['Sort Key']).join(', '));
+        return parts.join(' · ');
+    };
+    const render = (rec) => {
+        const n = rec.n;
+        const pct = 100 * rec.own / total;
+        const card = document.createElement('div');
+        card.className = 'plan-node' + (rec === hottest && pct > 15 ? ' hot' : '') + (n['Node Type'] === 'Seq Scan' && (n['Plan Rows'] || 0) > 1000 ? ' warn' : '');
+        card.style.marginLeft = (rec.depth * 22) + 'px';
+        const rows = analyzed
+            ? `${fmt(n['Actual Rows'] || 0)} rows${n['Plan Rows'] !== undefined && Math.abs((n['Actual Rows'] || 0) - n['Plan Rows']) > Math.max(10, n['Plan Rows'] * 0.5) ? ` <span class="plan-mis" title="planner estimated ${fmt(n['Plan Rows'])}">est ${fmt(n['Plan Rows'])}</span>` : ''}`
+            : `${fmt(n['Plan Rows'] || 0)} rows est`;
+        const own = analyzed ? `${fmt(rec.own)} ms` : `cost ${fmt(rec.own)}`;
+        card.innerHTML = `
+            <div class="plan-node-head">
+                <span class="plan-node-type">${tuskEscapeHtml(n['Node Type'] || '?')}</span>
+                <span class="plan-node-label">${tuskEscapeHtml(label(n))}</span>
+                <span class="plan-node-nums">${rows} · ${own} · ${pct.toFixed(0)}%</span>
+            </div>
+            <div class="plan-bar"><div class="plan-bar-fill" style="width:${Math.max(1, pct).toFixed(1)}%"></div></div>`;
+        wrap.appendChild(card);
+        for (const k of rec.kids) render(k);
+    };
+    render(tree);
+    const foot = document.createElement('div');
+    foot.className = 'plan-foot';
+    foot.textContent = analyzed
+        ? `Total ${fmt(metric(root))} ms · planning ${fmt(plan[0]?.['Planning Time'] || 0)} ms · execution ${fmt(plan[0]?.['Execution Time'] || 0)} ms. Bars are each node's own time.`
+        : `Estimated total cost ${fmt(metric(root))}. Bars are each node's own cost; press Analyze for real rows and times.`;
+    wrap.appendChild(foot);
+    return wrap;
 };

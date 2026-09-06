@@ -2,6 +2,15 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.46] - 2026-09-06 — Graphical EXPLAIN
+
+- **Plan tab draws the plan.** Each node is a card (type, relation/index,
+  join or filter condition, rows, own cost) with a bar for its share of the
+  total, exclusive of its children; the costliest node is highlighted,
+  sequential scans on big row counts flagged. **Analyze** runs the query
+  for real rows and times and marks planner misestimates; **JSON** toggles
+  the raw plan. *Explain with AI* stays.
+
 ## [0.4.45] - 2026-09-06 — Copilot SQL checked against the database; geo shortcuts
 
 - **Copilot SQL is EXPLAIN-checked before you see it.** A dry run (never

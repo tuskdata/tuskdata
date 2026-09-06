@@ -103,7 +103,16 @@ out; the product does not limp without it.
   clients (the territorial platform) consume Tusk layers directly.
 - "Aggregate to H3 resolution N" on the Explore map when `h3-pg` exists.
 
-## 0.5.0 — when Apple approves
+## 0.4.45 / 0.4.46 — pgAdmin-grade details (shipped 2026-09-06)
+
+- Copilot SQL is EXPLAIN-checked before it is shown, with one correction
+  round on "does not exist" errors; verdict on the card.
+- Copy vector-tiles URL on saved queries; "Open in map" on Spatial cards;
+  Studio deep links (`?connection&sql&map=1`).
+- Plan tab draws the EXPLAIN tree (own cost/time bars, hottest node,
+  Analyze, JSON toggle).
+
+## 0.5.0 — when ready (~2 weeks)
 
 Desktop packaging (own plan) plus a hygiene cut, no new features:
 
@@ -122,7 +131,10 @@ in Analytics. Any of these comes back only when a named user asks for it.
 
 ## Open nits (fold into whichever release touches the area)
 
-- Horizontal scroll appears after confirmation modals in BI.
+- Horizontal scroll appears after confirmation modals in BI, and the Studio
+  main pane can be scrolled sideways when the caret of a long one-line SQL
+  is scrolled into view (seen in a Playwright run; `.studio-main` is
+  `overflow:hidden` but programmatic scrollIntoView still moves it).
 - Copilot with a 9B model invents joins when the schema is thin
   (`orders.product_id` in the demo); geo grounding will not fix that one —
   a bigger model or a "verify columns" post-check would.

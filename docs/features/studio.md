@@ -130,6 +130,16 @@ default) lives in **Settings → Studio**, which keeps an accidental click on
 a 50M-row table cheap. Double-click still inserts the table name at the
 cursor; **INSERT** still opens an insert template.
 
+## Read a plan
+
+The **Plan** tab draws `EXPLAIN` as a tree of cards: node type, the table
+or index and the condition, estimated rows and the node's own cost, with a
+bar for its share of the whole plan (children excluded). The costliest
+node is highlighted; a sequential scan over many rows is flagged.
+**Analyze** runs the query and adds real rows and times, marking the
+nodes where the planner's estimate was far off. **JSON** shows the raw
+plan.
+
 ## Explain a plan with AI
 
 ![Plan tab with the AI insight.](../screenshots/studio-plan.png){ .screenshot }
