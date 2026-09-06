@@ -2,10 +2,22 @@
 
 All notable changes to Tusk will be documented in this file.
 
-## [Unreleased]
+## [0.4.45] - 2026-09-06 — Copilot SQL checked against the database; geo shortcuts
 
+- **Copilot SQL is EXPLAIN-checked before you see it.** A dry run (never
+  executes) resolves every table, column and function; when PostgreSQL
+  says a column does not exist the error goes back to the model for one
+  correction. The card shows *checked against the database* or *PostgreSQL
+  rejected it* with the reason, and confidence drops to low when the SQL
+  still fails. This is the invented-join bug.
+- **Copy vector-tiles URL** on saved queries in Studio (queries with a
+  geometry column); **Open in map** on the Spatial cards of Admin and
+  Explore (opens a sample of the table in Studio and jumps to the map).
+- Studio deep links: `/studio?connection=<id>&sql=<sql>&map=1[&title=…]`
+  select the connection, open the SQL in a new tab, run it and switch to
+  the map — usable from anywhere.
 - Explore: the H3 resolution picker showed 5 while the grid used 8 on first
-  render (options were generated after the select bound its value).
+  render.
 
 ## [0.4.44] - 2026-09-06 — Vector tiles from saved queries; H3 density grid
 

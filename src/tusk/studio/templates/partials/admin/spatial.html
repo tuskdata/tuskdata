@@ -23,7 +23,7 @@
     </div>
     {% endif %}
     <table class="dtable w-full">
-        <thead><tr><th>Table</th><th>Column</th><th>Type</th><th>SRID</th><th>Rows</th><th>Index</th><th>Invalid</th><th>Extent</th></tr></thead>
+        <thead><tr><th>Table</th><th>Column</th><th>Type</th><th>SRID</th><th>Rows</th><th>Index</th><th>Invalid</th><th>Extent</th><th></th></tr></thead>
         <tbody>
         {% for c in columns %}
             <tr>
@@ -35,6 +35,8 @@
                 <td>{% if c.has_index %}{{ badge("GIST", "success") }}{% else %}{{ badge("none", "warning" if c.approx_rows >= 1000 else "info") }}{% endif %}</td>
                 <td class="mono">{% if c.invalid is none %}—{% elif c.invalid %}<span style="color:var(--red)">{{ c.invalid }}</span>{% else %}0{% endif %}</td>
                 <td class="mono" style="font-size:11px;color:var(--fg-3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.extent or '' }}">{{ c.extent or '—' }}</td>
+                <td style="text-align:right"><a class="btn btn-sm btn-ghost" title="Open a sample of this table on the map in Studio"
+                       href="/studio?connection={{ conn_id }}&map=1&title={{ c.table | urlencode }}&sql={{ ('SELECT * FROM ' ~ c.table ~ ' LIMIT 500') | urlencode }}"><i data-lucide="map"></i></a></td>
             </tr>
         {% endfor %}
         </tbody>

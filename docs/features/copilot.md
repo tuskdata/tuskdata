@@ -55,13 +55,24 @@ when the query runs.
 
 ![The answer on the map.](../screenshots/studio-map.png){ .screenshot }
 
+## Checked before you see it
+
+Every generated `SELECT` is run through `EXPLAIN` on the connection — never
+executed — so PostgreSQL itself resolves the tables, columns and
+functions. If it rejects the SQL because something does not exist, the
+error goes back to the model once with the schema; the card then shows
+either *checked against the database* or *PostgreSQL rejected it* with
+the reason, and confidence is forced to *low*. A local model can still
+choose the wrong column among existing ones, but it can no longer invent
+one.
+
 ## Limits, honestly
 
 - The grounding is only as good as the data: a `tags` column full of
   empty arrays profiles to nothing.
-- Small models still invent a join now and then when the schema is thin.
-  The `confidence` field is the model's own estimate; treat *low* as "ask
-  which table".
+- Small models still pick the wrong column among existing ones now and
+  then; the dry run catches invented ones, not wrong ones. Treat *low* as
+  "ask which table".
 - Place lookup is by name, case-insensitive, first table with a hit. Two
   areas with the same name (a province and a district) are both listed;
   the model picks, and the `level`/`kind` column shown next to each match

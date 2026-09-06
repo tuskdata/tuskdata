@@ -2320,6 +2320,8 @@ function renderSavedQueryItem(q) {
              title="${escapeHtml(q.sql)}">
             <span class="text-indigo-400 text-xs"><i data-lucide="star" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></span>
             <span class="flex-1 truncate text-gray-300 text-xs">${escapeHtml(q.name)}</span>
+            <button onclick="event.stopPropagation(); copyTileUrl(${id})" title="Copy vector-tiles URL (queries with a geometry column)"
+                    class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 text-xs"><i data-lucide="layers" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></button>
             <button onclick="event.stopPropagation(); editSavedQuery(${id})"
                     class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 text-xs"><i data-lucide="pencil" class="w-3.5 h-3.5 inline-block align-[-2px]"></i></button>
             <button onclick="event.stopPropagation(); deleteSavedQuery(${id})"
@@ -3763,3 +3765,43 @@ window.exportGeoJSON = function() {
         }
     }
 })();
+
+// ─── Saved query → vector tiles URL ─────────────────────────────────
+// Copies the TileJSON URL a MapLibre/Mapbox/deck.gl client can use as a
+// vector source. Only queries that return a geometry column qualify; the
+// server says why when they don't.
+window.copyTileUrl = async function(id) {
+    try {
+        const res = await fetch(`/api/tiles/${id}/tilejson`);
+        const data = await res.json();
+        if (!res.ok || data.error) { tuskToast(data.error || 'This query cannot be served as tiles', 'warning'); return; }
+        const url = `${location.origin}/api/tiles/${id}/tilejson`;
+        await navigator.clipboard.writeText(url);
+        tuskToast(`Tile URL copied — layer "query", fields: ${Object.keys(data.vector_layers?.[0]?.fields || {}).join(', ') || 'none'}`, 'success');
+    } catch (e) {
+        tuskToast('Could not copy the tile URL: ' + e.message, 'error');
+    }
+};
+
+// ─── Deep links: /studio?connection=<id>&sql=<sql>&map=1 ──────────────
+// Used by "Open in map" on the Spatial cards (Admin, Explore) and usable
+// from anywhere else: pick the connection, open the SQL in a new tab, run
+// it, and jump to the map when asked.
+document.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(location.search);
+    const sql = params.get('sql');
+    if (!sql) return;
+    const conn = params.get('connection');
+    const wantMap = params.get('map') === '1';
+    setTimeout(async () => {
+        try {
+            if (conn && typeof window.selectConnectionById === 'function') await window.selectConnectionById(conn);
+            if (typeof window.createTab === 'function') window.createTab(params.get('title') || 'Query', sql);
+            if (wantMap) window._tuskAIWantsMap = true;
+            if (params.get('run') !== '0' && typeof window.runQuery === 'function') await window.runQuery();
+            history.replaceState(null, '', '/studio');
+        } catch (e) {
+            console.warn('deep link failed', e);
+        }
+    }, 800);
+});

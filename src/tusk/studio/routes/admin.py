@@ -349,7 +349,7 @@ class AdminController(Controller):
         if not health.get("postgis"):
             return Response(content=b"") if is_htmx(request) else health
         if is_htmx(request):
-            return Template("partials/admin/spatial.html", context=health)
+            return Template("partials/admin/spatial.html", context={**health, "conn_id": conn_id})
         return health
 
     @get("/{conn_id:str}/advisor")

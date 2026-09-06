@@ -377,6 +377,41 @@ class AICopilotController(Controller):
             sql_text = response.sql.strip()
             explanation_text = response.explanation.strip()
             confidence = response.confidence
+            # Dry run against the real database: EXPLAIN never executes the
+            # query but parses and resolves every table, column and
+            # function. When PostgreSQL says a column does not exist we
+            # hand the error back to the model once. This is what stops
+            # the invented join (`orders.product_id`) from reaching the
+            # user as "confidence: high".
+            verified, verify_error = await _dry_run(connection_id, sql_text)
+            if verified is False and verify_error and _looks_like_schema_error(verify_error):
+                retry_prompt = (
+                    f"{full_prompt}\n\n### Correction needed\n"
+                    f"PostgreSQL rejected the SQL you wrote:\n```sql\n{sql_text}\n```\n"
+                    f"Error: {verify_error}\n"
+                    "Rewrite it using ONLY tables and columns from `### Detailed schema`; "
+                    "if the data you need is not there, say so in `explanation` and set confidence to low."
+                )
+                try:
+                    response2 = await complete_struct(
+                        provider, retry_prompt, SQLResponse,
+                        system=system, max_tokens=800, temperature=0.2,
+                    )
+                    sql2 = response2.sql.strip()
+                    verified2, verify_error2 = await _dry_run(connection_id, sql2)
+                    if verified2 or not verify_error2:
+                        response, sql_text = response2, sql2
+                        explanation_text = response2.explanation.strip()
+                        confidence = response2.confidence
+                        verified, verify_error = verified2, verify_error2
+                        log.info("ai sql corrected after dry run", error=verify_error)
+                    else:
+                        verify_error = verify_error2
+                        confidence = "low"
+                except Exception as e:  # noqa: BLE001 — keep the first answer, flagged
+                    log.warning("ai sql correction failed", error=str(e))
+            elif verified is False:
+                confidence = "low"
             # Server-side destructive-SQL classification — overrides
             # whatever the model said in its own dangerous fields.
             is_dangerous, danger_reason = _classify_sql_danger(sql_text)
@@ -407,6 +442,8 @@ class AICopilotController(Controller):
             "confidence": confidence,
             "dangerous": is_dangerous,
             "dangerous_reason": danger_reason,
+            "verified": verified,
+            "verify_error": verify_error,
             "session_key": session_key,
             "schema_chars": len(schema_text),
         }
@@ -639,6 +676,42 @@ def _session_key(request: Request, connection_id: str | None) -> str | None:
         # Skip persistence rather than cross-pollinate memory.
         return None
     return f"csrf:{csrf[:16]}:c:{cid}"
+
+
+_SCHEMA_ERROR_MARKERS = ("does not exist", "no existe", "ambiguous", "must appear in the group by")
+
+
+def _looks_like_schema_error(error: str) -> bool:
+    e = error.lower()
+    return any(m in e for m in _SCHEMA_ERROR_MARKERS)
+
+
+async def _dry_run(connection_id: str | None, sql: str) -> tuple[bool | None, str | None]:
+    """EXPLAIN the generated SQL without running it.
+
+    Returns (True, None) when PostgreSQL accepts it, (False, error) when it
+    does not, and (None, None) when it cannot be checked: no connection,
+    not PostgreSQL, not a read-only statement, or a comment placeholder.
+    """
+    if not connection_id or not sql or sql.lstrip().startswith("--"):
+        return None, None
+    head = sql.lstrip().lower()
+    if not head.startswith(("select", "with", "values", "table ")):
+        return None, None
+    try:
+        from tusk.core.connection import get_connection
+        from tusk.engines.postgres import execute_query
+
+        conn = get_connection(connection_id)
+        if not conn or conn.type != "postgres":
+            return None, None
+        res = await execute_query(conn, f"EXPLAIN {sql.rstrip().rstrip(';')}")
+        if res.error:
+            return False, res.error.strip()[:400]
+        return True, None
+    except Exception as e:  # noqa: BLE001 — verification is best-effort
+        log.debug("ai dry run skipped", error=str(e))
+        return None, None
 
 
 async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:

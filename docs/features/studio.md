@@ -152,7 +152,8 @@ tile server instead of the default OpenFreeMap basemap (keyless vector tiles, li
 
 ## Saved queries as vector tiles
 
-A saved query with a geometry column can be served as Mapbox Vector Tiles:
+A saved query with a geometry column can be served as Mapbox Vector Tiles
+(the **layers** button next to a saved query copies the URL):
 
 ```
 GET /api/tiles/<query id>/tilejson             # TileJSON: tiles URL, bounds, fields
@@ -170,3 +171,10 @@ requests cannot carry headers.
 map.addSource('shops', { type: 'vector', url: 'https://tusk.example.com/api/tiles/12/tilejson?token=tusk_…' });
 map.addLayer({ id: 'shops', type: 'circle', source: 'shops', 'source-layer': 'query' });
 ```
+
+## Deep links
+
+`/studio?connection=<id>&sql=<sql>&map=1&title=<name>` selects the
+connection, opens the SQL in a new tab, runs it and switches to the map
+view. Add `run=0` to only open the tab. The **Open in map** buttons on the
+Spatial cards (Admin, Explore) use it.

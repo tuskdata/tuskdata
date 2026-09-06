@@ -134,10 +134,20 @@
                 </div>
             </div>
         ` : "";
+        // Dry-run verdict from the server (EXPLAIN against the real database).
+        const r = STATE.last_response || {};
+        const verifyChip = r.verified === true
+            ? `<span class="chip chip-green" title="EXPLAIN accepted it: every table and column exists"><i data-lucide="check"></i>checked against the database</span>`
+            : (r.verified === false
+                ? `<span class="chip chip-amber" title="${tuskEscapeHtml(r.verify_error || '')}"><i data-lucide="alert-triangle"></i>PostgreSQL rejected it</span>`
+                : "");
+        const verifyNote = r.verified === false && r.verify_error
+            ? `<div class="tusk-ai-explanation" style="color:var(--accent-amber)">${tuskEscapeHtml(r.verify_error)}</div>` : "";
         _renderBody(`
             <div class="tusk-ai-result">
                 <div class="tusk-ai-result-head">
                     <span class="chip chip-violet"><i data-lucide="terminal"></i>Generated SQL</span>
+                    ${verifyChip}
                     <span class="grow"></span>
                     <button type="button" class="btn btn-sm" onclick="window.tuskAI.replace()">
                         <i data-lucide="refresh-cw"></i>Replace
@@ -147,6 +157,7 @@
                     </button>
                 </div>
                 ${warnBanner}
+                ${verifyNote}
                 <pre class="tusk-ai-sql"><code>${tuskEscapeHtml(sql)}</code></pre>
                 ${explanation ? `<div class="tusk-ai-explanation">${tuskEscapeHtml(explanation)}</div>` : ""}
             </div>
