@@ -112,6 +112,14 @@ out; the product does not limp without it.
 - Plan tab draws the EXPLAIN tree (own cost/time bars, hottest node,
   Analyze, JSON toggle).
 
+## 0.4.47 — Container image actually published (shipped 2026-09-06)
+
+CI only. The `ghcr.io/tuskdata/tuskdata` job added in 0.4.40 had failed on
+every tag (default docker driver rejects cache export); it runs on Buildx
+now and `workflow_dispatch` takes a `tag` input to republish an image without
+touching PyPI. The package was created private: making it public is a
+one-time click in the org's package settings.
+
 ## 0.5.0 — when ready (~2 weeks)
 
 Desktop packaging (own plan) plus a hygiene cut, no new features:
