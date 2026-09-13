@@ -120,7 +120,7 @@ now and `workflow_dispatch` takes a `tag` input to republish an image without
 touching PyPI. The package was created private: making it public is a
 one-time click in the org's package settings.
 
-## 0.4.48 — Offline for real (next)
+## 0.4.48 — Offline for real (shipped 2026-09-13)
 
 The UI must not need the internet. Today `base.html` falls back to CDNs
 whenever `static/vendor/` is missing, the repo ships only `dagre.min.js`
@@ -140,6 +140,9 @@ a firewall.
   `TUSK_USE_CDN=1` for development.
 - Test: every `https://` reference in rendered templates must resolve to a
   file under `static/vendor/` when `use_cdn` is false.
+- Shipped: assets committed (2 MB), Tailwind 4 utilities emitted unlayered
+  and loaded after the app CSS so the cascade matches the play CDN;
+  vendored-vs-CDN screenshots of 13 pages differ only in dynamic text.
 
 ## 0.4.49 — Copilot: joins checked against foreign keys
 

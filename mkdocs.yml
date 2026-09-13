@@ -68,3 +68,4 @@ nav:
   - Desktop window (preview): features/desktop.md
   - Deployment:
       - Kubernetes: deployment/kubernetes.md
+      - Without internet: deployment/offline.md

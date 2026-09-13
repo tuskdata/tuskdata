@@ -21,6 +21,12 @@ MUST_SHIP = (
     "tusk/studio/static/studio.js",
     "tusk/bi/templates/bi/overview.html",
     "tusk/bi/static/bi/widgets.js",
+    # 0.4.48: the UI must work offline — vendored assets ship in the wheel
+    "tusk/studio/static/vendor/tailwind.min.css",
+    "tusk/studio/static/vendor/alpine.min.js",
+    "tusk/studio/static/vendor/maplibre-gl.js",
+    "tusk/studio/static/vendor/chart.umd.min.js",
+    "tusk/studio/static/vendor/fonts.css",
 )
 
 

@@ -121,19 +121,13 @@ def _filter_user_id(request: Request) -> str | None:
 
 
 def _use_cdn() -> bool:
-    """Check if CDN mode is enabled.
+    """CDN mode is opt-in: ``TUSK_CDN=1``.
 
-    Enabled when TUSK_CDN=1 env var is set, or when vendor files are not present.
-    This avoids 404 errors in development when vendor.sh hasn't been run.
+    The default is the vendored assets under ``static/vendor`` (committed,
+    shipped in the wheel and the image), so the UI works without internet.
+    CDN mode exists for hacking on templates without rebuilding Tailwind.
     """
-    env_val = os.environ.get("TUSK_CDN", "").lower()
-    if env_val in ("0", "false", "no"):
-        return False
-    if env_val in ("1", "true", "yes"):
-        return True
-    # Auto-detect: use CDN if vendor files don't exist
-    vendor_dir = os.path.join(os.path.dirname(__file__), "..", "static", "vendor")
-    return not os.path.isfile(os.path.join(vendor_dir, "alpine.min.js"))
+    return os.environ.get("TUSK_CDN", "").lower() in ("1", "true", "yes")
 
 
 def get_base_context(active_page: str = "", **extra) -> dict:

@@ -1,0 +1,50 @@
+/* Tailwind source for Tusk. Compiled by `make css` (Tailwind 4 standalone
+ * CLI) into static/vendor/tailwind.min.css, which is committed: the UI must
+ * render without the internet, and the wheel and the container image ship
+ * the compiled file. Rebuild after adding classes to a template.
+ *
+ * `source(none)` + explicit @source: never scan the venv or node_modules. */
+/* Theme and preflight stay in cascade layers; the utilities are emitted
+ * UNLAYERED on purpose. Tusk's own stylesheets (tusk-app.css, styles.css,
+ * studio-redesign.css) are unlayered, and unlayered rules always beat
+ * layered ones: with `@import "tailwindcss"` a `hidden` or `py-2` in a
+ * template could never override a .dtable rule. The Tailwind 3 play CDN
+ * these templates were written against had no layers and injected its
+ * styles at the end of <head>, so utilities won ties; base.html loads the
+ * compiled file after the app CSS to keep exactly that order. */
+@layer theme, base, components;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" source(none);
+
+@source "../templates";
+@source "../../bi/templates";
+@source "./*.js";
+
+/* The templates were written against the Tailwind 3 play CDN. These keep
+ * the v3 defaults that v4 changed, so nothing shifts visually. */
+@theme {
+  --default-ring-width: 3px;
+  --default-ring-color: var(--color-blue-500);
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  dialog {
+    margin: auto;
+  }
+}

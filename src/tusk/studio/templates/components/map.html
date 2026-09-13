@@ -11,11 +11,16 @@
 
 
 {% macro map_assets() %}
-{# MapLibre GL CDN script and CSS tags.
+{# MapLibre GL script and CSS tags (vendored; CDN only with TUSK_CDN=1).
    Place in {% block extra_head %} or at the top of {% block scripts %}.
 #}
+{% if use_cdn is defined and use_cdn %}
 <script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
 <link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+{% else %}
+<script src="/static/vendor/maplibre-gl.js"></script>
+<link href="/static/vendor/maplibre-gl.css" rel="stylesheet" />
+{% endif %}
 {% endmacro %}
 
 

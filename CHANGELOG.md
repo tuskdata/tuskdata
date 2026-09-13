@@ -2,6 +2,23 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.48] - 2026-09-13 — Works without internet
+
+- **No CDN in the UI.** Tailwind is now compiled (Tailwind 4 CLI, source in
+  `static/tailwind.css`) instead of loaded from the play CDN, and every
+  other browser asset — Alpine, HTMX, Lucide, MapLibre, proj4, Dagre,
+  Chart.js, gridstack, the Geist and Instrument Serif fonts — is vendored
+  under `static/vendor/`, committed, and shipped in the wheel and the
+  container image. Behind a firewall or on an air-gapped LAN the pages
+  render exactly as before; `tests/test_offline_assets.py` fails the build
+  if a template reaches for a CDN, a vendored file is missing, or the
+  compiled CSS lags the templates.
+- `TUSK_CDN=1` keeps the play CDN for template hacking; it is no longer the
+  fallback when vendor files are absent.
+- Docs: *Deployment → Without internet* lists what still talks to the
+  outside (basemap tiles, the AI provider you choose, notification
+  endpoints) and the offline option for each.
+
 ## [0.4.47] - 2026-09-06 — Container image actually published
 
 - **`ghcr.io/tuskdata/tuskdata` exists now.** The image job added in 0.4.40

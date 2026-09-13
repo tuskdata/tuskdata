@@ -10,15 +10,18 @@ PLUGINS := /Users/jeasoft/Projects/Tusk/cluster \
 vendor:
 	bash scripts/vendor.sh
 
-# Install Tailwind CSS standalone CLI (no Node.js)
+# Tailwind 4 standalone CLI (no Node.js). Uses $TAILWINDCSS, else
+# scripts/tailwindcss, else `tailwindcss` on PATH. `make tailwind` downloads it.
+TAILWINDCSS ?= $(if $(wildcard scripts/tailwindcss),scripts/tailwindcss,tailwindcss)
 tailwind:
 	bash scripts/install-tailwind.sh
 
-# Build production CSS with Tailwind
+# Compile the CSS the UI ships (committed under static/vendor). Rerun after
+# adding Tailwind classes to a template; tests/test_offline_assets.py fails
+# when the compiled file lags the templates.
 css:
-	scripts/tailwindcss -i src/tusk/studio/static/styles.css \
-	    -o src/tusk/studio/static/vendor/tailwind.min.css \
-	    --content "src/tusk/studio/templates/**/*.html" --minify
+	$(TAILWINDCSS) -i src/tusk/studio/static/tailwind.css \
+	    -o src/tusk/studio/static/vendor/tailwind.min.css --minify
 
 # Build wheel
 build: vendor css

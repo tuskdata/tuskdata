@@ -3,7 +3,7 @@
 {% block title %}Edit {{ dashboard.name if dashboard else 'Dashboard' }} - Analytics{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css">
+<link rel="stylesheet" href="/static/vendor/gridstack.min.css">
 <link rel="stylesheet" href="/static/plugins/bi/bi.css">
 {% endblock %}
 
@@ -617,7 +617,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+<script src="/static/vendor/gridstack-all.js"></script>
 <script src="/static/plugins/bi/bi.js"></script>
 <script>
 window._biDashboardEditorInitial = {

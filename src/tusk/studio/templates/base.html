@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Tusk{% endblock %}</title>
     {% if use_cdn %}
-    <!-- CDN mode (dev) — set TUSK_CDN=1 -->
+    <!-- CDN mode: only with TUSK_CDN=1, for hacking on templates without rebuilding Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
@@ -15,8 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     {% else %}
-    <!-- Vendor mode (production) — run: make vendor && make css -->
-    <link rel="stylesheet" href="/static/vendor/tailwind.min.css">
+    <!-- Vendored (default): static/vendor is committed; `make vendor` and `make css` regenerate it -->
     <script src="/static/vendor/htmx.min.js"></script>
     <script defer src="/static/vendor/alpine.min.js"></script>
     <script src="/static/vendor/lucide.min.js"></script>
@@ -33,6 +32,10 @@
     <link rel="stylesheet" href="/static/design-tokens.css">
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/studio-redesign.css">
+    {% if not use_cdn %}
+    <!-- Compiled Tailwind goes AFTER the app CSS so utilities win ties, as the play CDN did. -->
+    <link rel="stylesheet" href="/static/vendor/tailwind.min.css">
+    {% endif %}
     <script>window.TUSK_UI = {{ ui | tojson }};</script>
     <script src="/static/tusk-fetch.js"></script>
     <script src="/static/tusk-utils.js"></script>
