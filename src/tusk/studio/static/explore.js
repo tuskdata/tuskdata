@@ -27,6 +27,8 @@ function exploreApp() {
 
         // ── Pickers ───────────────────────────────────────────
         async onConnChange() {
+            // Let the AI Copilot panel ground itself on this connection too.
+            window.currentConnection = this.selectedConn ? { id: this.selectedConn } : null;
             this.selectedTable = '';
             this.tables = [];
             this.profile = null;

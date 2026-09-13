@@ -8,6 +8,8 @@ state instead of a generic error.
 
 from __future__ import annotations
 
+import time
+
 from litestar import Controller, Request, get, post
 from litestar.params import Body
 from litestar.response import Template
@@ -28,6 +30,7 @@ from tusk.core.ai import (
 )
 from tusk.core.ai_struct import complete_struct
 from tusk.core.crypto import is_encrypted
+from tusk.core import joincheck
 from tusk.core.logging import get_logger
 from tusk.studio.routes.base import TuskController
 
@@ -374,44 +377,11 @@ class AICopilotController(Controller):
                 provider, full_prompt, SQLResponse,
                 system=system, max_tokens=800, temperature=0.2,
             )
-            sql_text = response.sql.strip()
-            explanation_text = response.explanation.strip()
-            confidence = response.confidence
-            # Dry run against the real database: EXPLAIN never executes the
-            # query but parses and resolves every table, column and
-            # function. When PostgreSQL says a column does not exist we
-            # hand the error back to the model once. This is what stops
-            # the invented join (`orders.product_id`) from reaching the
-            # user as "confidence: high".
-            verified, verify_error = await _dry_run(connection_id, sql_text)
-            if verified is False and verify_error and _looks_like_schema_error(verify_error):
-                retry_prompt = (
-                    f"{full_prompt}\n\n### Correction needed\n"
-                    f"PostgreSQL rejected the SQL you wrote:\n```sql\n{sql_text}\n```\n"
-                    f"Error: {verify_error}\n"
-                    "Rewrite it using ONLY tables and columns from `### Detailed schema`; "
-                    "if the data you need is not there, say so in `explanation` and set confidence to low."
-                )
-                try:
-                    response2 = await complete_struct(
-                        provider, retry_prompt, SQLResponse,
-                        system=system, max_tokens=800, temperature=0.2,
-                    )
-                    sql2 = response2.sql.strip()
-                    verified2, verify_error2 = await _dry_run(connection_id, sql2)
-                    if verified2 or not verify_error2:
-                        response, sql_text = response2, sql2
-                        explanation_text = response2.explanation.strip()
-                        confidence = response2.confidence
-                        verified, verify_error = verified2, verify_error2
-                        log.info("ai sql corrected after dry run", error=verify_error)
-                    else:
-                        verify_error = verify_error2
-                        confidence = "low"
-                except Exception as e:  # noqa: BLE001 — keep the first answer, flagged
-                    log.warning("ai sql correction failed", error=str(e))
-            elif verified is False:
-                confidence = "low"
+            checked = await _verify_sql(provider, system, full_prompt, connection_id, response)
+            response, sql_text = checked["response"], checked["sql"]
+            explanation_text, confidence = checked["explanation"], checked["confidence"]
+            verified, verify_error = checked["verified"], checked["verify_error"]
+            joins, join_warnings = checked["joins"], checked["join_warnings"]
             # Server-side destructive-SQL classification — overrides
             # whatever the model said in its own dangerous fields.
             is_dangerous, danger_reason = _classify_sql_danger(sql_text)
@@ -444,6 +414,8 @@ class AICopilotController(Controller):
             "dangerous_reason": danger_reason,
             "verified": verified,
             "verify_error": verify_error,
+            "joins": joins,
+            "join_warnings": join_warnings,
             "session_key": session_key,
             "schema_chars": len(schema_text),
         }
@@ -712,6 +684,144 @@ async def _dry_run(connection_id: str | None, sql: str) -> tuple[bool | None, st
     except Exception as e:  # noqa: BLE001 — verification is best-effort
         log.debug("ai dry run skipped", error=str(e))
         return None, None
+
+
+async def _verify_sql(provider, system: str, full_prompt: str, connection_id: str | None, response: SQLResponse) -> dict:
+    """Dry-run the model's SQL, check its joins against the foreign keys,
+    and give the model at most one correction. Returns the (possibly
+    corrected) answer plus the verdicts the card shows."""
+    sql_text = response.sql.strip()
+    explanation_text = response.explanation.strip()
+    confidence = response.confidence
+    # Dry run against the real database: EXPLAIN never executes the
+    # query but parses and resolves every table, column and
+    # function. When PostgreSQL says a column does not exist we
+    # hand the error back to the model once. This is what stops
+    # the invented join (`orders.product_id`) from reaching the
+    # user as "confidence: high".
+    verified, verify_error = await _dry_run(connection_id, sql_text)
+    corrected = False
+    if verified is False and verify_error and _looks_like_schema_error(verify_error):
+        corrected = True
+        retry_prompt = (
+            f"{full_prompt}\n\n### Correction needed\n"
+            f"PostgreSQL rejected the SQL you wrote:\n```sql\n{sql_text}\n```\n"
+            f"Error: {verify_error}\n"
+            "Rewrite it using ONLY tables and columns from `### Detailed schema`; "
+            "if the data you need is not there, say so in `explanation` and set confidence to low."
+        )
+        try:
+            response2 = await complete_struct(
+                provider, retry_prompt, SQLResponse,
+                system=system, max_tokens=800, temperature=0.2,
+            )
+            sql2 = response2.sql.strip()
+            verified2, verify_error2 = await _dry_run(connection_id, sql2)
+            if verified2 or not verify_error2:
+                response, sql_text = response2, sql2
+                explanation_text = response2.explanation.strip()
+                confidence = response2.confidence
+                verified, verify_error = verified2, verify_error2
+                log.info("ai sql corrected after dry run", error=verify_error)
+            else:
+                verify_error = verify_error2
+                confidence = "low"
+        except Exception as e:  # noqa: BLE001 — keep the first answer, flagged
+            log.warning("ai sql correction failed", error=str(e))
+    elif verified is False:
+        confidence = "low"
+    # Joins against the foreign keys (0.4.49): the dry run proves the
+    # columns exist, this proves the model joined them the way the
+    # schema says. One correction at most per request, so skip it
+    # when the dry-run retry already happened.
+    joins = await _check_joins(connection_id, sql_text) if verified else []
+    join_warnings = joincheck.warnings(joins)
+    if join_warnings and not corrected:
+        tables = {f["left"].rsplit(".", 1)[0] for f in join_warnings} | {f["right"].rsplit(".", 1)[0] for f in join_warnings}
+        fk_text = joincheck.render_fks(await _catalog_for(connection_id) or {}, tables)
+        retry_prompt = (
+            f"{full_prompt}\n\n### Join check\n"
+            f"The SQL you wrote:\n```sql\n{sql_text}\n```\n"
+            "These joins do not follow a foreign key:\n"
+            + "\n".join(f"- {f['join']}: {f['detail']}" for f in join_warnings)
+            + f"\nForeign keys of the tables involved:\n{fk_text}\n"
+            "Rewrite the query so every join follows a foreign key (go through the linking table "
+            "when there is one). If the join is right as written, keep it and say why in `explanation`."
+        )
+        try:
+            response2 = await complete_struct(
+                provider, retry_prompt, SQLResponse,
+                system=system, max_tokens=800, temperature=0.2,
+            )
+            sql2 = response2.sql.strip()
+            verified2, verify_error2 = await _dry_run(connection_id, sql2)
+            joins2 = await _check_joins(connection_id, sql2) if verified2 else []
+            if verified2 is not False and len(joincheck.warnings(joins2)) < len(join_warnings):
+                response, sql_text = response2, sql2
+                explanation_text = response2.explanation.strip()
+                confidence = response2.confidence
+                verified, verify_error = verified2, verify_error2
+                joins, join_warnings = joins2, joincheck.warnings(joins2)
+                log.info("ai sql corrected after join check")
+        except Exception as e:  # noqa: BLE001 — keep the first answer, flagged
+            log.warning("ai join correction failed", error=str(e))
+    if any(f["status"] == "type_mismatch" for f in join_warnings):
+        confidence = "low"
+    elif join_warnings and confidence == "high":
+        confidence = "medium"
+    return {
+        "response": response,
+        "sql": sql_text,
+        "explanation": explanation_text,
+        "confidence": confidence,
+        "verified": verified,
+        "verify_error": verify_error,
+        "joins": joins,
+        "join_warnings": len(join_warnings),
+    }
+
+
+_catalog_cache: dict[str, tuple[float, dict]] = {}
+_CATALOG_TTL = 60.0
+
+
+async def _catalog_for(connection_id: str | None) -> dict | None:
+    """``fetch_catalog`` for a PostgreSQL connection, cached a minute so the
+    join check does not repeat the query the schema summary just ran."""
+    if not connection_id:
+        return None
+    hit = _catalog_cache.get(connection_id)
+    if hit and time.time() - hit[0] < _CATALOG_TTL:
+        return hit[1]
+    try:
+        from tusk.core.catalog import fetch_catalog
+        from tusk.core.connection import get_connection
+
+        conn = get_connection(connection_id)
+        if not conn or conn.type != "postgres":
+            return None
+        catalog = await fetch_catalog(conn, with_indexes=False)
+    except Exception as e:  # noqa: BLE001 — best-effort
+        log.debug("ai catalog unavailable", error=str(e))
+        return None
+    _catalog_cache[connection_id] = (time.time(), catalog)
+    return catalog
+
+
+async def _check_joins(connection_id: str | None, sql: str) -> list[dict]:
+    """Every join of ``sql`` classified against the foreign keys
+    (``fk`` / ``no_fk`` / ``type_mismatch`` / ``unknown``). Empty when the
+    query cannot be checked."""
+    if not connection_id or not sql:
+        return []
+    catalog = await _catalog_for(connection_id)
+    if not catalog:
+        return []
+    try:
+        return joincheck.check_joins(sql, catalog)
+    except Exception as e:  # noqa: BLE001
+        log.debug("ai join check failed", error=str(e))
+        return []
 
 
 async def _schema_summary(connection_id: str | None, prompt: str = "") -> str:

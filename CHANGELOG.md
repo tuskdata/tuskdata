@@ -2,6 +2,29 @@
 
 All notable changes to Tusk will be documented in this file.
 
+## [0.4.49] - 2026-09-13 — Copilot joins checked against the foreign keys
+
+- **Joins are verified, not just columns.** After the EXPLAIN dry run, every
+  `a.x = b.y` (and `JOIN … USING`) in the generated SQL is resolved and
+  looked up in the catalog. A join backed by a foreign key passes; two
+  existing columns with no foreign key between them are reported as *join
+  without a foreign key* (confidence capped at medium), and columns whose
+  types cannot match (`integer = text`, `uuid = integer`) as *join types
+  don't match* (confidence low). The model gets the foreign keys of the
+  tables involved and one chance to rewrite, typically through the linking
+  table it skipped. Joins through CTEs or subqueries are not counted.
+- **The Ask AI panel now actually sends the selected connection.** Since
+  0.4.6 it read a global Studio never set, so every question from the UI
+  went out with no connection: no schema grounding, no dry run, invented
+  tables. The API path was fine, which is why the tests never noticed.
+  Explore publishes the selected connection to the panel too.
+- **The verdict chips render.** *Checked against the database* and
+  *PostgreSQL rejected it* (0.4.45) were stored nowhere the card could
+  read them. The card now shows them, the join verdict, and *medium* /
+  *low confidence* when a check lowered it.
+- `tests/test_ai_panel_wiring.py` pins the contract between Studio,
+  Explore and the panel so the names cannot drift apart again.
+
 ## [0.4.48] - 2026-09-13 — Works without internet
 
 - **No CDN in the UI.** Tailwind is now compiled (Tailwind 4 CLI, source in

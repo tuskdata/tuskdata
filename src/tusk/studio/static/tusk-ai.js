@@ -136,18 +136,36 @@
         ` : "";
         // Dry-run verdict from the server (EXPLAIN against the real database).
         const r = STATE.last_response || {};
+        // Join check (0.4.49): every a.x = b.y compared with the foreign keys.
+        const joins = Array.isArray(r.joins) ? r.joins.filter(j => j.status !== "unknown") : [];
+        const badJoins = joins.filter(j => j.status === "no_fk" || j.status === "type_mismatch");
+        const okTitle = joins.length
+            ? `EXPLAIN accepted it and ${joins.length === 1 ? "its join follows" : "all " + joins.length + " joins follow"} a foreign key`
+            : "EXPLAIN accepted it: every table and column exists";
         const verifyChip = r.verified === true
-            ? `<span class="chip chip-green" title="EXPLAIN accepted it: every table and column exists"><i data-lucide="check"></i>checked against the database</span>`
+            ? `<span class="chip chip-green" title="${okTitle}"><i data-lucide="check"></i>checked against the database</span>`
             : (r.verified === false
                 ? `<span class="chip chip-amber" title="${tuskEscapeHtml(r.verify_error || '')}"><i data-lucide="alert-triangle"></i>PostgreSQL rejected it</span>`
                 : "");
+        const joinChip = badJoins.length
+            ? `<span class="chip chip-amber" title="${tuskEscapeHtml(badJoins.map(j => j.detail).join("\n"))}"><i data-lucide="git-branch"></i>${badJoins.some(j => j.status === "type_mismatch") ? "join types don't match" : "join without a foreign key"}</span>`
+            : "";
+        // The server lowers confidence when a check fails; say so, or the
+        // downgrade is invisible.
+        const confChip = r.confidence === "low"
+            ? `<span class="chip chip-rose" title="The model or the checks rated this answer low: ask which table, or read the explanation">low confidence</span>`
+            : (r.confidence === "medium" ? `<span class="chip chip-neutral" title="Plausible but not certain">medium confidence</span>` : "");
         const verifyNote = r.verified === false && r.verify_error
             ? `<div class="tusk-ai-explanation" style="color:var(--accent-amber)">${tuskEscapeHtml(r.verify_error)}</div>` : "";
+        const joinNote = badJoins.length
+            ? `<div class="tusk-ai-explanation" style="color:var(--accent-amber)">${badJoins.map(j => `<code>${tuskEscapeHtml(j.join)}</code> — ${tuskEscapeHtml(j.detail)}`).join("<br>")}</div>` : "";
         _renderBody(`
             <div class="tusk-ai-result">
                 <div class="tusk-ai-result-head">
                     <span class="chip chip-violet"><i data-lucide="terminal"></i>Generated SQL</span>
                     ${verifyChip}
+                    ${joinChip}
+                    ${confChip}
                     <span class="grow"></span>
                     <button type="button" class="btn btn-sm" onclick="window.tuskAI.replace()">
                         <i data-lucide="refresh-cw"></i>Replace
@@ -158,6 +176,7 @@
                 </div>
                 ${warnBanner}
                 ${verifyNote}
+                ${joinNote}
                 <pre class="tusk-ai-sql"><code>${tuskEscapeHtml(sql)}</code></pre>
                 ${explanation ? `<div class="tusk-ai-explanation">${tuskEscapeHtml(explanation)}</div>` : ""}
             </div>
@@ -195,8 +214,12 @@
     }
 
     function _currentConnectionId() {
-        // window.currentConnectionId is set by selectConnection()
-        return window.currentConnectionId || null;
+        // Studio publishes the selected connection as window.currentConnection
+        // ({id, name, type}); Explore does the same on change. Since 0.4.6
+        // this read a `currentConnectionId` global nobody set, so the panel
+        // asked with no connection: no schema, no dry run, pure guessing.
+        const c = window.currentConnection;
+        return window.currentConnectionId || (c && c.id) || null;
     }
 
     function _preset(kind) {
@@ -253,7 +276,15 @@
                 return;
             }
             const danger = { dangerous: !!res.dangerous, reason: res.dangerous_reason || "" };
-            STATE.last_response = { kind: "sql", sql: res.sql, explanation: res.explanation, danger };
+            // Keep the server's verdicts too: _renderSQL reads them for the
+            // "checked against the database" / join chips. (0.4.45 stored
+            // only sql+explanation, so those chips never showed in the UI.)
+            STATE.last_response = {
+                kind: "sql", sql: res.sql, explanation: res.explanation, danger,
+                verified: res.verified, verify_error: res.verify_error,
+                joins: res.joins || [], join_warnings: res.join_warnings || 0,
+                confidence: res.confidence,
+            };
             _renderSQL(res.sql, res.explanation, danger);
         } catch (e) {
             _renderError(e.message || "Request failed");

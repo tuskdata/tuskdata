@@ -1605,6 +1605,7 @@ window.deleteConnection = async function(id) {
     await fetch(`/api/connections/${id}`, { method: 'DELETE' });
     if (currentConnection?.id === id) {
         currentConnection = null;
+        window.currentConnection = null;
         document.getElementById('schema-tree').innerHTML = '<div class="text-gray-500 py-2">Select a connection</div>';
     }
     loadConnections();

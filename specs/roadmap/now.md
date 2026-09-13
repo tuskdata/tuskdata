@@ -144,7 +144,7 @@ a firewall.
   and loaded after the app CSS so the cascade matches the play CDN;
   vendored-vs-CDN screenshots of 13 pages differ only in dynamic text.
 
-## 0.4.49 — Copilot: joins checked against foreign keys
+## 0.4.49 — Copilot: joins checked against foreign keys (shipped 2026-09-13)
 
 The 0.4.45 dry run catches invented columns, not invented joins (a 9B
 model wrote `orders.product_id` on the demo). After the dry run, parse every
@@ -153,6 +153,13 @@ model wrote `orders.product_id` on the demo). After the dry run, parse every
 that matches nothing lowers confidence and is named in the card
 ("join orders.product_id = products.id has no foreign key"). One retry
 with the FK list, like the schema-error retry.
+
+Shipped as `core/joincheck.py` + `_verify_sql` in `routes/ai.py`. Found and
+fixed on the way: the Ask AI panel had sent no connection since 0.4.6
+(`window.currentConnectionId` vs the `window.currentConnection` Studio
+publishes) and the 0.4.45 verdict chips never rendered. Walked through in
+Chrome on the demo shop: the Toys question now goes through `order_items`
+with both chips green.
 
 ## 0.4.50 — Connections inside `tusk.db`
 

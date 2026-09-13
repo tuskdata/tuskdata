@@ -66,13 +66,28 @@ the reason, and confidence is forced to *low*. A local model can still
 choose the wrong column among existing ones, but it can no longer invent
 one.
 
+Then the **joins** are checked against the foreign keys. Every
+`a.x = b.y` (and `JOIN … USING`) in the generated SQL is resolved to real
+columns and looked up in the catalog: a join that follows a foreign key,
+in either direction, passes; two existing columns with no foreign key
+between them are reported as *join without a foreign key*, and two
+columns whose types cannot match (`integer = text`, `uuid = integer`) as
+*join types don't match*. When something is reported, the model gets the
+list of foreign keys of the tables involved and one chance to rewrite,
+typically by going through the linking table it skipped; if it keeps the
+join it has to say why. The card names the offending join, confidence
+drops to *medium* (no foreign key) or *low* (types), and joins the
+checker cannot resolve, through a CTE or a subquery, are simply not
+counted.
+
 ## Limits, honestly
 
 - The grounding is only as good as the data: a `tags` column full of
   empty arrays profiles to nothing.
 - Small models still pick the wrong column among existing ones now and
-  then; the dry run catches invented ones, not wrong ones. Treat *low* as
-  "ask which table".
+  then; the dry run catches invented ones and the join check catches
+  joins the schema does not support, not a wrong-but-plausible filter.
+  Treat *low* as "ask which table".
 - Place lookup is by name, case-insensitive, first table with a hit. Two
   areas with the same name (a province and a district) are both listed;
   the model picks, and the `level`/`kind` column shown next to each match
