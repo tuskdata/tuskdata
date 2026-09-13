@@ -120,16 +120,71 @@ now and `workflow_dispatch` takes a `tag` input to republish an image without
 touching PyPI. The package was created private: making it public is a
 one-time click in the org's package settings.
 
-## 0.5.0 — when ready (~2 weeks)
+## 0.4.48 — Offline for real (next)
 
-Desktop packaging (own plan) plus a hygiene cut, no new features:
+The UI must not need the internet. Today `base.html` falls back to CDNs
+whenever `static/vendor/` is missing, the repo ships only `dagre.min.js`
+there, and neither the wheel build nor the Dockerfile runs
+`scripts/vendor.sh`. So the GHCR and Coolify images render nothing behind
+a firewall.
+
+- Build Tailwind instead of loading the play CDN: Tailwind 4 CLI
+  (`~/bin/tailwindcss`, CSS-first config with `@source` over
+  `templates/**` and `static/*.js`), output `static/vendor/tailwind.min.css`.
+- `scripts/vendor.sh` grows: chart.js 4, gridstack 10 (BI), the woff2 files
+  behind `fonts.css` (Inter, JetBrains Mono) rewritten to local URLs; pin
+  the two stray unpinned tags (`lucide@latest`, `alpinejs@3`) to the same
+  versions as the vendored files.
+- Vendor runs in `uv build` (hatch build hook) and in the Dockerfile; the
+  wheel ships `static/vendor/**`. `use_cdn` stays only as an explicit
+  `TUSK_USE_CDN=1` for development.
+- Test: every `https://` reference in rendered templates must resolve to a
+  file under `static/vendor/` when `use_cdn` is false.
+
+## 0.4.49 — Copilot: joins checked against foreign keys
+
+The 0.4.45 dry run catches invented columns, not invented joins (a 9B
+model wrote `orders.product_id` on the demo). After the dry run, parse every
+`a.x = b.y` in ON/WHERE of the generated SQL and check the pair against
+`pg_constraint` (FK either direction) or at least matching types; a join
+that matches nothing lowers confidence and is named in the card
+("join orders.product_id = products.id has no foreign key"). One retry
+with the FK list, like the schema-error retry.
+
+## 0.4.50 — Connections inside `tusk.db`
+
+`connections.toml` was wiped twice by a save that ran before the registry
+loaded. Move connections (same Fernet-encrypted fields) into
+`tusk.core.meta`, one transaction per change, no loaded/not-loaded state;
+import the TOML once and rename it `.migrated` like the other stores.
+`tusk connections export/import` keeps a file round-trip for backups.
+
+## 0.4.51+ — Hygiene until 0.5.0 is clean
+
+Each as its own small release, no features:
 
 - Test coverage ≥ 45 % (35 % today; `routes/data.py`, `routes/auth.py`,
   `admin/backup.py`, `engines/postgres.py` are the gap).
 - Litestar 2.24 path-param deprecations (`{id:int}` → `FromPath[int]`),
   before 3.0 lands (beta expected late 2026).
 - Ibis to an optional extra (prod has run with `ibis: unavailable`).
-- Docs complete for everything above.
+- Windows pass with the coworker; `deploy/k8s/tusk.yaml` on a live k3s.
+- Open nits below.
+
+## 0.5.0 — the clean cut
+
+Everything above shipped and walked through end to end with the user
+(tiles, H3, Advisor, alerts, geo import, deep links, graphical EXPLAIN:
+none has been used by a person yet). Desktop packaging waits for the Apple
+developer account. Docs complete.
+
+## 0.5.x — features that pass the pgAdmin rule
+
+- **ERD**: pick tables, drag, relations from FKs, export PNG and SQL. The
+  Schema page already lays relations out with Dagre.
+- **New connection by link**: `/connections/new?host&port&database&user`
+  (never a password) so Respaldo or any DBaaS can "open in Tusk".
+- Close a tab with middle-click.
 
 ## Out, and the docs say so
 
